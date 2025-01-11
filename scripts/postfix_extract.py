@@ -39,15 +39,29 @@ if issue['state'] != 'closed':
 knowledge_cutoff = issue['created_at']
 timeline = session.get(issue['timeline_url']).json()
 fix_commit = None
+closed = False
 for event in timeline:
-    if event['event'] == 'closed' or event['event'] == 'referenced':
-        if 'commit_id' in event:
-            fix_commit = event['commit_id']
-            if fix_commit is not None:
-                break
+    if event['event'] == 'closed':
+        closed = True
+        fix_commit = event['commit_id']
+        if fix_commit is not None:
+            break
+    if closed and event['event'] == 'referenced':
+        fix_commit = event['commit_id']
+        break
 
 issue_type = 'unknown'
-pr_url = None
+for label in issue['labels']:
+    label_name = label['name']
+    if label_name == 'miscompilation':
+        issue_type = 'miscompilation'
+    if 'crash' in label_name:
+        issue_type = 'crash'
+    if 'hang' in label_name:
+        issue_type = 'hang'
+    if label_name in ['invalid', 'wontfix', 'duplicate', 'undefined behavior']:
+        print('This issue is marked as invalid')
+        exit(1)
 
 base_commit = llvm_helper.git_execute(['rev-parse', fix_commit+'~']).strip()
 changed_files = llvm_helper.git_execute(['show', '--name-only', '--format=', fix_commit]).strip()
@@ -91,37 +105,73 @@ def traverse_tree(tree):
                 retracing = False
 
 bug_location_funcname = {}
-for file in files:
-    print(f'Parsing {file}')
-    with open(os.path.join(llvm_helper.llvm_dir, file)) as f:
-        source_code = f.read()
+for file in patchset.modified_files:
+    print(f'Parsing {file.path}')
+    source_code = llvm_helper.git_execute(['show', f'{base_commit}:{file.path}'])
     tree = cxx_parser.parse(bytes(source_code, 'utf-8'))
     modified_funcs = set()
     for node in traverse_tree(tree):
-        if node.type == 'function_declarator':
-            func_name = node.children_by_field_name('declarator')[0].text.decode('utf-8')
+        if node.type == 'function_definition':
+            func_name_node = node.children_by_field_name('declarator')[0]
+            while True:
+                decl = func_name_node.children_by_field_name('declarator')
+                if len(decl) == 0:
+                    break
+                func_name_node = decl[0]
+            func_name = func_name_node.text.decode('utf-8')
             if func_name in patch:
                 modified_funcs.add(func_name)
-    bug_location_funcname[file] = list(modified_funcs)
+    modified_funcs_valid = list()
+    for func in modified_funcs:
+        substr = False
+        for rhs in modified_funcs:
+            if func != rhs and func in rhs:
+                substr = True
+                break
+        if not substr:
+            modified_funcs_valid.append(func)
+    bug_location_funcname[file.path] = list(modified_funcs_valid)
 
 # Extract tests
+test_patchset = PatchSet(llvm_helper.git_execute(['show', fix_commit, '--', 'llvm/test/*']))
 lit_test_dir = set(map(lambda x: os.path.dirname(x), filter(lambda x: x.count('/test/'), changed_files.split('\n'))))
+tests = []
+for file in test_patchset:
+    pass
+
+# Extract full issue context
+issue_comments = []
+comments = session.get(issue['comments_url']).json()
+for comment in comments:
+    issue_comments.append({
+        'author': comment['user']['login'],
+        'body': comment['body'],
+    })
+normalized_issue = {
+    'title': issue['title'],
+    'body': issue['body'],
+    'author': issue['user']['login'],
+    'labels': list(map(lambda x: x['name'], issue['labels'])),
+    'comments': issue_comments,
+}
 
 # Write to files
 metadata = {
 'bug_id': issue_id,
+'issue_url': issue['html_url'],
 'bug_type': issue_type,
-'fix_commit': fix_commit,
 'base_commit': base_commit,
-'bug_location': {
+'knowledge_cutoff': knowledge_cutoff,
+'lit_test_dir': list(lit_test_dir),
+'hints': {
+    'fix_commit': fix_commit,
     'components': list(components),
     'files': files,
     'bug_location_lineno': bug_location_lineno,
     'bug_location_funcname': bug_location_funcname,
 },
-'lit_test_dir': list(lit_test_dir),
-'knowledge_cutoff': knowledge_cutoff,
-'issue_url': issue_url,
 'patch': patch,
+'tests': tests,
+'issue': normalized_issue,
 }
 print(json.dumps(metadata, indent=4))
