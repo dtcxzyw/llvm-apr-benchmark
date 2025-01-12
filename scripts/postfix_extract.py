@@ -21,12 +21,15 @@ import sys
 import tree_sitter_cpp
 from tree_sitter import Language, Parser
 from unidiff import PatchSet
+import re
+import subprocess
 
 CXX_LANGUAGE = Language(tree_sitter_cpp.language())
 cxx_parser = Parser(CXX_LANGUAGE)
 github_token = os.environ['LAB_GITHUB_TOKEN']
 session = requests.Session()
 session.headers.update({'X-GitHub-Api-Version': '2022-11-28', 'Authorization': f'Bearer {github_token}', 'Accept': 'application/vnd.github+json'})
+subprocess.check_output(['llvm-extract', '--version'])
 
 issue_id = int(sys.argv[1])
 issue_url = f'https://api.github.com/repos/llvm/llvm-project/issues/{issue_id}'
@@ -136,8 +139,32 @@ for file in patchset.modified_files:
 test_patchset = PatchSet(llvm_helper.git_execute(['show', fix_commit, '--', 'llvm/test/*']))
 lit_test_dir = set(map(lambda x: os.path.dirname(x), filter(lambda x: x.count('/test/'), changed_files.split('\n'))))
 tests = []
+runline_pattern = re.compile(r'; RUN: (.+)\| FileCheck')
+testname_pattern = re.compile(r'define .+ @(\w+)')
 for file in test_patchset:
-    pass
+    test_names = set()
+    test_file = llvm_helper.git_execute(['show', f'{fix_commit}:{file.path}'])
+    for hunk in file:
+        matched = re.search(testname_pattern, hunk.section_header)
+        if not matched:
+            continue
+        test_names.add(matched.group(1))
+    commands = []
+    for match in re.findall(runline_pattern, test_file):
+        commands.append(match.strip())
+    subtests = []
+    for test_name in test_names:
+        test_body = subprocess.check_output(['llvm-extract', f'--func={test_name}', '-S', '-'], input=test_file.encode()).decode()
+        test_body = test_body.removeprefix("; ModuleID = '<stdin>'\nsource_filename = \"<stdin>\"\n\n")
+        subtests.append({
+            'test': test_name,
+            'test_body': test_body,
+        })
+    tests.append({
+        'file': file.path,
+        'commands': commands,
+        'tests': subtests
+    })
 
 # Extract full issue context
 issue_comments = []
@@ -155,7 +182,7 @@ normalized_issue = {
     'comments': issue_comments,
 }
 
-# Write to files
+# Write to file
 metadata = {
 'bug_id': issue_id,
 'issue_url': issue['html_url'],
