@@ -31,11 +31,17 @@ session = requests.Session()
 session.headers.update({'X-GitHub-Api-Version': '2022-11-28', 'Authorization': f'Bearer {github_token}', 'Accept': 'application/vnd.github+json'})
 subprocess.check_output(['llvm-extract', '--version'])
 
-issue_id = int(sys.argv[1])
+issue_id = sys.argv[1]
+
+data_json_path = os.path.join(llvm_helper.dataset_dir, f'{issue_id}.json')
+if os.path.exists(data_json_path):
+    print(f'Item {issue_id}.json already exists')
+    exit(0)
+
 issue_url = f'https://api.github.com/repos/llvm/llvm-project/issues/{issue_id}'
 print(f'Fetching {issue_url}')
 issue = session.get(issue_url).json()
-if issue['state'] != 'closed':
+if issue['state'] != 'closed' or issue['state_reason'] != 'completed':
     print('The issue/PR should be closed')
     exit(1)
 
@@ -201,4 +207,8 @@ metadata = {
 'tests': tests,
 'issue': normalized_issue,
 }
-print(json.dumps(metadata, indent=4))
+print(json.dumps(metadata, indent=2))
+with open(data_json_path, 'w') as f:
+    json.dump(metadata, f, indent=2)
+    f.write('\n')
+print(f'Saved to {data_json_path}')
