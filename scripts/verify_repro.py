@@ -14,3 +14,30 @@
 # limitations under the License.
 
 import os
+import sys
+import llvm_helper
+import json
+
+
+def verify_issue(issue):
+    with open(os.path.join(llvm_helper.dataset_dir, issue)) as f:
+        data = json.load(f)
+    print(data["issue"]["title"])
+    base_commit = data["base_commit"]
+    llvm_helper.reset(base_commit)
+    llvm_helper.build(max_build_jobs=os.cpu_count())
+    pass
+
+
+task_list = []
+if len(sys.argv) == 2:
+    task_list = [sys.argv[1] + ".json"]
+else:
+    for name in os.listdir(llvm_helper.dataset_dir):
+        if name.endswith(".json"):
+            task_list.append(name)
+task_list.sort()
+
+for idx, task in enumerate(task_list):
+    print("Verifying", idx + 1, task.removesuffix(".json"))
+    verify_issue(task)

@@ -75,9 +75,7 @@ class Environment:
 
     def reset(self):
         with TimeCompensationGuard(self):
-            llvm_helper.git_execute(["clean", "-fdx"])
-            llvm_helper.git_execute(["checkout", "."])
-            llvm_helper.git_execute(["checkout", self.base_commit])
+            llvm_helper.reset(self.base_commit)
 
     def verify_head(self):
         head = llvm_helper.git_execute(["rev-parse", "HEAD"])
@@ -87,8 +85,7 @@ class Environment:
     def build(self):
         with TimeCompensationGuard(self):
             self.verify_head()
-            # TODO
-            return (True, "")
+            return llvm_helper.build(self.max_build_jobs)
 
     def dump(self):
         wall_time = time.time() - self.start_time - self.interaction_time_compensation
@@ -162,6 +159,7 @@ class Environment:
         intrinsic_pattern = re.compile(r"@(llvm.\w+)\(")
         for match in re.findall(intrinsic_pattern, ir):
             keywords.add(match)
+        keywords.discard("call")
         return keywords
 
     def get_langref_desc(self, keywords):

@@ -29,6 +29,13 @@ def git_execute(args):
     ).decode("utf-8")
 
 
+def reset(commit):
+    git_execute(["restore", "--staged", "."])
+    git_execute(["clean", "-fdx"])
+    git_execute(["checkout", "."])
+    git_execute(["checkout", commit])
+
+
 def infer_related_components(diff_files):
     prefixes = [
         "llvm/lib/Analysis/",
@@ -52,10 +59,14 @@ def infer_related_components(diff_files):
                 if component_name != "":
                     if component_name.startswith("VPlan"):
                         component_name = "LoopVectorize"
+                    if component_name.startswith("ScalarEvolution"):
+                        component_name = "ScalarEvolution"
+                    if component_name.startswith("ConstantFold"):
+                        component_name = "ConstantFold"
+                    if file.startswith("llvm/lib/IR"):
+                        component_name = "IR"
                     components.add(component_name)
                     break
-        if file.startswith("llvm/lib/IR/Operator"):
-            components.add(component_name)
     return components
 
 
@@ -72,3 +83,38 @@ def get_langref_desc(keywords, commit):
         end = langref.find(sep, end)
         desc[keyword] = langref[beg:end]
     return desc
+
+
+def build(max_build_jobs: int):
+    os.makedirs(llvm_build_dir, exist_ok=True)
+    log = ""
+    try:
+        log += subprocess.check_output(
+            [
+                "cmake",
+                "-S",
+                llvm_dir + "/llvm",
+                "-G",
+                "Ninja",
+                "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
+                "-DCMAKE_BUILD_SHARED_LIBS=ON",
+                "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
+                "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
+                "-DLLVM_ENABLE_ASSERTIONS=ON",
+                "-DLLVM_ABI_BREAKING_CHECKS=FORCE_OFF",
+                "-DLLVM_ENABLE_WARNINGS=OFF",
+                "-DLLVM_APPEND_VC_REV=OFF",
+                "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ'",
+                "-DLLVM_PARALLEL_LINK_JOBS=4",
+            ],
+            stderr=subprocess.STDOUT,
+            cwd=llvm_build_dir,
+        )
+        log += subprocess.check_output(
+            ["cmake", "--build", ".", "-j", str(max_build_jobs), "-t", "opt"],
+            stderr=subprocess.STDOUT,
+            cwd=llvm_build_dir,
+        )
+        return (True, log)
+    except subprocess.CalledProcessError as e:
+        return (False, log + "\n" + str(e.output) + "\n" + e.stdout)
