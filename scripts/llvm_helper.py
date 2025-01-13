@@ -15,35 +15,60 @@
 
 import os
 import subprocess
+import re
 
-llvm_dir = os.environ['LAB_LLVM_DIR']
-llvm_build_dir = os.environ['LAB_LLVM_BUILD_DIR']
-llvm_alive_tv = os.environ['LAB_LLVM_ALIVE_TV']
-dataset_dir = os.environ['LAB_DATASET_DIR']
+llvm_dir = os.environ["LAB_LLVM_DIR"]
+llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
+llvm_alive_tv = os.environ["LAB_LLVM_ALIVE_TV"]
+dataset_dir = os.environ["LAB_DATASET_DIR"]
+
 
 def git_execute(args):
-    return subprocess.check_output(['git', '-C', llvm_dir] + args, cwd=llvm_dir).decode('utf-8')
+    return subprocess.check_output(
+        ["git", "-C", llvm_dir] + args, cwd=llvm_dir, stderr=subprocess.DEVNULL
+    ).decode("utf-8")
+
 
 def infer_related_components(diff_files):
     prefixes = [
-    'llvm/lib/Analysis/',
-    'llvm/lib/Transforms/Scalar/',
-    'llvm/lib/Transforms/Vectorize/',
-    'llvm/lib/Transforms/Utils/',
-    'llvm/lib/Transforms/IPO/',
-    'llvm/lib/Transforms/',
-    'llvm/lib/IR/',
+        "llvm/lib/Analysis/",
+        "llvm/lib/Transforms/Scalar/",
+        "llvm/lib/Transforms/Vectorize/",
+        "llvm/lib/Transforms/Utils/",
+        "llvm/lib/Transforms/IPO/",
+        "llvm/lib/Transforms/",
+        "llvm/lib/IR/",
     ]
     components = set()
     for file in diff_files:
         for prefix in prefixes:
             if file.startswith(prefix):
-                component_name = file.removeprefix(prefix).split('/')[0].removesuffix('.cpp').removesuffix('.h')
-                if component_name != '':
-                    if component_name.startswith('VPlan'):
-                        component_name = 'LoopVectorize'
+                component_name = (
+                    file.removeprefix(prefix)
+                    .split("/")[0]
+                    .removesuffix(".cpp")
+                    .removesuffix(".h")
+                )
+                if component_name != "":
+                    if component_name.startswith("VPlan"):
+                        component_name = "LoopVectorize"
                     components.add(component_name)
                     break
-        if file.startswith('llvm/lib/IR/Operator'):
+        if file.startswith("llvm/lib/IR/Operator"):
             components.add(component_name)
     return components
+
+
+def get_langref_desc(keywords, commit):
+    langref = str(git_execute(["show", f"{commit}:llvm/docs/LangRef.rst"]))
+    desc = dict()
+    sep = ".. _"
+    for keyword in keywords:
+        matched = re.search(f"\n'``{keyword}.+\n\\^", langref)
+        if matched is None:
+            continue
+        beg, end = matched.span()
+        beg = langref.rfind(sep, None, beg)
+        end = langref.find(sep, end)
+        desc[keyword] = langref[beg:end]
+    return desc

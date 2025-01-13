@@ -22,20 +22,27 @@ import time
 import tqdm
 import llvm_helper
 
-github_token = os.environ['LAB_GITHUB_TOKEN']
-cache_dir = os.environ['LAB_ISSUE_CACHE']
-postfix_extract = os.path.join(os.path.dirname(__file__), 'postfix_extract.py')
+github_token = os.environ["LAB_GITHUB_TOKEN"]
+cache_dir = os.environ["LAB_ISSUE_CACHE"]
+postfix_extract = os.path.join(os.path.dirname(__file__), "postfix_extract.py")
 session = requests.Session()
-session.headers.update({'X-GitHub-Api-Version': '2022-11-28', 'Authorization': f'Bearer {github_token}', 'Accept': 'application/vnd.github+json'})
+session.headers.update(
+    {
+        "X-GitHub-Api-Version": "2022-11-28",
+        "Authorization": f"Bearer {github_token}",
+        "Accept": "application/vnd.github+json",
+    }
+)
 
-issue_id_begin = 110000 # 76663 # Since 2024-01-01
-issue_id_end = 122633 # int(sys.argv[1])
+issue_id_begin = 110000  # 76663 # Since 2024-01-01
+issue_id_end = 122633  # int(sys.argv[1])
+
 
 def wait(progress):
     try:
-        rate_limit = session.get('https://api.github.com/rate_limit', timeout=10).json()
-        if rate_limit['rate']['remaining'] == 0:
-            next_window = rate_limit['rate']['reset']
+        rate_limit = session.get("https://api.github.com/rate_limit", timeout=10).json()
+        if rate_limit["rate"]["remaining"] == 0:
+            next_window = rate_limit["rate"]["reset"]
             while time.time() < next_window:
                 progress.set_description(f"wait {int(next_window - time.time())}s")
                 time.sleep(10)
@@ -43,51 +50,68 @@ def wait(progress):
         time.sleep(60)
         pass
 
+
 def fetch(issue_id):
-    data_json_path = os.path.join(llvm_helper.dataset_dir, f'{issue_id}.json')
+    data_json_path = os.path.join(llvm_helper.dataset_dir, f"{issue_id}.json")
     if os.path.exists(data_json_path):
         return False
 
-    issue_url = f'https://api.github.com/repos/llvm/llvm-project/issues/{issue_id}'
+    issue_url = f"https://api.github.com/repos/llvm/llvm-project/issues/{issue_id}"
     issue = session.get(issue_url).json()
-    if 'message' in issue and (issue['message'] == 'Not Found' or issue['message'] == 'This issue was deleted'):
+    if "message" in issue and (
+        issue["message"] == "Not Found" or issue["message"] == "This issue was deleted"
+    ):
         return False
-    if issue['state'] != 'closed' or issue['state_reason'] != 'completed':
+    if issue["state"] != "closed" or issue["state_reason"] != "completed":
         return False
-    if 'issue' not in issue['html_url']:
+    if "issue" not in issue["html_url"]:
         return False
     has_valid_label = False
     is_llvm_middleend = False
-    for label in issue['labels']:
-        label_name = label['name']
-        if label_name == 'miscompilation':
+    for label in issue["labels"]:
+        label_name = label["name"]
+        if label_name == "miscompilation":
             has_valid_label = True
-        if 'crash' in label_name:
+        if "crash" in label_name:
             has_valid_label = True
-        if 'hang' in label_name:
+        if "hang" in label_name:
             has_valid_label = True
-        if 'llvm' in label_name or label_name == 'vectorizers':
+        if "llvm" in label_name or label_name == "vectorizers":
             is_llvm_middleend = True
-        for key in ['backend', 'clang:', 'clangd', 'clang-tidy']:
+        for key in ["backend", "clang:", "clangd", "clang-tidy"]:
             if key in label_name:
                 return False
-        if label_name in ['invalid', 'wontfix', 'duplicate', 'undefined behavior', 'llvm:SelectionDAG', 'llvm:globalisel', 'llvm:regalloc', 'llvm:codegen', 'llvm-reduce', 'llvm:bitcode']:
+        if label_name in [
+            "invalid",
+            "wontfix",
+            "duplicate",
+            "undefined behavior",
+            "llvm:SelectionDAG",
+            "llvm:globalisel",
+            "llvm:regalloc",
+            "llvm:codegen",
+            "llvm-reduce",
+            "llvm:bitcode",
+        ]:
             return False
     if not has_valid_label:
         return False
     if not is_llvm_middleend:
         return False
-    
-    out = subprocess.check_output(['python3', postfix_extract, str(issue_id)],stderr=subprocess.DEVNULL).decode()
-    if 'This issue is marked as invalid' in out:
+
+    out = subprocess.check_output(
+        ["python3", postfix_extract, str(issue_id)], stderr=subprocess.DEVNULL
+    ).decode()
+    if "This issue is marked as invalid" in out:
         return False
     return True
+
 
 os.makedirs(cache_dir, exist_ok=True)
 success = 0
 progress = tqdm.tqdm(range(issue_id_begin, issue_id_end + 1))
 for issue_id in progress:
-    progress.set_description(f'Success {success}')
+    progress.set_description(f"Success {success}")
     cache_file = os.path.join(cache_dir, str(issue_id))
     if os.path.exists(cache_file):
         continue
