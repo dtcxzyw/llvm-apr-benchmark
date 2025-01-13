@@ -32,13 +32,18 @@ def infer_related_components(diff_files):
     'llvm/lib/Transforms/Utils/',
     'llvm/lib/Transforms/IPO/',
     'llvm/lib/Transforms/',
+    'llvm/lib/IR/',
     ]
     components = set()
     for file in diff_files:
         for prefix in prefixes:
             if file.startswith(prefix):
-                component_name = file.removeprefix(prefix).split('/')[0].split('.cpp')[0]
+                component_name = file.removeprefix(prefix).split('/')[0].removesuffix('.cpp').removesuffix('.h')
                 if component_name != '':
+                    if component_name.startswith('VPlan'):
+                        component_name = 'LoopVectorize'
                     components.add(component_name)
                     break
+        if file.startswith('llvm/lib/IR/Operator'):
+            components.add(component_name)
     return components

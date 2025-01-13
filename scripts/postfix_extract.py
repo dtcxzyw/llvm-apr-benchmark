@@ -32,9 +32,13 @@ session.headers.update({'X-GitHub-Api-Version': '2022-11-28', 'Authorization': f
 subprocess.check_output(['llvm-extract', '--version'])
 
 issue_id = sys.argv[1]
+override = False
+if len(sys.argv) == 3 and sys.argv[2] == '-f':
+    print('Force override')
+    override = True
 
 data_json_path = os.path.join(llvm_helper.dataset_dir, f'{issue_id}.json')
-if os.path.exists(data_json_path):
+if not override and os.path.exists(data_json_path):
     print(f'Item {issue_id}.json already exists')
     exit(0)
 
@@ -48,16 +52,42 @@ if issue['state'] != 'closed' or issue['state_reason'] != 'completed':
 knowledge_cutoff = issue['created_at']
 timeline = session.get(issue['timeline_url']).json()
 fix_commit = None
-closed = False
-for event in timeline:
-    if event['event'] == 'closed':
-        closed = True
-        fix_commit = event['commit_id']
-        if fix_commit is not None:
-            break
-    if closed and event['event'] == 'referenced':
-        fix_commit = event['commit_id']
-        break
+fix_commit_map = {
+    '110819': None,
+    '112633': None,
+}
+
+def is_valid_fix(commit):
+    if commit is None:
+        return False
+    try:
+        changed_files = subprocess.check_output(['git', '-C', llvm_helper.llvm_dir, 'show', '--name-only', '--format=', commit], stderr=subprocess.DEVNULL).decode().strip()
+        if 'llvm/test/' in changed_files and ('llvm/lib/' in changed_files or 'llvm/include/' in changed_files):
+            return True
+    except subprocess.CalledProcessError:
+        pass
+    return False
+
+if issue_id in fix_commit_map:
+    fix_commit = fix_commit_map[issue_id]
+    if fix_commit is None:
+        print('This issue is marked as invalid')
+        exit(0)
+else:
+    for event in timeline:
+        if event['event'] == 'closed':
+            commit_id = event['commit_id']
+            if commit_id is not None:
+                fix_commit = commit_id
+                break
+        if event['event'] == 'referenced':
+            commit = event['commit_id']
+            if is_valid_fix(commit):
+                fix_commit = commit
+
+if fix_commit is None:
+    print('Cannot find the fix commit')
+    exit(0)
 
 issue_type = 'unknown'
 for label in issue['labels']:
@@ -74,10 +104,14 @@ for label in issue['labels']:
 
 base_commit = llvm_helper.git_execute(['rev-parse', fix_commit+'~']).strip()
 changed_files = llvm_helper.git_execute(['show', '--name-only', '--format=', fix_commit]).strip()
+if '/AsmParser/' in changed_files or '/Bitcode/' in changed_files:
+    print('This issue is marked as invalid')
+    exit(0)
+
 # Component level
 components = llvm_helper.infer_related_components(changed_files.split('\n'))
 # File level
-files = list(filter(lambda x: not x.count('/test/'), changed_files.split('\n')))
+files = []
 # Extract patch
 patch = llvm_helper.git_execute(['show', fix_commit, '--', 'llvm/lib/*', 'llvm/include/*'])
 patchset = PatchSet(patch)
@@ -90,6 +124,7 @@ for file in patchset:
         max_lineno = max(x.source_line_no for x in hunk.source_lines())
         location.append([min_lineno, max_lineno])
     bug_location_lineno[file.path] = location
+    files.append(file.path)
 # Function level
 def traverse_tree(tree):
     cursor = tree.walk()
@@ -139,14 +174,21 @@ for file in patchset.modified_files:
                 break
         if not substr:
             modified_funcs_valid.append(func)
-    bug_location_funcname[file.path] = list(modified_funcs_valid)
+    if len(modified_funcs_valid) != 0:
+        bug_location_funcname[file.path] = list(modified_funcs_valid)
 
 # Extract tests
 test_patchset = PatchSet(llvm_helper.git_execute(['show', fix_commit, '--', 'llvm/test/*']))
-lit_test_dir = set(map(lambda x: os.path.dirname(x), filter(lambda x: x.count('/test/'), changed_files.split('\n'))))
+def remove_target_suffix(path):
+    targets = ['X86', 'AArch64', 'ARM', 'Mips', 'RISCV', 'PowerPC', 'LoongArch', 'AMDGPU']
+    for target in targets:
+        path = path.removesuffix('/' + target)
+    return path
+
+lit_test_dir = set(map(lambda x: remove_target_suffix(os.path.dirname(x)), filter(lambda x: x.count('/test/'), changed_files.split('\n'))))
 tests = []
 runline_pattern = re.compile(r'; RUN: (.+)\| FileCheck')
-testname_pattern = re.compile(r'define .+ @(\w+)')
+testname_pattern = re.compile(r'define .+ @(\w+)\(')
 for file in test_patchset:
     test_names = set()
     test_file = llvm_helper.git_execute(['show', f'{fix_commit}:{file.path}'])
@@ -155,15 +197,18 @@ for file in test_patchset:
         if not matched:
             continue
         test_names.add(matched.group(1))
+    if len(test_names) == 0:
+        for match in re.findall(testname_pattern, test_file):
+            test_names.add(match.strip())
     commands = []
     for match in re.findall(runline_pattern, test_file):
         commands.append(match.strip())
     subtests = []
     for test_name in test_names:
         test_body = subprocess.check_output(['llvm-extract', f'--func={test_name}', '-S', '-'], input=test_file.encode()).decode()
-        test_body = test_body.removeprefix("; ModuleID = '<stdin>'\nsource_filename = \"<stdin>\"\n\n")
+        test_body = test_body.removeprefix("; ModuleID = '<stdin>'\nsource_filename = \"<stdin>\"\n").removeprefix('\n')
         subtests.append({
-            'test': test_name,
+            'test_name': test_name,
             'test_body': test_body,
         })
     tests.append({

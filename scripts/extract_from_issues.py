@@ -18,6 +18,7 @@ import sys
 import requests
 import subprocess
 from pathlib import Path
+import time
 import tqdm
 import llvm_helper
 
@@ -27,8 +28,20 @@ postfix_extract = os.path.join(os.path.dirname(__file__), 'postfix_extract.py')
 session = requests.Session()
 session.headers.update({'X-GitHub-Api-Version': '2022-11-28', 'Authorization': f'Bearer {github_token}', 'Accept': 'application/vnd.github+json'})
 
-issue_id_begin = 76663 # Since 2024-01-01
-issue_id_end = int(sys.argv[1])
+issue_id_begin = 110000 # 76663 # Since 2024-01-01
+issue_id_end = 122633 # int(sys.argv[1])
+
+def wait(progress):
+    try:
+        rate_limit = session.get('https://api.github.com/rate_limit', timeout=10).json()
+        if rate_limit['rate']['remaining'] == 0:
+            next_window = rate_limit['rate']['reset']
+            while time.time() < next_window:
+                progress.set_description(f"wait {int(next_window - time.time())}s")
+                time.sleep(10)
+    except Exception:
+        time.sleep(60)
+        pass
 
 def fetch(issue_id):
     data_json_path = os.path.join(llvm_helper.dataset_dir, f'{issue_id}.json')
@@ -37,6 +50,8 @@ def fetch(issue_id):
 
     issue_url = f'https://api.github.com/repos/llvm/llvm-project/issues/{issue_id}'
     issue = session.get(issue_url).json()
+    if 'message' in issue and (issue['message'] == 'Not Found' or issue['message'] == 'This issue was deleted'):
+        return False
     if issue['state'] != 'closed' or issue['state_reason'] != 'completed':
         return False
     if 'issue' not in issue['html_url']:
@@ -53,22 +68,26 @@ def fetch(issue_id):
             has_valid_label = True
         if 'llvm' in label_name or label_name == 'vectorizers':
             is_llvm_middleend = True
-        if 'backend' in label_name or 'clang:' in label_name or 'clangd' in label_name or 'clang-tidy' in label_name:
-            return False
-        if label_name in ['invalid', 'wontfix', 'duplicate', 'undefined behavior', 'llvm:SelectionDAG', 'llvm:globalisel', 'llvm:regalloc']:
+        for key in ['backend', 'clang:', 'clangd', 'clang-tidy']:
+            if key in label_name:
+                return False
+        if label_name in ['invalid', 'wontfix', 'duplicate', 'undefined behavior', 'llvm:SelectionDAG', 'llvm:globalisel', 'llvm:regalloc', 'llvm:codegen', 'llvm-reduce', 'llvm:bitcode']:
             return False
     if not has_valid_label:
         return False
     if not is_llvm_middleend:
         return False
     
-    subprocess.check_output(['python3', postfix_extract, str(issue_id)],stderr=subprocess.DEVNULL)
+    out = subprocess.check_output(['python3', postfix_extract, str(issue_id)],stderr=subprocess.DEVNULL).decode()
+    if 'This issue is marked as invalid' in out:
+        return False
     return True
 
 os.makedirs(cache_dir, exist_ok=True)
 success = 0
 progress = tqdm.tqdm(range(issue_id_begin, issue_id_end + 1))
 for issue_id in progress:
+    progress.set_description(f'Success {success}')
     cache_file = os.path.join(cache_dir, str(issue_id))
     if os.path.exists(cache_file):
         continue
@@ -76,9 +95,13 @@ for issue_id in progress:
         try:
             if fetch(issue_id):
                 success += 1
-                progress.display(f'Success {success}')
             else:
                 Path(cache_file).touch()
             break
+        except KeyError as e:
+            wait(progress)
+        except requests.exceptions.RequestException:
+            wait(progress)
         except Exception as e:
-            print(e)
+            print(type(e), e)
+            exit(0)
