@@ -101,7 +101,7 @@ def build(max_build_jobs: int):
                 "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
                 "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
                 "-DLLVM_ENABLE_ASSERTIONS=ON",
-                "-DLLVM_ABI_BREAKING_CHECKS=FORCE_OFF",
+                "-DLLVM_ABI_BREAKING_CHECKS=WITH_ASSERTS",
                 "-DLLVM_ENABLE_WARNINGS=OFF",
                 "-DLLVM_APPEND_VC_REV=OFF",
                 "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ'",
@@ -109,12 +109,12 @@ def build(max_build_jobs: int):
             ],
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
-        )
+        ).decode()
         log += subprocess.check_output(
             ["cmake", "--build", ".", "-j", str(max_build_jobs), "-t", "opt"],
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
-        )
+        ).decode()
         return (True, log)
     except subprocess.CalledProcessError as e:
-        return (False, log + "\n" + str(e.output) + "\n" + e.stdout)
+        return (False, log + "\n" + e.output.decode())

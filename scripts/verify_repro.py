@@ -18,15 +18,22 @@ import sys
 import llvm_helper
 import json
 
+max_build_jobs = os.cpu_count()
+max_build_jobs = 12
+
 
 def verify_issue(issue):
     with open(os.path.join(llvm_helper.dataset_dir, issue)) as f:
         data = json.load(f)
+    if data["verified"]:
+        return
     print(data["issue"]["title"])
     base_commit = data["base_commit"]
     llvm_helper.reset(base_commit)
-    llvm_helper.build(max_build_jobs=os.cpu_count())
-    pass
+    res, log = llvm_helper.build(max_build_jobs)
+    if not res:
+        print(log)
+        return
 
 
 task_list = []
