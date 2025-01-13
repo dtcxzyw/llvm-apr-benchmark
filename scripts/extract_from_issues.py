@@ -14,7 +14,6 @@
 # limitations under the License.
 
 import os
-import sys
 import requests
 import subprocess
 from pathlib import Path
@@ -34,9 +33,8 @@ session.headers.update(
     }
 )
 
-issue_id_begin = 110000  # 76663 # Since 2024-01-01
-issue_id_end = 122633  # int(sys.argv[1])
-
+issue_id_begin = 76663 # Since 2024-01-01
+issue_id_end = 122733
 
 def wait(progress):
     try:
@@ -78,7 +76,7 @@ def fetch(issue_id):
             has_valid_label = True
         if "llvm" in label_name or label_name == "vectorizers":
             is_llvm_middleend = True
-        for key in ["backend", "clang:", "clangd", "clang-tidy"]:
+        for key in ["backend", "clang:", "clangd", "clang-tidy", "mlir:", "tools:"]:
             if key in label_name:
                 return False
         if label_name in [

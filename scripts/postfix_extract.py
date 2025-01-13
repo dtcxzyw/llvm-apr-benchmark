@@ -59,15 +59,19 @@ knowledge_cutoff = issue["created_at"]
 timeline = session.get(issue["timeline_url"]).json()
 fix_commit = None
 fix_commit_map = {
+    "108618": None,
+    "109581": None,
     "110819": None,
     "112633": None,
 }
-
 
 def is_valid_fix(commit):
     if commit is None:
         return False
     try:
+        branches = llvm_helper.git_execute(['branch', '--contains', commit])
+        if 'main\n' not in branches:
+            return False
         changed_files = (
             subprocess.check_output(
                 [
@@ -105,7 +109,7 @@ else:
             if commit_id is not None:
                 fix_commit = commit_id
                 break
-        if event["event"] == "referenced":
+        if event["event"] == "referenced" and fix_commit is None:
             commit = event["commit_id"]
             if is_valid_fix(commit):
                 fix_commit = commit
