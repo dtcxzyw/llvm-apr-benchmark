@@ -1,0 +1,100 @@
+{
+  "bug_id": "114879",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/114879",
+  "bug_type": "miscompilation",
+  "base_commit": "8f9dbb0a780feed60416ebc6ef8e89f4b0c2dca7",
+  "knowledge_cutoff": "2024-11-04T22:12:00Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize",
+    "llvm/test/Transforms/LoopStrengthReduce",
+    "llvm/test/Transforms/LoopStrengthReduce/Power"
+  ],
+  "hints": {
+    "fix_commit": "6dc23b70097e4135ecde33f49550b1f473a5c385",
+    "components": [
+      "ScalarEvolution"
+    ],
+    "files": [
+      "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp": [
+        [
+          1467,
+          1474
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp": [
+        "SCEVExpander::FindValueInExprValueMap"
+      ]
+    }
+  },
+  "patch": "commit 6dc23b70097e4135ecde33f49550b1f473a5c385\nAuthor: Nikita Popov <npopov@redhat.com>\nDate:   Mon Nov 11 12:36:29 2024 +0100\n\n    [SCEVExpander] Don't try to reuse SCEVUnknown values (#115141)\n    \n    The expansion of a SCEVUnknown is trivial (it's just the wrapped value).\n    If we try to reuse an existing value it might be a more complex\n    expression that simplifies to the SCEVUnknown.\n    \n    This is inspired by https://github.com/llvm/llvm-project/issues/114879,\n    because SCEVExpander replacing a constant with a phi node is just silly.\n    (I don't consider this a fix for that issue though.)\n\ndiff --git a/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp b/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp\nindex 39da38e49181..791d52882397 100644\n--- a/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp\n+++ b/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp\n@@ -1467,8 +1467,8 @@ Value *SCEVExpander::FindValueInExprValueMap(\n   if (!CanonicalMode && SE.containsAddRecurrence(S))\n     return nullptr;\n \n-  // If S is a constant, it may be worse to reuse an existing Value.\n-  if (isa<SCEVConstant>(S))\n+  // If S is a constant or unknown, it may be worse to reuse an existing Value.\n+  if (isa<SCEVConstant>(S) || isa<SCEVUnknown>(S))\n     return nullptr;\n \n   for (Value *V : SE.getSCEVValues(S)) {\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopStrengthReduce/Power/incomplete-phi.ll",
+      "commands": [
+        "opt -loop-reduce -S  < %s 2>&1"
+      ],
+      "tests": [
+        {
+          "test_name": "foo",
+          "test_body": "target datalayout = \"e-m:e-i64:64-n32:64\"\ntarget triple = \"powerpc64le-unknown-linux-gnu\"\n\n%0 = type <{ float }>\n\ndefine void @foo(ptr %arg) {\nbb:\n  %i = getelementptr inbounds [0 x %0], ptr %arg, i64 0, i64 -1\n  %i2 = getelementptr i8, ptr %i, i64 4\n  br label %bb3\n\nbb3:                                              ; preds = %bb18, %bb\n  %i4 = phi i64 [ %i20, %bb18 ], [ 0, %bb ]\n  %i5 = phi i64 [ %i21, %bb18 ], [ 1, %bb ]\n  br i1 undef, label %bb22, label %bb9\n\nbb9:                                              ; preds = %bb9, %bb3\n  %i10 = phi i64 [ 0, %bb3 ], [ %i16, %bb9 ]\n  %i11 = add i64 %i10, %i4\n  %i12 = shl i64 %i11, 2\n  %i13 = getelementptr i8, ptr %i2, i64 %i12\n  store <4 x float> undef, ptr %i13, align 4\n  %i16 = add i64 %i10, 32\n  br i1 true, label %bb17, label %bb9\n\nbb17:                                             ; preds = %bb9\n  br i1 undef, label %bb18, label %bb22\n\nbb18:                                             ; preds = %bb17\n  %i19 = add i64 undef, %i4\n  %i20 = add i64 %i19, %i5\n  %i21 = add nuw nsw i64 %i5, 1\n  br label %bb3\n\nbb22:                                             ; preds = %bb22, %bb17, %bb3\n  %i23 = phi i64 [ %i26, %bb22 ], [ undef, %bb17 ], [ 100, %bb3 ]\n  %i24 = add nsw i64 %i23, %i4\n  %i25 = getelementptr %0, ptr %i, i64 %i24, i32 0\n  store float undef, ptr %i25, align 4\n  %i26 = add nuw nsw i64 %i23, 1\n  br label %bb22\n}\n"
+        }
+      ]
+    },
+    {
+      "file": "llvm/test/Transforms/LoopStrengthReduce/lsr-term-fold.ll",
+      "commands": [
+        "opt < %s -passes=\"loop-reduce,loop-term-fold\" -S"
+      ],
+      "tests": [
+        {
+          "test_name": "ptr_of_ptr_addrec",
+          "test_body": "target datalayout = \"e-p:64:64:64-n64\"\n\ndefine void @ptr_of_ptr_addrec(ptr %ptrptr, i32 %length) {\nentry:\n  %start.ptrptr = getelementptr inbounds ptr, ptr %ptrptr\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %i.05 = phi i32 [ %dec, %for.body ], [ %length, %entry ]\n  %it.04 = phi ptr [ %incdec.ptr, %for.body ], [ %start.ptrptr, %entry ]\n  %0 = load ptr, ptr %it.04, align 8\n  tail call void @foo(ptr %0)\n  %incdec.ptr = getelementptr inbounds ptr, ptr %it.04, i64 1\n  %dec = add nsw i32 %i.05, -1\n  %tobool.not = icmp eq i32 %dec, 0\n  br i1 %tobool.not, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  ret void\n}\n\ndeclare void @foo(ptr)\n"
+        }
+      ]
+    },
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/pr45259.ll",
+      "commands": [
+        "opt < %s -S -passes=loop-vectorize -force-vector-width=4 -force-vector-interleave=1"
+      ],
+      "tests": [
+        {
+          "test_name": "widget",
+          "test_body": "define i8 @widget(ptr %arr, i8 %t9) {\nbb:\n  br label %bb6\n\nbb6:                                              ; preds = %bb6, %bb\n  %t1.0 = phi ptr [ %arr, %bb ], [ null, %bb6 ]\n  %c = call i1 @cond()\n  br i1 %c, label %for.preheader, label %bb6\n\nfor.preheader:                                    ; preds = %bb6\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %for.preheader\n  %iv = phi i8 [ %iv.next, %for.body ], [ 0, %for.preheader ]\n  %iv.next = add i8 %iv, 1\n  %ptr = getelementptr inbounds i8, ptr %arr, i8 %iv.next\n  %t3.i = icmp slt i8 %iv.next, %t9\n  %t3.i8 = zext i1 %t3.i to i8\n  store i8 %t3.i8, ptr %ptr, align 1\n  %ec = icmp eq ptr %t1.0, %ptr\n  br i1 %ec, label %for.exit, label %for.body\n\nfor.exit:                                         ; preds = %for.body\n  %iv.next.lcssa = phi i8 [ %iv.next, %for.body ]\n  ret i8 %iv.next.lcssa\n}\n\ndeclare i1 @cond()\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "WRONG code: GVN? Loop opts?",
+    "body": "cat wrong0.i\r\n```\r\nint printf(const char *, ...);\r\nunsigned int IntArr[6];\r\nunsigned int GlobIntONE = 1, GlobIntZERO = 0;\r\nconst unsigned int *GlobIntPtr = 0;\r\nunsigned long Res;\r\nunsigned long *ResPtr = &Res;\r\nconst unsigned int **GlobIntPtrPTr = &GlobIntPtr;\r\nunsigned int *func() {\r\n  int *GlobIntONEPtr = &GlobIntONE;\r\n  for (int Idx = 0; Idx <= 7; Idx += 1) {\r\n    int Idx2 = 1;\r\n    if (Idx > 0) {\r\n      for (; Idx2 <= 7; Idx2 += 1)\r\n        ;\r\n      return GlobIntONEPtr;\r\n    }\r\n  }\r\n  0 != &GlobIntONEPtr;\r\n  return &GlobIntZERO;\r\n}\r\n\r\nint main() {\r\n  IntArr[GlobIntZERO] = GlobIntZERO;\r\n  *GlobIntPtrPTr = func();\r\n  unsigned char Byte = *GlobIntPtr;\r\n  *ResPtr = Byte;\r\n  printf(\"checksum = %X\\n\", Res);\r\n}\r\n```\r\n\r\n\r\nIn the above file, func() should obviously should return GlobIntONEPtr, but it does not if compiled with '-fno-inline  -mllvm -unroll-full-max-count=1'.\r\n\r\n```\r\nclang -O0 -march=z16 wrong0.i -o a.out -w -fno-inline  ; ./a.out\r\nchecksum = 1\r\n\r\nclang -O3 -march=z16 wrong0.i -o a.out -w -fno-inline  ; ./a.out\r\nchecksum = 1\r\n\r\nclang -O3 -march=z16 wrong0.i -o a.out -w -fno-inline  -mllvm -unroll-full-max-count=1 ; ./a.out\r\nchecksum = 0\r\n\r\n```\r\nIt may be that GVN does something wrong, as after it @func() is always returning ptr undef. Or it could very well be some of the loop optimizations that is run just before it.\r\n\r\nA bisect shows that\r\n\r\n```\r\nd77067d08a3f56dc2d0e6c95bd2852c943df743a is the first bad commit\r\ncommit d77067d08a3f56dc2d0e6c95bd2852c943df743a\r\nAuthor: Nikita Popov <npopov@redhat.com>\r\nDate:   Wed Dec 6 14:17:18 2023 +0100\r\n\r\n    [ValueTracking] Add dominating condition support in computeKnownBits() (#73662)\r\n\r\n```\r\n@nikic ",
+    "author": "JonPsson1",
+    "labels": [
+      "miscompilation",
+      "llvm:SCEV"
+    ],
+    "comments": [
+      {
+        "author": "dtcxzyw",
+        "body": "Bisected to LoopUnrollFullPass:\r\n```\r\n; bin/opt -passes=loop-unroll-full -unroll-full-max-count=1 test.ll -S\r\n\r\n@GlobIntONE = dso_local global i32 1, align 4\r\n@GlobIntZERO = dso_local local_unnamed_addr global i32 0, align 4\r\n\r\ndefine i32 @main() local_unnamed_addr {\r\nentry:\r\n  br label %for.body\r\n\r\nfor.body:                                         ; preds = %entry, %cleanup\r\n  %retval.0 = phi ptr [ undef, %entry ], [ %retval.2, %cleanup ]\r\n  %cmp1.not = phi i1 [ true, %entry ], [ false, %cleanup ]\r\n  br i1 %cmp1.not, label %cleanup, label %for.cond2.preheader\r\n\r\nfor.cond2.preheader:                              ; preds = %for.body\r\n  br label %cleanup.loopexit\r\n\r\ncleanup.loopexit:                                 ; preds = %for.cond2.preheader\r\n  br label %cleanup\r\n\r\ncleanup:                                          ; preds = %cleanup.loopexit, %for.body\r\n  %retval.2 = phi ptr [ %retval.0, %for.body ], [ @GlobIntONE, %cleanup.loopexit ]\r\n  br i1 %cmp1.not, label %for.body, label %cleanup7\r\n\r\ncleanup7:                                         ; preds = %cleanup\r\n  %retval.2.lcssa = phi ptr [ %retval.2, %cleanup ]\r\n  %res = load i32, ptr %retval.2.lcssa, align 4\r\n  ret i32 %res\r\n}\r\n```\r\n```\r\nsource_filename = \"test.ll\"\r\n\r\n@GlobIntONE = dso_local global i32 1, align 4\r\n@GlobIntZERO = dso_local local_unnamed_addr global i32 0, align 4\r\n\r\ndefine i32 @main() local_unnamed_addr {\r\nentry:\r\n  br label %for.body.peel.begin\r\n\r\nfor.body.peel.begin:                              ; preds = %entry\r\n  br label %for.body.peel\r\n\r\nfor.body.peel:                                    ; preds = %for.body.peel.begin\r\n  br i1 true, label %cleanup.peel, label %for.cond2.preheader.peel\r\n\r\nfor.cond2.preheader.peel:                         ; preds = %for.body.peel\r\n  br label %cleanup.loopexit.peel\r\n\r\ncleanup.loopexit.peel:                            ; preds = %for.cond2.preheader.peel\r\n  br label %cleanup.peel\r\n\r\ncleanup.peel:                                     ; preds = %cleanup.loopexit.peel, %for.body.peel\r\n  %retval.2.peel = phi ptr [ undef, %for.body.peel ], [ @GlobIntONE, %cleanup.loopexit.peel ]\r\n  br i1 true, label %for.body.peel.next, label %cleanup7\r\n\r\nfor.body.peel.next:                               ; preds = %cleanup.peel\r\n  br label %for.body.peel.next1\r\n\r\nfor.body.peel.next1:                              ; preds = %for.body.peel.next\r\n  br label %entry.peel.newph\r\n\r\nentry.peel.newph:                                 ; preds = %for.body.peel.next1\r\n  br label %for.body\r\n\r\nfor.body:                                         ; preds = %cleanup, %entry.peel.newph\r\n  br i1 false, label %cleanup, label %for.cond2.preheader\r\n\r\nfor.cond2.preheader:                              ; preds = %for.body\r\n  br label %cleanup.loopexit\r\n\r\ncleanup.loopexit:                                 ; preds = %for.cond2.preheader\r\n  br label %cleanup\r\n\r\ncleanup:                                          ; preds = %cleanup.loopexit, %for.body\r\n  br i1 false, label %for.body, label %cleanup7.loopexit, !llvm.loop !0\r\n\r\ncleanup7.loopexit:                                ; preds = %cleanup\r\n  %retval.2.lcssa.ph = phi ptr [ %retval.2.peel, %cleanup ]\r\n  br label %cleanup7\r\n\r\ncleanup7:                                         ; preds = %cleanup7.loopexit, %cleanup.peel\r\n  %retval.2.lcssa = phi ptr [ %retval.2.peel, %cleanup.peel ], [ %retval.2.lcssa.ph, %cleanup7.loopexit ]\r\n  %res = load i32, ptr %retval.2.lcssa, align 4\r\n  ret i32 %res\r\n}\r\n\r\n!0 = distinct !{!0, !1}\r\n!1 = !{!\"llvm.loop.peeled.count\", i32 1}\r\n```"
+      },
+      {
+        "author": "dtcxzyw",
+        "body": "`simplifyLoopAfterUnroll -> simplifyLoopIVs` causes the miscompilation: https://alive2.llvm.org/ce/z/yiBsZt\r\nI will post a fix later.\r\n"
+      },
+      {
+        "author": "dtcxzyw",
+        "body": "The root cause is:\r\n1. `simplifyInstruction(%retval.2.peel)` returns `@GlobIntONE`. Thus, `ScalarEvolution::createNodeForPHI` returns SCEV expr `@GlobIntONE` for `%retval.2.peel`.\r\n2.  `SimplifyIndvar::replaceIVUserWithLoopInvariant` tries to replace the use of `%retval.2.peel` in `%retval.2.lcssa.ph` with `@GlobIntONE`.\r\n3. `SCEVExpander::expand` reuses `%retval.2.peel = phi ptr [ undef, %for.body.peel ], [ @GlobIntONE, %cleanup.loopexit.peel ]` to generate code for `@GlobIntONE`. It is incorrect.\r\n\r\nTwo possible solutions:\r\n1. Set `CanUseUndef` to false in `simplifyInstruction`.\r\n2. Block this case in `ScalarEvolution::canReuseInstruction`.\r\n\r\n@nikic @preames Any thoughts?\r\n"
+      },
+      {
+        "author": "nikic",
+        "body": "I think setting `CanUseUndef=false` would be the correct thing to do. The reverse replacement here is particularly fishy, but more generally, if we make an assumption about the value of undef at a particular use, we have to be consistent about that assumption, and SCEV cannot really guarantee that this is the case."
+      }
+    ]
+  }
+}

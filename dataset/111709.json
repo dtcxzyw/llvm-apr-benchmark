@@ -1,0 +1,208 @@
+{
+  "bug_id": "111709",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/111709",
+  "bug_type": "miscompilation",
+  "base_commit": "c5eb591257c3c32eefb71d5150be453beea762ec",
+  "knowledge_cutoff": "2024-10-09T16:22:31Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LowerConstantIntrinsics"
+  ],
+  "hints": {
+    "fix_commit": "01a103b0b9c449e8dec17950835991757d1c4f88",
+    "components": [
+      "MemoryBuiltins"
+    ],
+    "files": [
+      "llvm/include/llvm/Analysis/MemoryBuiltins.h",
+      "llvm/lib/Analysis/MemoryBuiltins.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/include/llvm/Analysis/MemoryBuiltins.h": [
+        [
+          221,
+          241
+        ],
+        [
+          245,
+          273
+        ]
+      ],
+      "llvm/lib/Analysis/MemoryBuiltins.cpp": [
+        [
+          686,
+          695
+        ],
+        [
+          706,
+          733
+        ],
+        [
+          737,
+          743
+        ],
+        [
+          763,
+          769
+        ],
+        [
+          771,
+          777
+        ],
+        [
+          782,
+          793
+        ],
+        [
+          796,
+          811
+        ],
+        [
+          816,
+          860
+        ],
+        [
+          865,
+          871
+        ],
+        [
+          936,
+          950
+        ],
+        [
+          956,
+          1025
+        ],
+        [
+          1072,
+          1078
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/include/llvm/Analysis/MemoryBuiltins.h": [
+        "SizeOffsetType",
+        "bothKnown",
+        "knownOffset",
+        "SizeOffsetAPInt",
+        "knownSize",
+        "SizeOffsetValue",
+        "unknown",
+        "anyKnown",
+        "operator==",
+        "operator!="
+      ],
+      "llvm/lib/Analysis/MemoryBuiltins.cpp": [
+        "ObjectSizeOffsetVisitor::visitIntToPtrInst",
+        "ObjectSizeOffsetVisitor::computeImpl",
+        "ObjectSizeOffsetVisitor::visitGlobalVariable",
+        "ObjectSizeOffsetVisitor::visitUndefValue",
+        "ObjectSizeOffsetVisitor::visitInstruction",
+        "ObjectSizeOffsetVisitor::visitCallBase",
+        "ObjectSizeOffsetEvaluator::compute_",
+        "ObjectSizeOffsetVisitor::visitArgument",
+        "ObjectSizeOffsetVisitor::findLoadSizeOffset",
+        "ObjectSizeOffsetVisitor::visitPHINode",
+        "ObjectSizeOffsetVisitor::visitSelectInst",
+        "getSizeWithOverflow",
+        "ObjectSizeOffsetVisitor::visitAllocaInst",
+        "ObjectSizeOffsetVisitor::computeValue",
+        "ObjectSizeOffsetVisitor::CheckedZextOrTrunc",
+        "ObjectSizeOffsetVisitor::visitConstantPointerNull",
+        "ObjectSizeOffsetVisitor::ObjectSizeOffsetVisitor",
+        "ObjectSizeOffsetVisitor::visitExtractValueInst",
+        "ObjectSizeOffsetVisitor::combineSizeOffset",
+        "ObjectSizeOffsetVisitor::visitGlobalAlias",
+        "ObjectSizeOffsetVisitor::visitLoadInst",
+        "ObjectSizeOffsetVisitor::visitExtractElementInst"
+      ]
+    }
+  },
+  "patch": "commit 01a103b0b9c449e8dec17950835991757d1c4f88\nAuthor: serge-sans-paille <sguelton@mozilla.com>\nDate:   Sat Nov 2 09:14:35 2024 +0000\n\n    [llvm] Fix __builtin_object_size interaction between Negative Offset \u2026 (#111827)\n    \n    \u2026and Select/Phi\n    \n    When picking a SizeOffsetAPInt through combineSizeOffset, the behavior\n    differs if we're going to apply a constant offset that's positive or\n    negative: If it's positive, then we need to compare the remaining bytes\n    (i.e. Size\n    - Offset), but if it's negative, we need to compare the preceding bytes\n    (i.e. Offset).\n    \n    Fix #111709\n\ndiff --git a/llvm/include/llvm/Analysis/MemoryBuiltins.h b/llvm/include/llvm/Analysis/MemoryBuiltins.h\nindex 7b48844cc9e8..c3b11cdf5cf5 100644\n--- a/llvm/include/llvm/Analysis/MemoryBuiltins.h\n+++ b/llvm/include/llvm/Analysis/MemoryBuiltins.h\n@@ -221,21 +221,43 @@ struct SizeOffsetAPInt : public SizeOffsetType<APInt, SizeOffsetAPInt> {\n   static bool known(const APInt &V) { return V.getBitWidth() > 1; }\n };\n \n+/// OffsetSpan - Used internally by \\p ObjectSizeOffsetVisitor. Represents a\n+/// point in memory as a pair of allocated bytes before and after it.\n+struct OffsetSpan {\n+  APInt Before; /// Number of allocated bytes before this point.\n+  APInt After;  /// Number of allocated bytes after this point.\n+\n+  OffsetSpan() = default;\n+  OffsetSpan(APInt Before, APInt After) : Before(Before), After(After) {}\n+\n+  bool knownBefore() const { return known(Before); }\n+  bool knownAfter() const { return known(After); }\n+  bool anyKnown() const { return knownBefore() || knownAfter(); }\n+  bool bothKnown() const { return knownBefore() && knownAfter(); }\n+\n+  bool operator==(const OffsetSpan &RHS) const {\n+    return Before == RHS.Before && After == RHS.After;\n+  }\n+  bool operator!=(const OffsetSpan &RHS) const { return !(*this == RHS); }\n+\n+  static bool known(const APInt &V) { return V.getBitWidth() > 1; }\n+};\n+\n /// Evaluate the size and offset of an object pointed to by a Value*\n /// statically. Fails if size or offset are not known at compile time.\n class ObjectSizeOffsetVisitor\n-    : public InstVisitor<ObjectSizeOffsetVisitor, SizeOffsetAPInt> {\n+    : public InstVisitor<ObjectSizeOffsetVisitor, OffsetSpan> {\n   const DataLayout &DL;\n   const TargetLibraryInfo *TLI;\n   ObjectSizeOpts Options;\n   unsigned IntTyBits;\n   APInt Zero;\n-  SmallDenseMap<Instruction *, SizeOffsetAPInt, 8> SeenInsts;\n+  SmallDenseMap<Instruction *, OffsetSpan, 8> SeenInsts;\n   unsigned InstructionsVisited;\n \n   APInt align(APInt Size, MaybeAlign Align);\n \n-  static SizeOffsetAPInt unknown() { return SizeOffsetAPInt(); }\n+  static OffsetSpan unknown() { return OffsetSpan(); }\n \n public:\n   ObjectSizeOffsetVisitor(const DataLayout &DL, const TargetLibraryInfo *TLI,\n@@ -245,29 +267,30 @@ public:\n \n   // These are \"private\", except they can't actually be made private. Only\n   // compute() should be used by external users.\n-  SizeOffsetAPInt visitAllocaInst(AllocaInst &I);\n-  SizeOffsetAPInt visitArgument(Argument &A);\n-  SizeOffsetAPInt visitCallBase(CallBase &CB);\n-  SizeOffsetAPInt visitConstantPointerNull(ConstantPointerNull &);\n-  SizeOffsetAPInt visitExtractElementInst(ExtractElementInst &I);\n-  SizeOffsetAPInt visitExtractValueInst(ExtractValueInst &I);\n-  SizeOffsetAPInt visitGlobalAlias(GlobalAlias &GA);\n-  SizeOffsetAPInt visitGlobalVariable(GlobalVariable &GV);\n-  SizeOffsetAPInt visitIntToPtrInst(IntToPtrInst &);\n-  SizeOffsetAPInt visitLoadInst(LoadInst &I);\n-  SizeOffsetAPInt visitPHINode(PHINode &);\n-  SizeOffsetAPInt visitSelectInst(SelectInst &I);\n-  SizeOffsetAPInt visitUndefValue(UndefValue &);\n-  SizeOffsetAPInt visitInstruction(Instruction &I);\n+  OffsetSpan visitAllocaInst(AllocaInst &I);\n+  OffsetSpan visitArgument(Argument &A);\n+  OffsetSpan visitCallBase(CallBase &CB);\n+  OffsetSpan visitConstantPointerNull(ConstantPointerNull &);\n+  OffsetSpan visitExtractElementInst(ExtractElementInst &I);\n+  OffsetSpan visitExtractValueInst(ExtractValueInst &I);\n+  OffsetSpan visitGlobalAlias(GlobalAlias &GA);\n+  OffsetSpan visitGlobalVariable(GlobalVariable &GV);\n+  OffsetSpan visitIntToPtrInst(IntToPtrInst &);\n+  OffsetSpan visitLoadInst(LoadInst &I);\n+  OffsetSpan visitPHINode(PHINode &);\n+  OffsetSpan visitSelectInst(SelectInst &I);\n+  OffsetSpan visitUndefValue(UndefValue &);\n+  OffsetSpan visitInstruction(Instruction &I);\n \n private:\n-  SizeOffsetAPInt findLoadSizeOffset(\n-      LoadInst &LoadFrom, BasicBlock &BB, BasicBlock::iterator From,\n-      SmallDenseMap<BasicBlock *, SizeOffsetAPInt, 8> &VisitedBlocks,\n-      unsigned &ScannedInstCount);\n-  SizeOffsetAPInt combineSizeOffset(SizeOffsetAPInt LHS, SizeOffsetAPInt RHS);\n-  SizeOffsetAPInt computeImpl(Value *V);\n-  SizeOffsetAPInt computeValue(Value *V);\n+  OffsetSpan\n+  findLoadOffsetRange(LoadInst &LoadFrom, BasicBlock &BB,\n+                      BasicBlock::iterator From,\n+                      SmallDenseMap<BasicBlock *, OffsetSpan, 8> &VisitedBlocks,\n+                      unsigned &ScannedInstCount);\n+  OffsetSpan combineOffsetRange(OffsetSpan LHS, OffsetSpan RHS);\n+  OffsetSpan computeImpl(Value *V);\n+  OffsetSpan computeValue(Value *V);\n   bool CheckedZextOrTrunc(APInt &I);\n };\n \ndiff --git a/llvm/lib/Analysis/MemoryBuiltins.cpp b/llvm/lib/Analysis/MemoryBuiltins.cpp\nindex dc2dc4c1733b..71400ac46bdc 100644\n--- a/llvm/lib/Analysis/MemoryBuiltins.cpp\n+++ b/llvm/lib/Analysis/MemoryBuiltins.cpp\n@@ -686,10 +686,21 @@ ObjectSizeOffsetVisitor::ObjectSizeOffsetVisitor(const DataLayout &DL,\n \n SizeOffsetAPInt ObjectSizeOffsetVisitor::compute(Value *V) {\n   InstructionsVisited = 0;\n-  return computeImpl(V);\n+  OffsetSpan Span = computeImpl(V);\n+\n+  // In ExactSizeFromOffset mode, we don't care about the Before Field, so allow\n+  // us to overwrite it if needs be.\n+  if (Span.knownAfter() && !Span.knownBefore() &&\n+      Options.EvalMode == ObjectSizeOpts::Mode::ExactSizeFromOffset)\n+    Span.Before = APInt::getZero(Span.After.getBitWidth());\n+\n+  if (!Span.bothKnown())\n+    return {};\n+\n+  return {Span.Before + Span.After, Span.Before};\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::computeImpl(Value *V) {\n+OffsetSpan ObjectSizeOffsetVisitor::computeImpl(Value *V) {\n   unsigned InitialIntTyBits = DL.getIndexTypeSizeInBits(V->getType());\n \n   // Stripping pointer casts can strip address space casts which can change the\n@@ -706,28 +717,28 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::computeImpl(Value *V) {\n   IntTyBits = DL.getIndexTypeSizeInBits(V->getType());\n   Zero = APInt::getZero(IntTyBits);\n \n-  SizeOffsetAPInt SOT = computeValue(V);\n+  OffsetSpan ORT = computeValue(V);\n \n   bool IndexTypeSizeChanged = InitialIntTyBits != IntTyBits;\n   if (!IndexTypeSizeChanged && Offset.isZero())\n-    return SOT;\n+    return ORT;\n \n   // We stripped an address space cast that changed the index type size or we\n   // accumulated some constant offset (or both). Readjust the bit width to match\n   // the argument index type size and apply the offset, as required.\n   if (IndexTypeSizeChanged) {\n-    if (SOT.knownSize() && !::CheckedZextOrTrunc(SOT.Size, InitialIntTyBits))\n-      SOT.Size = APInt();\n-    if (SOT.knownOffset() &&\n-        !::CheckedZextOrTrunc(SOT.Offset, InitialIntTyBits))\n-      SOT.Offset = APInt();\n+    if (ORT.knownBefore() &&\n+        !::CheckedZextOrTrunc(ORT.Before, InitialIntTyBits))\n+      ORT.Before = APInt();\n+    if (ORT.knownAfter() && !::CheckedZextOrTrunc(ORT.After, InitialIntTyBits))\n+      ORT.After = APInt();\n   }\n-  // If the computed offset is \"unknown\" we cannot add the stripped offset.\n-  return {SOT.Size,\n-          SOT.Offset.getBitWidth() > 1 ? SOT.Offset + Offset : SOT.Offset};\n+  // If the computed bound is \"unknown\" we cannot add the stripped offset.\n+  return {(ORT.knownBefore() ? ORT.Before + Offset : ORT.Before),\n+          (ORT.knownAfter() ? ORT.After - Offset : ORT.After)};\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::computeValue(Value *V) {\n+OffsetSpan ObjectSizeOffsetVisitor::computeValue(Value *V) {\n   if (Instruction *I = dyn_cast<Instruction>(V)) {\n     // If we have already seen this instruction, bail out. Cycles can happen in\n     // unreachable code after constant propagation.\n@@ -737,7 +748,7 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::computeValue(Value *V) {\n     ++InstructionsVisited;\n     if (InstructionsVisited > ObjectSizeOffsetVisitorMaxVisitInstructions)\n       return ObjectSizeOffsetVisitor::unknown();\n-    SizeOffsetAPInt Res = visit(*I);\n+    OffsetSpan Res = visit(*I);\n     // Cache the result for later visits. If we happened to visit this during\n     // the above recursion, we would consider it unknown until now.\n     SeenInsts[I] = Res;\n@@ -763,7 +774,7 @@ bool ObjectSizeOffsetVisitor::CheckedZextOrTrunc(APInt &I) {\n   return ::CheckedZextOrTrunc(I, IntTyBits);\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {\n   TypeSize ElemSize = DL.getTypeAllocSize(I.getAllocatedType());\n   if (ElemSize.isScalable() && Options.EvalMode != ObjectSizeOpts::Mode::Min)\n     return ObjectSizeOffsetVisitor::unknown();\n@@ -771,7 +782,7 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {\n     return ObjectSizeOffsetVisitor::unknown();\n   APInt Size(IntTyBits, ElemSize.getKnownMinValue());\n   if (!I.isArrayAllocation())\n-    return SizeOffsetAPInt(align(Size, I.getAlign()), Zero);\n+    return OffsetSpan(Zero, align(Size, I.getAlign()));\n \n   Value *ArraySize = I.getArraySize();\n   if (const ConstantInt *C = dyn_cast<ConstantInt>(ArraySize)) {\n@@ -782,12 +793,12 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::visitAllocaInst(AllocaInst &I) {\n     bool Overflow;\n     Size = Size.umul_ov(NumElems, Overflow);\n     return Overflow ? ObjectSizeOffsetVisitor::unknown()\n-                    : SizeOffsetAPInt(align(Size, I.getAlign()), Zero);\n+                    : OffsetSpan(Zero, align(Size, I.getAlign()));\n   }\n   return ObjectSizeOffsetVisitor::unknown();\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitArgument(Argument &A) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitArgument(Argument &A) {\n   Type *MemoryTy = A.getPointeeInMemoryValueType();\n   // No interprocedural analysis is done at the moment.\n   if (!MemoryTy|| !MemoryTy->isSized()) {\n@@ -796,16 +807,16 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::visitArgument(Argument &A) {\n   }\n \n   APInt Size(IntTyBits, DL.getTypeAllocSize(MemoryTy));\n-  return SizeOffsetAPInt(align(Size, A.getParamAlign()), Zero);\n+  return OffsetSpan(Zero, align(Size, A.getParamAlign()));\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitCallBase(CallBase &CB) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitCallBase(CallBase &CB) {\n   if (std::optional<APInt> Size = getAllocSize(&CB, TLI))\n-    return SizeOffsetAPInt(*Size, Zero);\n+    return OffsetSpan(Zero, *Size);\n   return ObjectSizeOffsetVisitor::unknown();\n }\n \n-SizeOffsetAPInt\n+OffsetSpan\n ObjectSizeOffsetVisitor::visitConstantPointerNull(ConstantPointerNull &CPN) {\n   // If null is unknown, there's nothing we can do. Additionally, non-zero\n   // address spaces can make use of null, so we don't presume to know anything\n@@ -816,45 +827,43 @@ ObjectSizeOffsetVisitor::visitConstantPointerNull(ConstantPointerNull &CPN) {\n   // addrspace(1) gets casted to addrspace(0) (or vice-versa).\n   if (Options.NullIsUnknownSize || CPN.getType()->getAddressSpace())\n     return ObjectSizeOffsetVisitor::unknown();\n-  return SizeOffsetAPInt(Zero, Zero);\n+  return OffsetSpan(Zero, Zero);\n }\n \n-SizeOffsetAPInt\n+OffsetSpan\n ObjectSizeOffsetVisitor::visitExtractElementInst(ExtractElementInst &) {\n   return ObjectSizeOffsetVisitor::unknown();\n }\n \n-SizeOffsetAPInt\n-ObjectSizeOffsetVisitor::visitExtractValueInst(ExtractValueInst &) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitExtractValueInst(ExtractValueInst &) {\n   // Easy cases were already folded by previous passes.\n   return ObjectSizeOffsetVisitor::unknown();\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitGlobalAlias(GlobalAlias &GA) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitGlobalAlias(GlobalAlias &GA) {\n   if (GA.isInterposable())\n     return ObjectSizeOffsetVisitor::unknown();\n   return computeImpl(GA.getAliasee());\n }\n \n-SizeOffsetAPInt\n-ObjectSizeOffsetVisitor::visitGlobalVariable(GlobalVariable &GV) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitGlobalVariable(GlobalVariable &GV) {\n   if (!GV.getValueType()->isSized() || GV.hasExternalWeakLinkage() ||\n       ((!GV.hasInitializer() || GV.isInterposable()) &&\n        Options.EvalMode != ObjectSizeOpts::Mode::Min))\n     return ObjectSizeOffsetVisitor::unknown();\n \n   APInt Size(IntTyBits, DL.getTypeAllocSize(GV.getValueType()));\n-  return SizeOffsetAPInt(align(Size, GV.getAlign()), Zero);\n+  return OffsetSpan(Zero, align(Size, GV.getAlign()));\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitIntToPtrInst(IntToPtrInst &) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitIntToPtrInst(IntToPtrInst &) {\n   // clueless\n   return ObjectSizeOffsetVisitor::unknown();\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::findLoadSizeOffset(\n+OffsetSpan ObjectSizeOffsetVisitor::findLoadOffsetRange(\n     LoadInst &Load, BasicBlock &BB, BasicBlock::iterator From,\n-    SmallDenseMap<BasicBlock *, SizeOffsetAPInt, 8> &VisitedBlocks,\n+    SmallDenseMap<BasicBlock *, OffsetSpan, 8> &VisitedBlocks,\n     unsigned &ScannedInstCount) {\n   constexpr unsigned MaxInstsToScan = 128;\n \n@@ -865,7 +874,7 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::findLoadSizeOffset(\n   auto Unknown = [&BB, &VisitedBlocks]() {\n     return VisitedBlocks[&BB] = ObjectSizeOffsetVisitor::unknown();\n   };\n-  auto Known = [&BB, &VisitedBlocks](SizeOffsetAPInt SO) {\n+  auto Known = [&BB, &VisitedBlocks](OffsetSpan SO) {\n     return VisitedBlocks[&BB] = SO;\n   };\n \n@@ -936,15 +945,15 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::findLoadSizeOffset(\n       if (!C)\n         return Unknown();\n \n-      return Known({C->getValue(), APInt(C->getValue().getBitWidth(), 0)});\n+      return Known({APInt(C->getValue().getBitWidth(), 0), C->getValue()});\n     }\n \n     return Unknown();\n   } while (From-- != BB.begin());\n \n-  SmallVector<SizeOffsetAPInt> PredecessorSizeOffsets;\n+  SmallVector<OffsetSpan> PredecessorSizeOffsets;\n   for (auto *PredBB : predecessors(&BB)) {\n-    PredecessorSizeOffsets.push_back(findLoadSizeOffset(\n+    PredecessorSizeOffsets.push_back(findLoadOffsetRange(\n         Load, *PredBB, BasicBlock::iterator(PredBB->getTerminator()),\n         VisitedBlocks, ScannedInstCount));\n     if (!PredecessorSizeOffsets.back().bothKnown())\n@@ -956,70 +965,70 @@ SizeOffsetAPInt ObjectSizeOffsetVisitor::findLoadSizeOffset(\n \n   return Known(std::accumulate(\n       PredecessorSizeOffsets.begin() + 1, PredecessorSizeOffsets.end(),\n-      PredecessorSizeOffsets.front(),\n-      [this](SizeOffsetAPInt LHS, SizeOffsetAPInt RHS) {\n-        return combineSizeOffset(LHS, RHS);\n+      PredecessorSizeOffsets.front(), [this](OffsetSpan LHS, OffsetSpan RHS) {\n+        return combineOffsetRange(LHS, RHS);\n       }));\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitLoadInst(LoadInst &LI) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitLoadInst(LoadInst &LI) {\n   if (!Options.AA) {\n     ++ObjectVisitorLoad;\n     return ObjectSizeOffsetVisitor::unknown();\n   }\n \n-  SmallDenseMap<BasicBlock *, SizeOffsetAPInt, 8> VisitedBlocks;\n+  SmallDenseMap<BasicBlock *, OffsetSpan, 8> VisitedBlocks;\n   unsigned ScannedInstCount = 0;\n-  SizeOffsetAPInt SO =\n-      findLoadSizeOffset(LI, *LI.getParent(), BasicBlock::iterator(LI),\n-                         VisitedBlocks, ScannedInstCount);\n+  OffsetSpan SO =\n+      findLoadOffsetRange(LI, *LI.getParent(), BasicBlock::iterator(LI),\n+                          VisitedBlocks, ScannedInstCount);\n   if (!SO.bothKnown())\n     ++ObjectVisitorLoad;\n   return SO;\n }\n \n-SizeOffsetAPInt\n-ObjectSizeOffsetVisitor::combineSizeOffset(SizeOffsetAPInt LHS,\n-                                           SizeOffsetAPInt RHS) {\n+OffsetSpan ObjectSizeOffsetVisitor::combineOffsetRange(OffsetSpan LHS,\n+                                                       OffsetSpan RHS) {\n   if (!LHS.bothKnown() || !RHS.bothKnown())\n     return ObjectSizeOffsetVisitor::unknown();\n \n   switch (Options.EvalMode) {\n   case ObjectSizeOpts::Mode::Min:\n-    return (getSizeWithOverflow(LHS).slt(getSizeWithOverflow(RHS))) ? LHS : RHS;\n-  case ObjectSizeOpts::Mode::Max:\n-    return (getSizeWithOverflow(LHS).sgt(getSizeWithOverflow(RHS))) ? LHS : RHS;\n+    return {LHS.Before.slt(RHS.Before) ? LHS.Before : RHS.Before,\n+            LHS.After.slt(RHS.After) ? LHS.After : RHS.After};\n+  case ObjectSizeOpts::Mode::Max: {\n+    return {LHS.Before.sgt(RHS.Before) ? LHS.Before : RHS.Before,\n+            LHS.After.sgt(RHS.After) ? LHS.After : RHS.After};\n+  }\n   case ObjectSizeOpts::Mode::ExactSizeFromOffset:\n-    return (getSizeWithOverflow(LHS).eq(getSizeWithOverflow(RHS)))\n-               ? LHS\n-               : ObjectSizeOffsetVisitor::unknown();\n+    return {LHS.Before.eq(RHS.Before) ? LHS.Before : APInt(),\n+            LHS.After.eq(RHS.After) ? LHS.After : APInt()};\n   case ObjectSizeOpts::Mode::ExactUnderlyingSizeAndOffset:\n-    return LHS == RHS ? LHS : ObjectSizeOffsetVisitor::unknown();\n+    return (LHS == RHS) ? LHS : ObjectSizeOffsetVisitor::unknown();\n   }\n   llvm_unreachable(\"missing an eval mode\");\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitPHINode(PHINode &PN) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitPHINode(PHINode &PN) {\n   if (PN.getNumIncomingValues() == 0)\n     return ObjectSizeOffsetVisitor::unknown();\n   auto IncomingValues = PN.incoming_values();\n   return std::accumulate(IncomingValues.begin() + 1, IncomingValues.end(),\n                          computeImpl(*IncomingValues.begin()),\n-                         [this](SizeOffsetAPInt LHS, Value *VRHS) {\n-                           return combineSizeOffset(LHS, computeImpl(VRHS));\n+                         [this](OffsetSpan LHS, Value *VRHS) {\n+                           return combineOffsetRange(LHS, computeImpl(VRHS));\n                          });\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitSelectInst(SelectInst &I) {\n-  return combineSizeOffset(computeImpl(I.getTrueValue()),\n-                           computeImpl(I.getFalseValue()));\n+OffsetSpan ObjectSizeOffsetVisitor::visitSelectInst(SelectInst &I) {\n+  return combineOffsetRange(computeImpl(I.getTrueValue()),\n+                            computeImpl(I.getFalseValue()));\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitUndefValue(UndefValue &) {\n-  return SizeOffsetAPInt(Zero, Zero);\n+OffsetSpan ObjectSizeOffsetVisitor::visitUndefValue(UndefValue &) {\n+  return OffsetSpan(Zero, Zero);\n }\n \n-SizeOffsetAPInt ObjectSizeOffsetVisitor::visitInstruction(Instruction &I) {\n+OffsetSpan ObjectSizeOffsetVisitor::visitInstruction(Instruction &I) {\n   LLVM_DEBUG(dbgs() << \"ObjectSizeOffsetVisitor unknown instruction:\" << I\n                     << '\\n');\n   return ObjectSizeOffsetVisitor::unknown();\n@@ -1072,7 +1081,13 @@ SizeOffsetValue ObjectSizeOffsetEvaluator::compute(Value *V) {\n }\n \n SizeOffsetValue ObjectSizeOffsetEvaluator::compute_(Value *V) {\n-  ObjectSizeOffsetVisitor Visitor(DL, TLI, Context, EvalOpts);\n+\n+  // Only trust ObjectSizeOffsetVisitor in exact mode, otherwise fallback on\n+  // dynamic computation.\n+  ObjectSizeOpts VisitorEvalOpts(EvalOpts);\n+  VisitorEvalOpts.EvalMode = ObjectSizeOpts::Mode::ExactUnderlyingSizeAndOffset;\n+  ObjectSizeOffsetVisitor Visitor(DL, TLI, Context, VisitorEvalOpts);\n+\n   SizeOffsetAPInt Const = Visitor.compute(V);\n   if (Const.bothKnown())\n     return SizeOffsetValue(ConstantInt::get(Context, Const.Size),\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LowerConstantIntrinsics/builtin-object-size-phi.ll",
+      "commands": [
+        "opt -passes=lower-constant-intrinsics  -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "outofbound_offset_eval",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @outofbound_offset_eval(i32 %x) {\nentry:\n  %array = alloca [4 x i8], align 16\n  %tobool.not = icmp eq i32 %x, 0\n  br i1 %tobool.not, label %if.else, label %if.then\n\nif.then:                                          ; preds = %entry\n  %add.ptr0 = getelementptr i8, ptr %array, i64 10\n  br label %if.end\n\nif.else:                                          ; preds = %entry\n  %add.ptr1 = getelementptr i8, ptr %array, i64 12\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then\n  %ptr = phi ptr [ %add.ptr0, %if.then ], [ %add.ptr1, %if.else ]\n  %add.ptr2 = getelementptr i8, ptr %ptr, i64 -10\n  %objsize = call i64 @llvm.objectsize.i64.p0(ptr %add.ptr2, i1 false, i1 false, i1 false)\n  ret i64 %objsize\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "negative_offset_dynamic_eval",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @negative_offset_dynamic_eval(i32 %x, i64 %i) {\nentry:\n  %array1 = alloca [4 x i32], align 16\n  %array2 = alloca [8 x i32], align 16\n  %tobool.not = icmp eq i32 %x, 0\n  br i1 %tobool.not, label %if.else, label %if.then\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.else:                                          ; preds = %entry\n  %add.ptr = getelementptr inbounds i8, ptr %array2, i64 16\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then\n  %ptr = phi ptr [ %array1, %if.then ], [ %add.ptr, %if.else ]\n  %add.ptr2 = getelementptr inbounds i32, ptr %ptr, i64 %i\n  %objsize = call i64 @llvm.objectsize.i64.p0(ptr %add.ptr2, i1 false, i1 true, i1 true)\n  ret i64 %objsize\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_negative_offset_with_unsized_nullptr",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @pick_negative_offset_with_unsized_nullptr(i32 %n) {\nentry:\n  %buffer0 = alloca i8, i64 20, align 1\n  %offseted0 = getelementptr i8, ptr %buffer0, i64 20\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p0 = phi ptr [ %offseted0, %entry ], [ null, %if.else ]\n  %p1 = phi ptr [ null, %if.else ], [ %offseted0, %entry ]\n  %p0offseted = getelementptr i8, ptr %p0, i64 -4\n  %p1offseted = getelementptr i8, ptr %p1, i64 -4\n  %size0 = call i64 @llvm.objectsize.i64.p0(ptr %p0offseted, i1 false, i1 true, i1 false)\n  %size1 = call i64 @llvm.objectsize.i64.p0(ptr %p1offseted, i1 false, i1 true, i1 false)\n  %size = select i1 %cond, i64 %size0, i64 %size1\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "chain_pick_negative_offset_with_nullptr",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @chain_pick_negative_offset_with_nullptr(i32 %x) {\nentry:\n  %array = alloca [4 x i32], align 4\n  %c = icmp eq i32 %x, 0\n  %p = getelementptr i8, ptr %array, i64 8\n  %cond = select i1 %c, ptr %p, ptr null\n  %p4 = getelementptr i8, ptr %cond, i64 8\n  %cond6 = select i1 %c, ptr %p4, ptr null\n  %p7 = getelementptr i8, ptr %cond6, i64 -4\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %p7, i1 false, i1 false, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_max",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n@buffer = external dso_local global [4 x i8], align 1\n\n; Function Attrs: allocsize(0)\ndeclare dso_local noalias noundef ptr @malloc(i64 noundef) local_unnamed_addr #0\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #1\n\ndefine dso_local i64 @pick_max(i32 noundef %n) local_unnamed_addr {\nentry:\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  %malloced = call noalias dereferenceable_or_null(8) ptr @malloc(i64 noundef 8)\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p = phi ptr [ %malloced, %if.else ], [ @buffer, %entry ]\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %p, i1 false, i1 true, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { allocsize(0) }\nattributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_min_same",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @pick_min_same(i32 %n) {\nentry:\n  %buffer = alloca i8, i64 20, align 1\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  %offseted = getelementptr i8, ptr %buffer, i64 10\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p = phi ptr [ %offseted, %if.else ], [ %buffer, %entry ]\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %p, i1 true, i1 true, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_negative_offset",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @pick_negative_offset(i32 %n) {\nentry:\n  %buffer0 = alloca i8, i64 20, align 1\n  %offseted0 = getelementptr i8, ptr %buffer0, i64 20\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  %buffer1 = alloca i8, i64 20, align 1\n  %offseted1 = getelementptr i8, ptr %buffer1, i64 20\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p = phi ptr [ %offseted1, %if.else ], [ %offseted0, %entry ]\n  %poffseted = getelementptr i8, ptr %p, i64 -4\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %poffseted, i1 false, i1 false, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_min",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n@buffer = external dso_local global [4 x i8], align 1\n\n; Function Attrs: allocsize(0)\ndeclare dso_local noalias noundef ptr @malloc(i64 noundef) local_unnamed_addr #0\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #1\n\ndefine dso_local i64 @pick_min(i32 noundef %n) local_unnamed_addr {\nentry:\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  %malloced = call noalias dereferenceable_or_null(8) ptr @malloc(i64 noundef 8)\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p = phi ptr [ %malloced, %if.else ], [ @buffer, %entry ]\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %p, i1 true, i1 true, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { allocsize(0) }\nattributes #1 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_negative_offset_different_width",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @pick_negative_offset_different_width(i32 %n) {\nentry:\n  %buffer0 = alloca i8, i64 4, align 1\n  %buffer1 = alloca i8, i64 8, align 1\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.then, label %if.else\n\nif.then:                                          ; preds = %entry\n  %offseted0 = getelementptr i8, ptr %buffer0, i64 1\n  br label %if.end\n\nif.else:                                          ; preds = %entry\n  %offseted1 = getelementptr i8, ptr %buffer1, i64 6\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then\n  %p = phi ptr [ %offseted0, %if.then ], [ %offseted1, %if.else ]\n  %poffseted = getelementptr i8, ptr %p, i64 -2\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %poffseted, i1 false, i1 false, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_negative_offset_with_nullptr",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @pick_negative_offset_with_nullptr(i32 %n) {\nentry:\n  %buffer0 = alloca i8, i64 20, align 1\n  %offseted0 = getelementptr i8, ptr %buffer0, i64 20\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p0 = phi ptr [ %offseted0, %entry ], [ null, %if.else ]\n  %p1 = phi ptr [ null, %if.else ], [ %offseted0, %entry ]\n  %p0offseted = getelementptr i8, ptr %p0, i64 -4\n  %p1offseted = getelementptr i8, ptr %p1, i64 -4\n  %size0 = call i64 @llvm.objectsize.i64.p0(ptr %p0offseted, i1 false, i1 false, i1 false)\n  %size1 = call i64 @llvm.objectsize.i64.p0(ptr %p1offseted, i1 false, i1 false, i1 false)\n  %size = select i1 %cond, i64 %size0, i64 %size1\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pick_max_same",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.objectsize.i64.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\ndefine i64 @pick_max_same(i32 %n) {\nentry:\n  %buffer = alloca i8, i64 20, align 1\n  %cond = icmp eq i32 %n, 0\n  br i1 %cond, label %if.else, label %if.end\n\nif.else:                                          ; preds = %entry\n  %offseted = getelementptr i8, ptr %buffer, i64 10\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %entry\n  %p = phi ptr [ %offseted, %if.else ], [ %buffer, %entry ]\n  %size = call i64 @llvm.objectsize.i64.p0(ptr %p, i1 false, i1 true, i1 false)\n  ret i64 %size\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        }
+      ]
+    },
+    {
+      "file": "llvm/test/Transforms/LowerConstantIntrinsics/objectsize_basic.ll",
+      "commands": [
+        "opt -passes=lower-constant-intrinsics -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "promote_with_objectsize_nullunknown_true",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\ntarget triple = \"x86_64-apple-darwin10.0.0\"\n\n@gv_extern = extern_weak global i64, align 16\n\ndefine i32 @promote_with_objectsize_nullunknown_true() {\n  %size = call i32 @llvm.objectsize.i32.p0(ptr @gv_extern, i1 true, i1 true, i1 false)\n  ret i32 %size\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.objectsize.i32.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "UBSan false positive: runtime error: load of address with insufficient space for an object of type 'int'",
+    "body": "Please consider this small reduced testcase:\r\n```c++\r\nint x;\r\nint main(void) {\r\n  int array[4] = {0};\r\n  int *ptr;\r\n  if (x) {\r\n    ptr = 0;\r\n  } else {\r\n    ptr = array + 4;\r\n  }\r\n  return ptr[-1];\r\n}\r\n```\r\nThis, as far as I know, is a strictly conforming C program. But Clang's UBSan rejects it as of version 15:\r\n```\r\n$ clang-14 test.c -O3 -o test -fsanitize=undefined && ./test\r\n$ clang-15 test.c -O3 -o test -fsanitize=undefined && ./test\r\ntest.c:10:10: runtime error: load of address 0xffffd0f236dc with insufficient space for an object of type 'int'\r\n0xffffd0f236dc: note: pointer points here\r\n  00 00 00 00 00 00 00 00  00 38 f2 d0 ff ff 00 00  c4 84 f1 eb 72 e1 00 00  78 38 f2 d0 ff ff 00 00\r\n              ^\r\nSUMMARY: UndefinedBehaviorSanitizer: undefined-behavior test.c:10:10 in\r\n```\r\nThis continues to be rejected in all later versions too. From what I can tell debugging, it's going wrong in `llvm::lowerObjectSizeCall`: this sets `EvalOptions.EvalMode = ObjectSizeOpts::Mode::ExactSizeFromOffset`. `ExactSizeFromOffset` allows combining `SizeOffsetValue`s if the sizes are the same, even if the offsets are different. So, we combine \"0 bytes into a 0-byte-sized object\" and \"16 bytes into a 16-byte-sized object\" into just \"0 bytes into a 0-byte-sized object\". But that is wrong when we then use that to conclude that we cannot access any bytes before that object.\r\n\r\nIf I change LLVM as\r\n```diff\r\ndiff --git a/llvm/lib/Analysis/MemoryBuiltins.cpp b/llvm/lib/Analysis/MemoryBuiltins.cpp\r\nindex e1abf5e4d885..8abbb074647c 100644\r\n--- a/llvm/lib/Analysis/MemoryBuiltins.cpp\r\n+++ b/llvm/lib/Analysis/MemoryBuiltins.cpp\r\n@@ -610,7 +610,7 @@ Value *llvm::lowerObjectSizeCall(\r\n     EvalOptions.EvalMode =\r\n         MaxVal ? ObjectSizeOpts::Mode::Max : ObjectSizeOpts::Mode::Min;\r\n   else\r\n-    EvalOptions.EvalMode = ObjectSizeOpts::Mode::ExactSizeFromOffset;\r\n+    EvalOptions.EvalMode = ObjectSizeOpts::Mode::ExactUnderlyingSizeAndOffset;\r\n\r\n   EvalOptions.NullIsUnknownSize =\r\n       cast<ConstantInt>(ObjectSize->getArgOperand(2))->isOne();\r\n```\r\nthen this program gets accepted. But I expect this change to not be right, I expect this to result in poorer codegen where `lowerObjectSizeCall` is already doing the right thing.",
+    "author": "hvdijk",
+    "labels": [
+      "compiler-rt:ubsan",
+      "miscompilation",
+      "false-positive",
+      "llvm:analysis"
+    ],
+    "comments": [
+      {
+        "author": "hvdijk",
+        "body": "This happened ever since PHI node handling was added in D121897 d8e0a6d5e9dd2311641f9a8a5d2bf90829951ddc, cc @serge-sans-paille & @nikic "
+      },
+      {
+        "author": "serge-sans-paille",
+        "body": "I managed to reproduce and analyze the issue. I have a working patch but I need to test it some more, keep in touch."
+      }
+    ]
+  }
+}

@@ -1,0 +1,143 @@
+{
+  "bug_id": "102784",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/102784",
+  "bug_type": "crash",
+  "base_commit": "93f5c61d04fbef877dd9ac74511bb76093cc66cf",
+  "knowledge_cutoff": "2024-08-11T02:53:39Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/AlignmentFromAssumptions",
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "5ce47a5813506e08daddc1e3d59b06f7a452c300",
+    "components": [
+      "AlignmentFromAssumptions",
+      "SLPVectorizer",
+      "LoopFuse",
+      "TypeMetadataUtils"
+    ],
+    "files": [
+      "llvm/include/llvm/Support/GenericDomTree.h",
+      "llvm/lib/Analysis/TypeMetadataUtils.cpp",
+      "llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp",
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp",
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/include/llvm/Support/GenericDomTree.h": [
+        [
+          397,
+          402
+        ]
+      ],
+      "llvm/lib/Analysis/TypeMetadataUtils.cpp": [
+        [
+          33,
+          38
+        ]
+      ],
+      "llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp": [
+        [
+          208,
+          213
+        ]
+      ],
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
+        [
+          1729,
+          1735
+        ],
+        [
+          2023,
+          2029
+        ]
+      ],
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          6108,
+          6113
+        ],
+        [
+          6115,
+          6121
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/include/llvm/Support/GenericDomTree.h": [
+        "getBlock",
+        "DomTreeNodeBase",
+        "getNodeIndex",
+        "getParent",
+        "dominates"
+      ],
+      "llvm/lib/Analysis/TypeMetadataUtils.cpp": [
+        "findCallsAtConstantOffset"
+      ],
+      "llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp": [
+        "AlignmentFromAssumptionsPass::processAssumption"
+      ],
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
+        "mergeLatch",
+        "size",
+        "isValid",
+        "invalidate"
+      ],
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "getValue",
+        "isSimple",
+        "add",
+        "TreeEntry",
+        "BoUpSLP::collectUserStores",
+        "size",
+        "isValidElementType"
+      ]
+    }
+  },
+  "patch": "commit 5ce47a5813506e08daddc1e3d59b06f7a452c300\nAuthor: Vitaly Buka <vitalybuka@google.com>\nDate:   Tue Aug 13 02:56:02 2024 -0700\n\n    Reland \"[Support] Assert that DomTree nodes share parent\" (#102782)\n    \n    A dominance query of a block that is in a different function is\n    ill-defined, so assert that getNode() is only called for blocks that are\n    in the same function.\n    \n    There are three cases, where this behavior did occur. LoopFuse didn't\n    explicitly do this, but didn't invalidate the SCEV block dispositions,\n    leaving dangling pointers to free'ed basic blocks behind, causing\n    use-after-free. We do, however, want to be able to dereference basic\n    blocks inside the dominator tree, so that we can refer to them by a\n    number stored inside the basic block.\n    \n    Reverts #102780\n    Reland #101198\n    Fixes #102784\n    \n    Co-authored-by: Alexis Engelke <engelke@in.tum.de>\n\ndiff --git a/llvm/include/llvm/Support/GenericDomTree.h b/llvm/include/llvm/Support/GenericDomTree.h\nindex 7e2b68e6faea..45ef38b965b7 100644\n--- a/llvm/include/llvm/Support/GenericDomTree.h\n+++ b/llvm/include/llvm/Support/GenericDomTree.h\n@@ -397,6 +397,8 @@ public:\n   /// may (but is not required to) be null for a forward (backwards)\n   /// statically unreachable block.\n   DomTreeNodeBase<NodeT> *getNode(const NodeT *BB) const {\n+    assert((!BB || Parent == NodeTrait::getParent(const_cast<NodeT *>(BB))) &&\n+           \"cannot get DomTreeNode of block with different parent\");\n     if (auto Idx = getNodeIndex(BB); Idx && *Idx < DomTreeNodes.size())\n       return DomTreeNodes[*Idx].get();\n     return nullptr;\ndiff --git a/llvm/lib/Analysis/TypeMetadataUtils.cpp b/llvm/lib/Analysis/TypeMetadataUtils.cpp\nindex 67ce1540112b..9ec0785eb503 100644\n--- a/llvm/lib/Analysis/TypeMetadataUtils.cpp\n+++ b/llvm/lib/Analysis/TypeMetadataUtils.cpp\n@@ -33,6 +33,8 @@ findCallsAtConstantOffset(SmallVectorImpl<DevirtCallSite> &DevirtCalls,\n     // after indirect call promotion and inlining, where we may have uses\n     // of the vtable pointer guarded by a function pointer check, and a fallback\n     // indirect call.\n+    if (CI->getFunction() != User->getFunction())\n+      continue;\n     if (!DT.dominates(CI, User))\n       continue;\n     if (isa<BitCastInst>(User)) {\ndiff --git a/llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp b/llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp\nindex f3422a705dca..8555ef5c22f8 100644\n--- a/llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp\n+++ b/llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp\n@@ -208,6 +208,7 @@ bool AlignmentFromAssumptionsPass::processAssumption(CallInst *ACall,\n       continue;\n \n     if (Instruction *K = dyn_cast<Instruction>(J))\n+      if (K->getFunction() == ACall->getFunction())\n         WorkList.push_back(K);\n   }\n \ndiff --git a/llvm/lib/Transforms/Scalar/LoopFuse.cpp b/llvm/lib/Transforms/Scalar/LoopFuse.cpp\nindex 8512b2accbe7..fe0e30d1965e 100644\n--- a/llvm/lib/Transforms/Scalar/LoopFuse.cpp\n+++ b/llvm/lib/Transforms/Scalar/LoopFuse.cpp\n@@ -1729,7 +1729,9 @@ private:\n     // mergeLatch may remove the only block in FC1.\n     SE.forgetLoop(FC1.L);\n     SE.forgetLoop(FC0.L);\n-    SE.forgetLoopDispositions();\n+    // Forget block dispositions as well, so that there are no dangling\n+    // pointers to erased/free'ed blocks.\n+    SE.forgetBlockAndLoopDispositions();\n \n     // Move instructions from FC0.Latch to FC1.Latch.\n     // Note: mergeLatch requires an updated DT.\n@@ -2023,7 +2025,9 @@ private:\n     // mergeLatch may remove the only block in FC1.\n     SE.forgetLoop(FC1.L);\n     SE.forgetLoop(FC0.L);\n-    SE.forgetLoopDispositions();\n+    // Forget block dispositions as well, so that there are no dangling\n+    // pointers to erased/free'ed blocks.\n+    SE.forgetBlockAndLoopDispositions();\n \n     // Move instructions from FC0.Latch to FC1.Latch.\n     // Note: mergeLatch requires an updated DT.\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex cd89d5c63c40..d1946313addb 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -6108,6 +6108,9 @@ BoUpSLP::collectUserStores(const BoUpSLP::TreeEntry *TE) const {\n   DenseMap<Value *, SmallVector<StoreInst *>> PtrToStoresMap;\n   for (unsigned Lane : seq<unsigned>(0, TE->Scalars.size())) {\n     Value *V = TE->Scalars[Lane];\n+    // Don't iterate over the users of constant data.\n+    if (isa<ConstantData>(V))\n+      continue;\n     // To save compilation time we don't visit if we have too many users.\n     if (V->hasNUsesOrMore(UsesLimit))\n       break;\n@@ -6115,7 +6118,9 @@ BoUpSLP::collectUserStores(const BoUpSLP::TreeEntry *TE) const {\n     // Collect stores per pointer object.\n     for (User *U : V->users()) {\n       auto *SI = dyn_cast<StoreInst>(U);\n-      if (SI == nullptr || !SI->isSimple() ||\n+      // Test whether we can handle the store. V might be a global, which could\n+      // be used in a different function.\n+      if (SI == nullptr || !SI->isSimple() || SI->getFunction() != F ||\n           !isValidElementType(SI->getValueOperand()->getType()))\n         continue;\n       // Skip entry if already\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/AlignmentFromAssumptions/domtree-crash.ll",
+      "commands": [
+        "opt -passes=alignment-from-assumptions -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "fn2",
+          "test_body": "@global = external constant [192 x i8]\n\ndefine void @fn2() {\n  ret void\n\nloop:                                             ; preds = %loop\n  %gep = getelementptr inbounds i8, ptr @global, i64 0\n  %load = load i64, ptr %gep, align 1\n  br label %loop\n}\n"
+        },
+        {
+          "test_name": "fn1",
+          "test_body": "@global = external constant [192 x i8]\n\ndefine void @fn1() {\n  call void @llvm.assume(i1 false) [ \"align\"(ptr @global, i64 1) ]\n  ret void\n}\n\n; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)\ndeclare void @llvm.assume(i1 noundef) #0\n\nattributes #0 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }\n"
+        }
+      ]
+    },
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/const-in-different-functions.ll",
+      "commands": [
+        "opt -S -mtriple=x86_64 -passes=slp-vectorizer < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "_Z1hPfl",
+          "test_body": "@p = external global [64 x float]\n\ndefine void @_Z1hPfl() {\nentry:\n  %0 = getelementptr i8, ptr @p, i64 28\n  store float 0.000000e+00, ptr %0, align 4\n  %1 = getelementptr i8, ptr @p, i64 32\n  store float 1.000000e+00, ptr %1, align 16\n  ret void\n}\n"
+        },
+        {
+          "test_name": "_Z1mv",
+          "test_body": "@p = external global [64 x float]\n\ndefine void @_Z1mv(i64 %arrayidx4.i.2.idx) {\nentry:\n  ret void\n\nfor.cond1.preheader.lr.ph.i:                      ; No predecessors!\n  br label %for.cond1.preheader.i\n\nfor.cond1.preheader.i:                            ; preds = %for.cond1.preheader.i, %for.cond1.preheader.lr.ph.i\n  store float 1.000000e+00, ptr @p, align 4\n  %arrayidx4.i.2 = getelementptr i8, ptr @p, i64 %arrayidx4.i.2.idx\n  store float 0.000000e+00, ptr %arrayidx4.i.2, align 4\n  br label %for.cond1.preheader.i\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "A/F: \"cannot get DomTreeNode of block with different parent\" after 8101d18",
+    "body": "After commit 8101d1863cc3a6ca0ca49962903f2d7651b25659 was merged into our downstream repo, we started to see assertion failures in many of our tests, and it seems many buildbots also hit the same assertion failure.\r\n\r\nHere is a reduced version of one of our internal tests that hits the assertion failure:\r\n```c++\r\n/* repro.cpp */\r\n#define a() struct\r\nusing b = float;\r\na() c { b d; };\r\nusing n = b;\r\nvoid e(n *, long, long);\r\nlong f;\r\nfloat *g;\r\nvoid h(n *i, long j) {\r\n  for (long k; f; ++k)\r\n    for (long l = 0; l < j; ++l)\r\n      g[l * k] = i[l];\r\n  c input[]{{}, {}, {}, {}, {}, {}, {}, 15.1f, 16.1f};\r\n  e(reinterpret_cast<b *>(input), 2, 6);\r\n}\r\nvoid m() {\r\n  c input[]{16.1f};\r\n  h(reinterpret_cast<b *>(input), 6);\r\n}\r\n```\r\n\r\nWhen compiled with optimizations using a compiler built from 9bb7c11 (the change immediately preceding 8101d18) there is no assertion failure and it succeeds (although the assertion failure was added in the mentioned commit so it makes sense the previous commit would not hit it, but I digress):\r\n```\r\n$ ~/src/upstream/9bb7c11-linux/bin/clang -c -O2 repro.cpp\r\n$\r\n```\r\n\r\nWhen compiled with optimizations using a compiler built from 8101d18, we see an assertion failure during the compilation:\r\n```\r\n$ ~/src/upstream/8101d18-linux/bin/clang -c -O2 repro.cpp\r\nclang: /home/dyung/src/upstream/llvm_clean_git/llvm/include/llvm/Support/GenericDomTree.h:400: llvm::DomTreeNodeBase<NodeT>* llvm::DominatorTreeBase<NodeT, IsPostDom>::getNode(const NodeT*) const [with NodeT = llvm::BasicBlock; bool IsPostDom = false]: Assertion `(!BB || Parent == NodeTrait::getParent(const_cast<NodeT *>(BB))) && \"cannot get DomTreeNode of block with different parent\"' failed.\r\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace, preprocessed source, and associated run script.\r\nStack dump:\r\n0.      Program arguments: /home/dyung/src/upstream/8101d18-linux/bin/clang -c -O2 repro.cpp\r\n1.      <eof> parser at end of file\r\n2.      Optimizer\r\n3.      Running pass \"function<eager-inv>(float2int,lower-constant-intrinsics,loop(loop-rotate<header-duplication;no-prepare-for-lto>,loop-deletion),loop-distribute,inject-tli-mappings,loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>,infer-alignment,loop-load-elim,instcombine<max-iterations=1;no-use-loop-info;no-verify-fixpoint>,simplifycfg<bonus-inst-threshold=1;forward-switch-cond;switch-range-to-icmp;switch-to-lookup;no-keep-loops;hoist-common-insts;sink-common-insts;speculate-blocks;simplify-cond-branch;no-speculate-unpredictables>,slp-vectorizer,vector-combine,instcombine<max-iterations=1;no-use-loop-info;no-verify-fixpoint>,loop-unroll<O2>,transform-warning,sroa<preserve-cfg>,infer-alignment,instcombine<max-iterations=1;no-use-loop-info;no-verify-fixpoint>,loop-mssa(licm<allowspeculation>),alignment-from-assumptions,loop-sink,instsimplify,div-rem-pairs,tailcallelim,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-sink-common-insts;speculate-blocks;simplify-cond-branch;speculate-unpredictables>)\" on module \"repro.cpp\"\r\n4.      Running pass \"slp-vectorizer\" on function \"_Z1hPfl\"\r\n #0 0x000055dca663cc2f llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x421bc2f)\r\n #1 0x000055dca663a78c llvm::sys::CleanupOnSignal(unsigned long) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x421978c)\r\n #2 0x000055dca657e5b8 CrashRecoverySignalHandler(int) CrashRecoveryContext.cpp:0:0\r\n #3 0x00007fc7a7875420 __restore_rt (/lib/x86_64-linux-gnu/libpthread.so.0+0x14420)\r\n #4 0x00007fc7a734200b raise /build/glibc-LcI20x/glibc-2.31/signal/../sysdeps/unix/sysv/linux/raise.c:51:1\r\n #5 0x00007fc7a7321859 abort /build/glibc-LcI20x/glibc-2.31/stdlib/abort.c:81:7\r\n #6 0x00007fc7a7321729 get_sysdep_segment_value /build/glibc-LcI20x/glibc-2.31/intl/loadmsgcat.c:509:8\r\n #7 0x00007fc7a7321729 _nl_load_domain /build/glibc-LcI20x/glibc-2.31/intl/loadmsgcat.c:970:34\r\n #8 0x00007fc7a7332fd6 (/lib/x86_64-linux-gnu/libc.so.6+0x33fd6)\r\n #9 0x000055dca5ee216f llvm::DominatorTreeBase<llvm::BasicBlock, false>::getNode(llvm::BasicBlock const*) const (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x3ac116f)\r\n#10 0x000055dca565e011 llvm::ScalarEvolution::getOperandsToCreate(llvm::Value*, llvm::SmallVectorImpl<llvm::Value*>&) (.part.0) ScalarEvolution.cpp:0:0\r\n#11 0x000055dca5674fd0 llvm::ScalarEvolution::createSCEVIter(llvm::Value*) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x3253fd0)\r\n#12 0x000055dca559632e llvm::getPointersDiff(llvm::Type*, llvm::Value*, llvm::Type*, llvm::Value*, llvm::DataLayout const&, llvm::ScalarEvolution&, bool, bool) (.part.0) LoopAccessAnalysis.cpp:0:0\r\n#13 0x000055dca7fba08c llvm::slpvectorizer::BoUpSLP::canFormVector(llvm::ArrayRef<llvm::StoreInst*>, llvm::SmallVector<unsigned int, 4u>&) const (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5b9908c)\r\n#14 0x000055dca7fba607 llvm::slpvectorizer::BoUpSLP::findExternalStoreUsersReorderIndices(llvm::slpvectorizer::BoUpSLP::TreeEntry*) const (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5b99607)\r\n#15 0x000055dca7ffce00 llvm::slpvectorizer::BoUpSLP::reorderTopToBottom() (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5bdbe00)\r\n#16 0x000055dca8019c10 llvm::SLPVectorizerPass::vectorizeStoreChain(llvm::ArrayRef<llvm::Value*>, llvm::slpvectorizer::BoUpSLP&, unsigned int, unsigned int, unsigned int&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5bf8c10)\r\n#17 0x000055dca801b3f6 llvm::SLPVectorizerPass::vectorizeStores(llvm::ArrayRef<llvm::StoreInst*>, llvm::slpvectorizer::BoUpSLP&, llvm::DenseSet<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, llvm::DenseMapInfo<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, void>>&)::'lambda'(std::set<std::pair<unsigned int, int>, llvm::SLPVectorizerPass::vectorizeStores(llvm::ArrayRef<llvm::StoreInst*>, llvm::slpvectorizer::BoUpSLP&, llvm::DenseSet<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, llvm::DenseMapInfo<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, void>>&)::StoreDistCompare, std::allocator<std::pair<unsigned int, int>>> const&)::operator()(std::set<std::pair<unsigned int, int>, llvm::SLPVectorizerPass::vectorizeStores(llvm::ArrayRef<llvm::StoreInst*>, llvm::slpvectorizer::BoUpSLP&, llvm::DenseSet<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, llvm::DenseMapInfo<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, void>>&)::StoreDistCompare, std::allocator<std::pair<unsigned int, int>>> const&) const SLPVectorizer.cpp:0:0\r\n#18 0x000055dca801d2c8 llvm::SLPVectorizerPass::vectorizeStores(llvm::ArrayRef<llvm::StoreInst*>, llvm::slpvectorizer::BoUpSLP&, llvm::DenseSet<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, llvm::DenseMapInfo<std::tuple<llvm::Value*, llvm::Value*, llvm::Value*, llvm::Value*, unsigned int>, void>>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5bfc2c8)\r\n#19 0x000055dca801db51 llvm::SLPVectorizerPass::vectorizeStoreChains(llvm::slpvectorizer::BoUpSLP&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5bfcb51)\r\n#20 0x000055dca801f02d llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\r\n#21 0x000055dca801fb23 llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x5bfeb23)\r\n#22 0x000055dca7ad9906 llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x56b8906)\r\n#23 0x000055dca5fdccb1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x3bbbcb1)\r\n#24 0x000055dca3b614b6 llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x17404b6)\r\n#25 0x000055dca5fdb5ed llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x3bba5ed)\r\n#26 0x000055dca3b625a6 llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x17415a6)\r\n#27 0x000055dca5fd9751 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x3bb8751)\r\n#28 0x000055dca68f1d00 (anonymous namespace)::EmitAssemblyHelper::RunOptimizationPipeline(clang::BackendAction, std::unique_ptr<llvm::raw_pwrite_stream, std::default_delete<llvm::raw_pwrite_stream>>&, std::unique_ptr<llvm::ToolOutputFile, std::default_delete<llvm::ToolOutputFile>>&, clang::BackendConsumer*) BackendUtil.cpp:0:0\r\n#29 0x000055dca68f506c (anonymous namespace)::EmitAssemblyHelper::EmitAssembly(clang::BackendAction, std::unique_ptr<llvm::raw_pwrite_stream, std::default_delete<llvm::raw_pwrite_stream>>, clang::BackendConsumer*) BackendUtil.cpp:0:0\r\n#30 0x000055dca68f56e6 clang::EmitBackendOutput(clang::DiagnosticsEngine&, clang::HeaderSearchOptions const&, clang::CodeGenOptions const&, clang::TargetOptions const&, clang::LangOptions const&, llvm::StringRef, llvm::Module*, clang::BackendAction, llvm::IntrusiveRefCntPtr<llvm::vfs::FileSystem>, std::unique_ptr<llvm::raw_pwrite_stream, std::default_delete<llvm::raw_pwrite_stream>>, clang::BackendConsumer*) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x44d46e6)\r\n#31 0x000055dca6f921fc clang::BackendConsumer::HandleTranslationUnit(clang::ASTContext&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4b711fc)\r\n#32 0x000055dca8dcd5ec clang::ParseAST(clang::Sema&, bool, bool) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x69ac5ec)\r\n#33 0x000055dca6f92608 clang::CodeGenAction::ExecuteAction() (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4b71608)\r\n#34 0x000055dca722a959 clang::FrontendAction::Execute() (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4e09959)\r\n#35 0x000055dca71ac7ce clang::CompilerInstance::ExecuteAction(clang::FrontendAction&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4d8b7ce)\r\n#36 0x000055dca73171a6 clang::ExecuteCompilerInvocation(clang::CompilerInstance*) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4ef61a6)\r\n#37 0x000055dca37363a5 cc1_main(llvm::ArrayRef<char const*>, char const*, void*) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x13153a5)\r\n#38 0x000055dca372f39a ExecuteCC1Tool(llvm::SmallVectorImpl<char const*>&, llvm::ToolContext const&) driver.cpp:0:0\r\n#39 0x000055dca6fd780d void llvm::function_ref<void ()>::callback_fn<clang::driver::CC1Command::Execute(llvm::ArrayRef<std::optional<llvm::StringRef>>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>*, bool*) const::'lambda'()>(long) Job.cpp:0:0\r\n#40 0x000055dca657eac0 llvm::CrashRecoveryContext::RunSafely(llvm::function_ref<void ()>) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x415dac0)\r\n#41 0x000055dca6fd7e2f clang::driver::CC1Command::Execute(llvm::ArrayRef<std::optional<llvm::StringRef>>, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>*, bool*) const (.part.0) Job.cpp:0:0\r\n#42 0x000055dca6f9c38c clang::driver::Compilation::ExecuteCommand(clang::driver::Command const&, clang::driver::Command const*&, bool) const (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4b7b38c)\r\n#43 0x000055dca6f9ce1d clang::driver::Compilation::ExecuteJobs(clang::driver::JobList const&, llvm::SmallVectorImpl<std::pair<int, clang::driver::Command const*>>&, bool) const (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4b7be1d)\r\n#44 0x000055dca6fa5125 clang::driver::Driver::ExecuteCompilation(clang::driver::Compilation&, llvm::SmallVectorImpl<std::pair<int, clang::driver::Command const*>>&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x4b84125)\r\n#45 0x000055dca37335fb clang_main(int, char**, llvm::ToolContext const&) (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x13125fb)\r\n#46 0x000055dca362305b main (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x120205b)\r\n#47 0x00007fc7a7323083 __libc_start_main /build/glibc-LcI20x/glibc-2.31/csu/../csu/libc-start.c:342:3\r\n#48 0x000055dca372ee2e _start (/home/dyung/src/upstream/8101d18-linux/bin/clang+0x130de2e)\r\nclang: error: clang frontend command failed with exit code 134 (use -v to see invocation)\r\nclang version 20.0.0 (https://github.com/llvm/llvm-project.git 8101d1863cc3a6ca0ca49962903f2d7651b25659)\r\nTarget: x86_64-unknown-linux-gnu\r\nThread model: posix\r\nInstalledDir: /home/dyung/src/upstream/8101d18-linux/bin\r\nBuild config: +assertions\r\n```",
+    "author": "dyung",
+    "labels": [
+      "crash",
+      "llvm:support",
+      "llvm:transforms"
+    ],
+    "comments": []
+  }
+}

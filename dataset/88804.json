@@ -1,0 +1,78 @@
+{
+  "bug_id": "88804",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/88804",
+  "bug_type": "crash",
+  "base_commit": "9ec6c5d26321f5d32d97218f850ae7cafda32b2e",
+  "knowledge_cutoff": "2024-04-15T22:10:46Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "34777c238b117b52dd41a9d12e8b54fb83677a12",
+    "components": [
+      "LoopVectorize"
+    ],
+    "files": [
+      "llvm/lib/Transforms/Vectorize/VPlanValue.h"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VPlanValue.h": [
+        [
+          361,
+          368
+        ],
+        [
+          376,
+          382
+        ]
+      ]
+    },
+    "bug_location_funcname": {}
+  },
+  "patch": "commit 34777c238b117b52dd41a9d12e8b54fb83677a12\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Tue Apr 16 21:24:24 2024 +0100\n\n    [VPlan] Don't mark VPBlendRecipe as phi-like.\n    \n    VPBlendRecipes don't get lowered to phis and usually do not appear at\n    the beginning of blocks, due to their masks appearing before them.\n    \n    This effectively relaxes an over-eager verifier message.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/88297.\n    Fixes https://github.com/llvm/llvm-project/issues/88804.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanValue.h b/llvm/lib/Transforms/Vectorize/VPlanValue.h\nindex da3a768552fc..3f8d4f4fe7d6 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanValue.h\n+++ b/llvm/lib/Transforms/Vectorize/VPlanValue.h\n@@ -361,8 +361,8 @@ public:\n     VPWidenMemoryInstructionSC,\n     VPWidenSC,\n     VPWidenSelectSC,\n-    // START: Phi-like recipes. Need to be kept together.\n     VPBlendSC,\n+    // START: Phi-like recipes. Need to be kept together.\n     VPWidenPHISC,\n     VPPredInstPHISC,\n     // START: SubclassID for recipes that inherit VPHeaderPHIRecipe.\n@@ -376,7 +376,7 @@ public:\n     VPReductionPHISC,\n     // END: SubclassID for recipes that inherit VPHeaderPHIRecipe\n     // END: Phi-like recipes\n-    VPFirstPHISC = VPBlendSC,\n+    VPFirstPHISC = VPWidenPHISC,\n     VPFirstHeaderPHISC = VPCanonicalIVPHISC,\n     VPLastHeaderPHISC = VPReductionPHISC,\n     VPLastPHISC = VPReductionPHISC,\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/blend-in-header.ll",
+      "commands": [
+        "opt -p loop-vectorize -force-vector-width=4 -force-vector-interleave=1 -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "invar_cond",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\n\ndefine i64 @invar_cond(i1 %c) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  br i1 %c, label %loop.latch, label %then\n\nthen:                                             ; preds = %loop.header\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %then, %loop.header\n  %r = phi i64 [ 1, %then ], [ 0, %loop.header ]\n  %iv.next = add i32 %iv, 1\n  %icmp = icmp sgt i32 %iv, 1000\n  br i1 %icmp, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  %r.lcssa = phi i64 [ %r, %loop.latch ]\n  ret i64 %r.lcssa\n}\n"
+        },
+        {
+          "test_name": "pr88297_incoming_ops_reordered",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\n\ndefine i64 @pr88297_incoming_ops_reordered() {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  br i1 false, label %loop.latch, label %then\n\nthen:                                             ; preds = %loop.header\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %then, %loop.header\n  %r = phi i64 [ 0, %loop.header ], [ 1, %then ]\n  %iv.next = add i32 %iv, 1\n  %icmp = icmp sgt i32 %iv, 1000\n  br i1 %icmp, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  %r.lcssa = phi i64 [ %r, %loop.latch ]\n  ret i64 %r.lcssa\n}\n"
+        },
+        {
+          "test_name": "pr88297",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\n\ndefine i64 @pr88297() {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  br i1 false, label %loop.latch, label %then\n\nthen:                                             ; preds = %loop.header\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %then, %loop.header\n  %r = phi i64 [ 1, %then ], [ 0, %loop.header ]\n  %iv.next = add i32 %iv, 1\n  %icmp = icmp sgt i32 %iv, 1000\n  br i1 %icmp, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  %r.lcssa = phi i64 [ %r, %loop.latch ]\n  ret i64 %r.lcssa\n}\n"
+        },
+        {
+          "test_name": "invar_cond_incoming_ops_reordered",
+          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\n\ndefine i64 @invar_cond_incoming_ops_reordered(i1 %c) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  br i1 %c, label %loop.latch, label %then\n\nthen:                                             ; preds = %loop.header\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %then, %loop.header\n  %r = phi i64 [ 0, %loop.header ], [ 1, %then ]\n  %iv.next = add i32 %iv, 1\n  %icmp = icmp sgt i32 %iv, 1000\n  br i1 %icmp, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  %r.lcssa = phi i64 [ %r, %loop.latch ]\n  ret i64 %r.lcssa\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LoopVectorize][VPlan] Found non-header PHI recipe in header - Assertion `verifyVPlanIsValid(*Plan) && \"VPlan is invalid\"' failed.",
+    "body": "Reduced LLVM IR:\r\n```llvm ir\r\ntarget datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\r\ntarget triple = \"riscv64-unknown-linux-gnu\"\r\n\r\ndefine i32 @main() #0 {\r\nfor.cond6.preheader:\r\n  br label %for.body10.1.i\r\n\r\nfor.body10.1.i:                                   ; preds = %cond.end.1.i, %for.cond6.preheader\r\n  %am.028.1.i = phi i32 [ 0, %for.cond6.preheader ], [ %inc.1.i, %cond.end.1.i ]\r\n  br i1 false, label %cond.end.1.i, label %cond.true.1.i\r\n\r\ncond.true.1.i:                                    ; preds = %for.body10.1.i\r\n  br label %cond.end.1.i\r\n\r\ncond.end.1.i:                                     ; preds = %cond.true.1.i, %for.body10.1.i\r\n  %cond.1.i = phi i32 [ 1, %cond.true.1.i ], [ 0, %for.body10.1.i ]\r\n  %inc.1.i = add i32 %am.028.1.i, 1\r\n  %exitcond21 = icmp ne i32 %inc.1.i, 0\r\n  br i1 %exitcond21, label %for.body10.1.i, label %for.cond.cleanup9.1.i.loopexit\r\n\r\nfor.cond.cleanup9.1.i.loopexit:                   ; preds = %cond.end.1.i\r\n  %cond.1.i.lcssa = phi i32 [ %cond.1.i, %cond.end.1.i ]\r\n  ret i32 0\r\n}\r\n\r\nattributes #0 = { \"target-features\"=\"+64bit,+a,+c,+d,+f,+m,+relax,+v,+zicsr,+zifencei,+zve32f,+zve32x,+zve64d,+zve64f,+zve64x,+zvl128b,+zvl256b,+zvl32b,+zvl64b,-e,-experimental-smmpm,-experimental-smnpm,-experimental-ssnpm,-experimental-sspm,-experimental-ssqosid,-experimental-supm,-experimental-zaamo,-experimental-zabha,-experimental-zalasr,-experimental-zalrsc,-experimental-zfbfmin,-experimental-zicfilp,-experimental-zicfiss,-experimental-ztso,-experimental-zvfbfmin,-experimental-zvfbfwma,-h,-shcounterenw,-shgatpa,-shtvala,-shvsatpa,-shvstvala,-shvstvecd,-smaia,-smepmp,-ssaia,-ssccptr,-sscofpmf,-sscounterenw,-ssstateen,-ssstrict,-sstc,-sstvala,-sstvecd,-ssu64xl,-svade,-svadu,-svbare,-svinval,-svnapot,-svpbmt,-xcvalu,-xcvbi,-xcvbitmanip,-xcvelw,-xcvmac,-xcvmem,-xcvsimd,-xsfcease,-xsfvcp,-xsfvfnrclipxfqf,-xsfvfwmaccqqq,-xsfvqmaccdod,-xsfvqmaccqoq,-xsifivecdiscarddlone,-xsifivecflushdlone,-xtheadba,-xtheadbb,-xtheadbs,-xtheadcmo,-xtheadcondmov,-xtheadfmemidx,-xtheadmac,-xtheadmemidx,-xtheadmempair,-xtheadsync,-xtheadvdot,-xventanacondops,-za128rs,-za64rs,-zacas,-zawrs,-zba,-zbb,-zbc,-zbkb,-zbkc,-zbkx,-zbs,-zca,-zcb,-zcd,-zce,-zcf,-zcmop,-zcmp,-zcmt,-zdinx,-zfa,-zfh,-zfhmin,-zfinx,-zhinx,-zhinxmin,-zic64b,-zicbom,-zicbop,-zicboz,-ziccamoa,-ziccif,-zicclsm,-ziccrse,-zicntr,-zicond,-zihintntl,-zihintpause,-zihpm,-zimop,-zk,-zkn,-zknd,-zkne,-zknh,-zkr,-zks,-zksed,-zksh,-zkt,-zmmul,-zvbb,-zvbc,-zvfh,-zvfhmin,-zvkb,-zvkg,-zvkn,-zvknc,-zvkned,-zvkng,-zvknha,-zvknhb,-zvks,-zvksc,-zvksed,-zvksg,-zvksh,-zvkt,-zvl1024b,-zvl16384b,-zvl2048b,-zvl32768b,-zvl4096b,-zvl512b,-zvl65536b,-zvl8192b\" }\r\n```\r\nGodbolt: https://godbolt.org/z/vrd5EvhW7\r\n\r\nBacktrace:\r\n```\r\nFound non-header PHI recipe in header VPBB: BLEND ir<%cond.1.i> = ir<1> ir<0>/ir<false>\r\nopt: /scratch/tc-testing/tc-apr-15/llvm/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp:8555: void llvm::LoopVectorizationPlanner::buildVPlansWithVPRecipes(llvm::ElementCount, llvm::ElementCount): Assertion `verifyVPlanIsValid(*Plan) && \"VPlan is invalid\"' failed.\r\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace.\r\nStack dump:\r\n0.      Program arguments: /scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt --passes=loop-vectorize reduced.ll\r\n #0 0x00006290953d31b0 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x2da91b0)\r\n #1 0x00006290953d05bf llvm::sys::RunSignalHandlers() (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x2da65bf)\r\n #2 0x00006290953d0715 SignalHandler(int) Signals.cpp:0:0\r\n #3 0x00007953b0842520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\r\n #4 0x00007953b08969fc __pthread_kill_implementation ./nptl/pthread_kill.c:44:76\r\n #5 0x00007953b08969fc __pthread_kill_internal ./nptl/pthread_kill.c:78:10\r\n #6 0x00007953b08969fc pthread_kill ./nptl/pthread_kill.c:89:10\r\n #7 0x00007953b0842476 gsignal ./signal/../sysdeps/posix/raise.c:27:6\r\n #8 0x00007953b08287f3 abort ./stdlib/abort.c:81:7\r\n #9 0x00007953b082871b _nl_load_domain ./intl/loadmsgcat.c:1177:9\r\n#10 0x00007953b0839e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\r\n#11 0x000062909443e70a (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x1e1470a)\r\n#12 0x000062909443ebd1 llvm::LoopVectorizationPlanner::plan(llvm::ElementCount, unsigned int) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x1e14bd1)\r\n#13 0x0000629094440f35 llvm::LoopVectorizePass::processLoop(llvm::Loop*) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x1e16f35)\r\n#14 0x0000629094443fee llvm::LoopVectorizePass::runImpl(llvm::Function&, llvm::ScalarEvolution&, llvm::LoopInfo&, llvm::TargetTransformInfo&, llvm::DominatorTree&, llvm::BlockFrequencyInfo*, llvm::TargetLibraryInfo*, llvm::DemandedBits&, llvm::AssumptionCache&, llvm::LoopAccessInfoManager&, llvm::OptimizationRemarkEmitter&, llvm::ProfileSummaryInfo*) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x1e19fee)\r\n#15 0x000062909444513d llvm::LoopVectorizePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x1e1b13d)\r\n#16 0x0000629093340396 llvm::detail::PassModel<llvm::Function, llvm::LoopVectorizePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0xd16396)\r\n#17 0x00006290951f8451 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x2bce451)\r\n#18 0x0000629093337c26 llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0xd0dc26)\r\n#19 0x00006290951f712b llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x2bcd12b)\r\n#20 0x000062909333fee6 llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0xd15ee6)\r\n#21 0x00006290951f4f61 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x2bcaf61)\r\n#22 0x0000629092bb9205 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool) (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x58f205)\r\n#23 0x0000629092bab836 optMain (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x581836)\r\n#24 0x00007953b0829d90 __libc_start_call_main ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16\r\n#25 0x00007953b0829e40 call_init ./csu/../csu/libc-start.c:128:20\r\n#26 0x00007953b0829e40 __libc_start_main ./csu/../csu/libc-start.c:379:5\r\n#27 0x0000629092ba14b5 _start (/scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt+0x5774b5)\r\nzsh: IOT instruction (core dumped)  /scratch/tc-testing/tc-apr-15/build-rv64gcv/build-llvm-linux/bin/opt\r\n```\r\n\r\nFound via fuzzer.",
+    "author": "patrick-rivos",
+    "labels": [
+      "vectorizers",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "hiraditya",
+        "body": "cc: @nikolaypanchenko @alexey-bataev "
+      },
+      {
+        "author": "fhahn",
+        "body": "Looks to be the same issue as #88297; not RISCV related"
+      }
+    ]
+  }
+}

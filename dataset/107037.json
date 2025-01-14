@@ -1,0 +1,88 @@
+{
+  "bug_id": "107037",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/107037",
+  "bug_type": "crash",
+  "base_commit": "7d3b81d06f96bc27673f31a7bd7d141ce4a2777b",
+  "knowledge_cutoff": "2024-09-03T01:42:33Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "98bb354a0add4aeb614430f48a23f87992166239",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "files": [
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          17778,
+          17787
+        ],
+        [
+          17802,
+          17809
+        ],
+        [
+          17827,
+          17838
+        ],
+        [
+          17937,
+          17943
+        ],
+        [
+          17956,
+          17963
+        ],
+        [
+          18085,
+          18094
+        ],
+        [
+          18099,
+          18108
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "analyzedReductionRoot",
+        "createOp",
+        "add",
+        "isVectorized",
+        "get",
+        "size",
+        "emitScaleForReusedOps",
+        "allConstant"
+      ]
+    }
+  },
+  "patch": "commit 98bb354a0add4aeb614430f48a23f87992166239\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Tue Sep 3 15:35:40 2024 -0700\n\n    [SLP]Fix PR107037: correctly track origonal/modified after vectorizations reduced values\n    \n    Need to correctly track reduced values with multiple uses in the same\n    reduction emission attempt. Otherwise, the number of the reuses might be\n    calculated incorrectly, and may cause compiler crash.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/107037\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex cf802034cd56..5ac2e0c5586b 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -17778,10 +17778,12 @@ public:\n       // Emit code for constant values.\n       if (Candidates.size() > 1 && allConstant(Candidates)) {\n         Value *Res = Candidates.front();\n-        ++VectorizedVals.try_emplace(Candidates.front(), 0).first->getSecond();\n+        Value *OrigV = TrackedToOrig.find(Candidates.front())->second;\n+        ++VectorizedVals.try_emplace(OrigV).first->getSecond();\n         for (Value *VC : ArrayRef(Candidates).drop_front()) {\n           Res = createOp(Builder, RdxKind, Res, VC, \"const.rdx\", ReductionOps);\n-          ++VectorizedVals.try_emplace(VC, 0).first->getSecond();\n+          Value *OrigV = TrackedToOrig.find(VC)->second;\n+          ++VectorizedVals.try_emplace(OrigV).first->getSecond();\n           if (auto *ResI = dyn_cast<Instruction>(Res))\n             V.analyzedReductionRoot(ResI);\n         }\n@@ -17802,8 +17804,10 @@ public:\n       // Gather same values.\n       MapVector<Value *, unsigned> SameValuesCounter;\n       if (IsSupportedHorRdxIdentityOp)\n-        for (Value *V : Candidates)\n-          ++SameValuesCounter.insert(std::make_pair(V, 0)).first->second;\n+        for (Value *V : Candidates) {\n+          Value *OrigV = TrackedToOrig.find(V)->second;\n+          ++SameValuesCounter.try_emplace(OrigV).first->second;\n+        }\n       // Used to check if the reduced values used same number of times. In this\n       // case the compiler may produce better code. E.g. if reduced values are\n       // aabbccdd (8 x values), then the first node of the tree will have a node\n@@ -17827,12 +17831,12 @@ public:\n                    });\n         Candidates.resize(SameValuesCounter.size());\n         transform(SameValuesCounter, Candidates.begin(),\n-                  [](const auto &P) { return P.first; });\n+                  [&](const auto &P) { return TrackedVals.at(P.first); });\n         NumReducedVals = Candidates.size();\n         // Have a reduction of the same element.\n         if (NumReducedVals == 1) {\n           Value *OrigV = TrackedToOrig.find(Candidates.front())->second;\n-          unsigned Cnt = SameValuesCounter.lookup(OrigV);\n+          unsigned Cnt = SameValuesCounter.find(OrigV)->second;\n           Value *RedVal =\n               emitScaleForReusedOps(Candidates.front(), Builder, Cnt);\n           VectorizedTree = GetNewVectorizedTree(VectorizedTree, RedVal);\n@@ -17937,7 +17941,7 @@ public:\n               continue;\n             Value *V = Candidates[Cnt];\n             Value *OrigV = TrackedToOrig.find(V)->second;\n-            ++SameValuesCounter[OrigV];\n+            ++SameValuesCounter.find(OrigV)->second;\n           }\n         }\n         SmallPtrSet<Value *, 4> VLScalars(VL.begin(), VL.end());\n@@ -17956,8 +17960,8 @@ public:\n             continue;\n           }\n           Value *OrigV = TrackedToOrig.find(RdxVal)->second;\n-          unsigned NumOps =\n-              VectorizedVals.lookup(RdxVal) + SameValuesCounter[OrigV];\n+          unsigned NumOps = VectorizedVals.lookup(OrigV) +\n+                            SameValuesCounter.find(OrigV)->second;\n           if (NumOps != ReducedValsToOps.find(OrigV)->second.size())\n             LocalExternallyUsedValues[RdxVal];\n         }\n@@ -18085,10 +18089,11 @@ public:\n         for (Value *RdxVal : VL) {\n           Value *OrigV = TrackedToOrig.find(RdxVal)->second;\n           if (IsSupportedHorRdxIdentityOp) {\n-            VectorizedVals.try_emplace(OrigV, SameValuesCounter[RdxVal]);\n+            VectorizedVals.try_emplace(OrigV,\n+                                       SameValuesCounter.find(OrigV)->second);\n             continue;\n           }\n-          ++VectorizedVals.try_emplace(OrigV, 0).first->getSecond();\n+          ++VectorizedVals.try_emplace(OrigV).first->getSecond();\n           if (!V.isVectorized(RdxVal))\n             RequiredExtract.insert(RdxVal);\n         }\n@@ -18099,10 +18104,10 @@ public:\n       }\n       if (OptReusedScalars && !AnyVectorized) {\n         for (const std::pair<Value *, unsigned> &P : SameValuesCounter) {\n-          Value *RedVal = emitScaleForReusedOps(P.first, Builder, P.second);\n+          Value *RdxVal = TrackedVals.find(P.first)->second;\n+          Value *RedVal = emitScaleForReusedOps(RdxVal, Builder, P.second);\n           VectorizedTree = GetNewVectorizedTree(VectorizedTree, RedVal);\n-          Value *OrigV = TrackedToOrig.find(P.first)->second;\n-          VectorizedVals.try_emplace(OrigV, P.second);\n+          VectorizedVals.try_emplace(P.first, P.second);\n         }\n         continue;\n       }\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/multi-tracked-reduced-value.ll",
+      "commands": [
+        "opt -S --passes=slp-vectorizer -mtriple=x86_64-unknown-linux-gnu < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "test",
+          "test_body": "define i8 @test() {\nentry:\n  %0 = trunc i32 0 to i8\n  %1 = add i8 %0, 0\n  %2 = add i8 %0, 0\n  %3 = add i8 %0, 0\n  %4 = add i8 %0, 0\n  %5 = trunc i32 0 to i8\n  %6 = or i8 %5, %0\n  %7 = or i8 %6, %2\n  %8 = or i8 %7, %3\n  %9 = or i8 %8, %0\n  %10 = or i8 %9, %4\n  %conv4 = or i8 %10, %1\n  %11 = trunc i32 0 to i8\n  %12 = add i8 %11, 0\n  %conv7 = or i8 %conv4, %12\n  %13 = add i8 %11, 0\n  %14 = add i8 %11, 0\n  %15 = add i8 %11, 0\n  %16 = trunc i32 0 to i8\n  %17 = or i8 %13, %16\n  %18 = or i8 %17, %14\n  %19 = or i8 %18, %11\n  %20 = or i8 %19, %15\n  %conv5 = or i8 %20, %conv7\n  %21 = trunc i32 0 to i8\n  %conv6 = or i8 %21, %conv5\n  ret i8 %conv6\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[SLPVectorizer] Assertion `Val && \"isa<> used on a null pointer\"' failed.",
+    "body": "Reproducer: https://godbolt.org/z/14Ea4as18\r\n```\r\n; bin/opt -passes=slp-vectorizer test.ll -S\r\n\r\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\r\ntarget triple = \"x86_64-unknown-linux-gnu\"\r\n\r\ndefine i8 @test() {\r\nentry:\r\n  %0 = trunc i32 0 to i8\r\n  %1 = add i8 %0, 0\r\n  %2 = add i8 %0, 0\r\n  %3 = add i8 %0, 0\r\n  %4 = add i8 %0, 0\r\n  %5 = trunc i32 0 to i8\r\n  %6 = or i8 %5, %0\r\n  %7 = or i8 %6, %2\r\n  %8 = or i8 %7, %3\r\n  %9 = or i8 %8, %0\r\n  %10 = or i8 %9, %4\r\n  %conv223.us.us.us.i.us.us.22.i.us.4 = or i8 %10, %1\r\n  %11 = trunc i32 0 to i8\r\n  %12 = add i8 %11, 0\r\n  %conv223.us.us.us.peel.i.i.us.5 = or i8 %conv223.us.us.us.i.us.us.22.i.us.4, %12\r\n  %13 = add i8 %11, 0\r\n  %14 = add i8 %11, 0\r\n  %15 = add i8 %11, 0\r\n  %16 = trunc i32 0 to i8\r\n  %17 = or i8 %13, %16\r\n  %18 = or i8 %17, %14\r\n  %19 = or i8 %18, %11\r\n  %20 = or i8 %19, %15\r\n  %conv223.us.us.us.i.us.us.22.i.us.5 = or i8 %20, %conv223.us.us.us.peel.i.i.us.5\r\n  %21 = trunc i32 0 to i8\r\n  %conv223.us.us.us.i.us.us.22.i.us.6 = or i8 %21, %conv223.us.us.us.i.us.us.22.i.us.5\r\n  ret i8 %conv223.us.us.us.i.us.us.22.i.us.6\r\n}\r\n```\r\n```\r\nopt: /home/dtcxzyw/WorkSpace/Projects/compilers/llvm-project/llvm/include/llvm/Support/Casting.h:109: static bool llvm::isa_impl_cl<To, const From*>::doit(const From*) [with To = llvm::MetadataAsValue; From = llvm::Value]: Assertion `Val && \"isa<> used on a null pointer\"' failed.\r\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace.\r\nStack dump:\r\n0.      Program arguments: bin/opt -passes=slp-vectorizer reduced.ll -S\r\n1.      Running pass \"function(slp-vectorizer)\" on module \"reduced.ll\"\r\n2.      Running pass \"slp-vectorizer\" on function \"test\"\r\n #0 0x00007adbd8e12c32 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/libLLVMSupport.so.20.0git+0x212c32)\r\n #1 0x00007adbd8e0faff llvm::sys::RunSignalHandlers() (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/libLLVMSupport.so.20.0git+0x20faff)\r\n #2 0x00007adbd8e0fc45 SignalHandler(int) Signals.cpp:0:0\r\n #3 0x00007adbd8842520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\r\n #4 0x00007adbd88969fc __pthread_kill_implementation ./nptl/pthread_kill.c:44:76\r\n #5 0x00007adbd88969fc __pthread_kill_internal ./nptl/pthread_kill.c:78:10\r\n #6 0x00007adbd88969fc pthread_kill ./nptl/pthread_kill.c:89:10\r\n #7 0x00007adbd8842476 gsignal ./signal/../sysdeps/posix/raise.c:27:6\r\n #8 0x00007adbd88287f3 abort ./stdlib/abort.c:81:7\r\n #9 0x00007adbd882871b _nl_load_domain ./intl/loadmsgcat.c:1177:9\r\n#10 0x00007adbd8839e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\r\n#11 0x00007adbd1f02fbb isGuaranteedNotToBeUndefOrPoison(llvm::Value const*, llvm::AssumptionCache*, llvm::Instruction const*, llvm::DominatorTree const*, unsigned int, UndefPoisonKind) ValueTracking.cpp:0:0\r\n#12 0x00007adbd1f0313f isGuaranteedNotToBeUndefOrPoison(llvm::Value const*, llvm::AssumptionCache*, llvm::Instruction const*, llvm::DominatorTree const*, unsigned int, UndefPoisonKind) ValueTracking.cpp:0:0\r\n#13 0x00007adbd3b3aad9 (anonymous namespace)::HorizontalReduction::tryToReduce(llvm::slpvectorizer::BoUpSLP&, llvm::DataLayout const&, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo const&)::'lambda2'(llvm::Value*, llvm::Value*)::operator()(llvm::Value*, llvm::Value*) const SLPVectorizer.cpp:0:0\r\n#14 0x00007adbd3bbcaa0 (anonymous namespace)::HorizontalReduction::tryToReduce(llvm::slpvectorizer::BoUpSLP&, llvm::DataLayout const&, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo const&) SLPVectorizer.cpp:0:0\r\n#15 0x00007adbd3bbf18a llvm::SLPVectorizerPass::vectorizeHorReduction(llvm::PHINode*, llvm::Instruction*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&, llvm::TargetTransformInfo*, llvm::SmallVectorImpl<llvm::WeakTrackingVH>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMVectorize.so.20.0git+0x1bf18a)\r\n#16 0x00007adbd3bc3788 llvm::SLPVectorizerPass::vectorizeRootInstruction(llvm::PHINode*, llvm::Instruction*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&, llvm::TargetTransformInfo*) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMVectorize.so.20.0git+0x1c3788)\r\n#17 0x00007adbd3bc799e llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMVectorize.so.20.0git+0x1c799e)\r\n#18 0x00007adbd3bce3cf llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMVectorize.so.20.0git+0x1ce3cf)\r\n#19 0x00007adbd3bcf036 llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMVectorize.so.20.0git+0x1cf036)\r\n#20 0x00007adbd44d3fb5 llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMPasses.so.20.0git+0xd3fb5)\r\n#21 0x00007adbd1751d0d llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMCore.so.20.0git+0x351d0d)\r\n#22 0x00007adbd7ad7f85 llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMX86CodeGen.so.20.0git+0xd7f85)\r\n#23 0x00007adbd1750876 llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMCore.so.20.0git+0x350876)\r\n#24 0x00007adbd7ad8945 llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMX86CodeGen.so.20.0git+0xd8945)\r\n#25 0x00007adbd174e83a llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/../lib/libLLVMCore.so.20.0git+0x34e83a)\r\n#26 0x00007adbd90fefc7 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool) (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/libLLVMOptDriver.so.20.0git+0x2cfc7)\r\n#27 0x00007adbd910a962 optMain (/home/dtcxzyw/WorkSpace/Projects/compilers/LLVM/llvm-build/bin/../lib/libLLVMOptDriver.so.20.0git+0x38962)\r\n#28 0x00007adbd8829d90 __libc_start_call_main ./csu/../sysdeps/nptl/libc_start_call_main.h:58:16\r\n#29 0x00007adbd8829e40 call_init ./csu/../csu/libc-start.c:128:20\r\n#30 0x00007adbd8829e40 __libc_start_main ./csu/../csu/libc-start.c:379:5\r\n#31 0x0000556f487ba095 _start (bin/opt+0x1095)\r\nAborted (core dumped)\r\n```\r\n",
+    "author": "dtcxzyw",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash-on-valid"
+    ],
+    "comments": []
+  }
+}

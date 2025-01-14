@@ -1,0 +1,143 @@
+{
+  "bug_id": "116553",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/116553",
+  "bug_type": "miscompilation",
+  "base_commit": "11be11b8773bf63abe2c8da72db3ee7c25af524b",
+  "knowledge_cutoff": "2024-11-17T18:49:16Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/ConstraintElimination"
+  ],
+  "hints": {
+    "fix_commit": "7e2da7d262380d5ebaf25dbadd7ad2440f6ce21f",
+    "components": [
+      "ConstraintElimination"
+    ],
+    "files": [
+      "llvm/lib/Transforms/Scalar/ConstraintElimination.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Scalar/ConstraintElimination.cpp": [
+        [
+          1033,
+          1041
+        ],
+        [
+          1043,
+          1050
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Scalar/ConstraintElimination.cpp": [
+        "getConditionFact",
+        "FactOrCheck",
+        "State::addInfoForInductions",
+        "ConditionTy",
+        "isNe"
+      ]
+    }
+  },
+  "patch": "commit 7e2da7d262380d5ebaf25dbadd7ad2440f6ce21f\nAuthor: Yingwei Zheng <dtcxzyw2333@gmail.com>\nDate:   Mon Nov 18 23:41:04 2024 +0800\n\n    [ConstraintElim] Bail out on non-dedicated exits when adding exiting conditions (#116627)\n    \n    This patch bails out non-dedicated exits to avoid adding exiting\n    conditions to invalid context.\n    Closes https://github.com/llvm/llvm-project/issues/116553.\n    \n    (cherry picked from commit 52361d0368b79841be12156bf03cf8c1851e5df7)\n\ndiff --git a/llvm/lib/Transforms/Scalar/ConstraintElimination.cpp b/llvm/lib/Transforms/Scalar/ConstraintElimination.cpp\nindex 37022104d0a9..d1c80aa67124 100644\n--- a/llvm/lib/Transforms/Scalar/ConstraintElimination.cpp\n+++ b/llvm/lib/Transforms/Scalar/ConstraintElimination.cpp\n@@ -1033,9 +1033,9 @@ void State::addInfoForInductions(BasicBlock &BB) {\n       DTN, CmpInst::ICMP_SLT, PN, B,\n       ConditionTy(CmpInst::ICMP_SLE, StartValue, B)));\n \n-  // Try to add condition from header to the exit blocks. When exiting either\n-  // with EQ or NE in the header, we know that the induction value must be u<=\n-  // B, as other exits may only exit earlier.\n+  // Try to add condition from header to the dedicated exit blocks. When exiting\n+  // either with EQ or NE in the header, we know that the induction value must\n+  // be u<= B, as other exits may only exit earlier.\n   assert(!StepOffset.isNegative() && \"induction must be increasing\");\n   assert((Pred == CmpInst::ICMP_EQ || Pred == CmpInst::ICMP_NE) &&\n          \"unsupported predicate\");\n@@ -1043,8 +1043,11 @@ void State::addInfoForInductions(BasicBlock &BB) {\n   SmallVector<BasicBlock *> ExitBBs;\n   L->getExitBlocks(ExitBBs);\n   for (BasicBlock *EB : ExitBBs) {\n-    WorkList.emplace_back(FactOrCheck::getConditionFact(\n-        DT.getNode(EB), CmpInst::ICMP_ULE, A, B, Precond));\n+    // Bail out on non-dedicated exits.\n+    if (DT.dominates(&BB, EB)) {\n+      WorkList.emplace_back(FactOrCheck::getConditionFact(\n+          DT.getNode(EB), CmpInst::ICMP_ULE, A, B, Precond));\n+    }\n   }\n }\n \n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/ConstraintElimination/induction-condition-in-loop-exit.ll",
+      "commands": [
+        "opt -p constraint-elimination -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_var_compare_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_var_compare_known(ptr %s, i32 %N) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, %N\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ule i32 %iv, %N\n  ret i1 %t\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_const_compare_known_due_to_precond_on_start_value",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)\ndeclare void @llvm.assume(i1 noundef) #0\n\ndefine i1 @multi_exiting_loop_eq_same_unique_exit_const_compare_known_due_to_precond_on_start_value(ptr %s, i32 %start) {\nentry:\n  %pre.c = icmp ule i32 %start, 1234\n  call void @llvm.assume(i1 %pre.c)\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ %start, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ult i32 %iv, 1235\n  ret i1 %t\n}\n\nattributes #0 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_different_exits_2_const_compare_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_different_exits_2_const_compare_known(ptr %s, i1 %c.1, i1 %c.2) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit.1, label %else.1\n\nelse.1:                                           ; preds = %loop.header\n  br i1 %c.1, label %exit.1, label %else.2\n\nelse.2:                                           ; preds = %else.1\n  br i1 %c.2, label %exit.2, label %loop.latch\n\nloop.latch:                                       ; preds = %else.2\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit.2\n\nexit.1:                                           ; preds = %else.1, %loop.header\n  %t.1 = icmp ult i32 %iv, 1235\n  ret i1 %t.1\n\nexit.2:                                           ; preds = %loop.latch, %else.2\n  %t.2 = icmp ult i32 %iv, 1235\n  ret i1 %t.2\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_successors_swapped",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_successors_swapped(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %loop.latch, label %exit\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %u = icmp ult i32 %iv, 1235\n  ret i1 %u\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_const_compare_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_const_compare_known(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ult i32 %iv, 1235\n  ret i1 %t\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_different_exits_compare_not_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_different_exits_compare_not_known(ptr %s, i32 %N) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, %N\n  br i1 %exitcond.not, label %exit.1, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit.2\n\nexit.1:                                           ; preds = %loop.header\n  %t.1 = icmp ult i32 %iv, %N\n  ret i1 %t.1\n\nexit.2:                                           ; preds = %loop.latch\n  %t.2 = icmp ult i32 %iv, %N\n  ret i1 %t.2\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_different_exits_const_compare_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_different_exits_const_compare_known(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit.1, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit.2\n\nexit.1:                                           ; preds = %loop.header\n  %t.1 = icmp ult i32 %iv, 1235\n  ret i1 %t.1\n\nexit.2:                                           ; preds = %loop.latch\n  %t.2 = icmp ult i32 %iv, 1235\n  ret i1 %t.2\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_ne_same_unique_exit_successors_swapped",
+          "test_body": "define i1 @multi_exiting_loop_ne_same_unique_exit_successors_swapped(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp ne i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %u = icmp ult i32 %iv, 1235\n  ret i1 %u\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_const_compare_not_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_const_compare_not_known(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %u = icmp ult i32 %iv, 1234\n  ret i1 %u\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_const_compare_not_known_due_to_start_value",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_const_compare_not_known_due_to_start_value(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 1235, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ult i32 %iv, 1235\n  ret i1 %t\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_exit_with_out_loop_preds_const_compare_not_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_exit_with_out_loop_preds_const_compare_not_known(ptr %s, i1 %pre.c, i32 %x) {\nentry:\n  br i1 %pre.c, label %loop.header, label %exit\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header, %entry\n  %p = phi i32 [ %x, %entry ], [ %iv, %loop.header ], [ %iv, %loop.latch ]\n  %u = icmp ult i32 %p, 1235\n  ret i1 %u\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_const_compare_not_known_due_to_precond_on_start_value",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)\ndeclare void @llvm.assume(i1 noundef) #0\n\ndefine i1 @multi_exiting_loop_eq_same_unique_exit_const_compare_not_known_due_to_precond_on_start_value(ptr %s, i32 %start) {\nentry:\n  %pre.c = icmp ule i32 %start, 1236\n  call void @llvm.assume(i1 %pre.c)\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ %start, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ult i32 %iv, 1236\n  ret i1 %t\n}\n\nattributes #0 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_const_compare_not_known_due_to_missing_precond",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_const_compare_not_known_due_to_missing_precond(ptr %s, i32 %start) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ %start, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, 1234\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ult i32 %iv, 1236\n  ret i1 %t\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_same_unique_exit_var_compare_not_known_due_to_start",
+          "test_body": "define i1 @multi_exiting_loop_eq_same_unique_exit_var_compare_not_known_due_to_start(ptr %s, i32 %N) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 1, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, %N\n  br i1 %exitcond.not, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %c = icmp ule i32 %iv, %N\n  ret i1 %c\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_ne_different_exits_compare_not_known",
+          "test_body": "define i1 @multi_exiting_loop_ne_different_exits_compare_not_known(ptr %s, i32 %N) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 1, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp ne i32 %iv, %N\n  br i1 %exitcond.not, label %loop.latch, label %exit.1\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit.2\n\nexit.1:                                           ; preds = %loop.header\n  %t.1 = icmp ult i32 %iv, %N\n  ret i1 %t.1\n\nexit.2:                                           ; preds = %loop.latch\n  %t.2 = icmp ult i32 %iv, %N\n  ret i1 %t.2\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_ne_different_exits_const_compare_known",
+          "test_body": "define i1 @multi_exiting_loop_ne_different_exits_const_compare_known(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 1, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp ne i32 %iv, 1234\n  br i1 %exitcond.not, label %loop.latch, label %exit.1\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit.2\n\nexit.1:                                           ; preds = %loop.header\n  %t.1 = icmp ult i32 %iv, 1235\n  ret i1 %t.1\n\nexit.2:                                           ; preds = %loop.latch\n  %t.2 = icmp ult i32 %iv, 1235\n  ret i1 %t.2\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_ne_same_unique_exit_const_compare_known",
+          "test_body": "define i1 @multi_exiting_loop_ne_same_unique_exit_const_compare_known(ptr %s) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp ne i32 %iv, 1234\n  br i1 %exitcond.not, label %loop.latch, label %exit\n\nloop.latch:                                       ; preds = %loop.header\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %t = icmp ult i32 %iv, 1235\n  ret i1 %t\n}\n"
+        },
+        {
+          "test_name": "multi_exiting_loop_eq_different_exits_2_compare_not_known",
+          "test_body": "define i1 @multi_exiting_loop_eq_different_exits_2_compare_not_known(ptr %s, i32 %N, i1 %c.1, i1 %c.2) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %exitcond.not = icmp eq i32 %iv, %N\n  br i1 %exitcond.not, label %exit.1, label %else.1\n\nelse.1:                                           ; preds = %loop.header\n  br i1 %c.1, label %exit.1, label %else.2\n\nelse.2:                                           ; preds = %else.1\n  br i1 %c.2, label %exit.2, label %loop.latch\n\nloop.latch:                                       ; preds = %else.2\n  %arrayidx = getelementptr inbounds i8, ptr %s, i32 %iv\n  %0 = load i8, ptr %arrayidx, align 1\n  %latch.c = icmp ult i8 %0, 10\n  %iv.next = add nuw nsw i32 %iv, 1\n  br i1 %latch.c, label %loop.header, label %exit.2\n\nexit.1:                                           ; preds = %else.1, %loop.header\n  %t.1 = icmp ult i32 %iv, %N\n  ret i1 %t.1\n\nexit.2:                                           ; preds = %loop.latch, %else.2\n  %t.2 = icmp ult i32 %iv, %N\n  ret i1 %t.2\n}\n"
+        },
+        {
+          "test_name": "test_non_dedicated_exit",
+          "test_body": "define i1 @test_non_dedicated_exit(i16 %n) {\nentry:\n  %cond = icmp slt i16 %n, 1\n  br i1 %cond, label %exit, label %loop.preheader\n\nloop.preheader:                                   ; preds = %entry\n  %sub = add nsw i16 %n, -1\n  %ext = zext nneg i16 %sub to i32\n  br label %loop\n\nloop:                                             ; preds = %loop.latch, %loop.preheader\n  %indvar = phi i32 [ %indvar.inc, %loop.latch ], [ 0, %loop.preheader ]\n  %exitcond = icmp eq i32 %indvar, %ext\n  br i1 %exitcond, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop\n  %indvar.inc = add nuw nsw i32 %indvar, 1\n  br label %loop\n\nexit:                                             ; preds = %loop, %entry\n  %cmp = icmp sgt i16 %n, 0\n  ret i1 %cmp\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[clang] Miscompile at O3 with SIGKILL",
+    "body": "When I compiled this code with O3, it triggered SIGKILL. With O0/1/2, it returned 0.\r\n\r\nBisected to https://github.com/llvm/llvm-project/commit/5b927130b0e15a442a6ed171f43a612e6a40bbcd, which was committed by @fhahn \r\n\r\nCompiler Explorer: https://godbolt.org/z/q9j75feYG\r\n\r\nCode:\r\n```c\r\nint printf(const char *, ...);\r\nint a, c, d;\r\nint *b;\r\nchar e;\r\nshort f;\r\nint g(int i) {\r\n  if (i <= 0)\r\n    return 1;\r\n  int h = 0;\r\n  for (; h < i - 1; h++) {\r\n    for (; d - h - 1;)\r\n      if (c)\r\n        b[d] = e = 1;\r\n    if (e)\r\n      break;\r\n  }\r\n  return 0;\r\n}\r\nvoid j() { g(f); }\r\nint main(int i, char *k[]) {\r\n  j();\r\n  while (0 < f)\r\n    ;\r\n  printf(\"%X\\n\", a);\r\n}\r\n```",
+    "author": "cardigan1008",
+    "labels": [
+      "miscompilation",
+      "confirmed",
+      "llvm:transforms"
+    ],
+    "comments": [
+      {
+        "author": "dtcxzyw",
+        "body": "Reproducer: https://alive2.llvm.org/ce/z/fLN5gw\r\n```\r\n; bin/opt -passes=constraint-elimination test.ll -S\r\ndefine i1 @test(i16 %n) {\r\nentry:\r\n  %cond = icmp slt i16 %n, 1\r\n  br i1 %cond, label %exit, label %loop.preheader\r\n\r\nloop.preheader:\r\n  %sub = add nsw i16 %n, -1\r\n  %ext = zext nneg i16 %sub to i32\r\n  br label %loop\r\n\r\nloop:\r\n  %indvar = phi i32 [ %indvar.inc, %loop.latch ], [ 0, %loop.preheader ]\r\n  %12 = icmp eq i32 %indvar, %ext\r\n  br i1 %12, label %exit, label %loop.latch\r\n\r\nloop.latch:\r\n  %indvar.inc = add nuw nsw i32 %indvar, 1\r\n  br label %loop\r\n\r\nexit:\r\n  %cmp = icmp sgt i16 %n, 0\r\n  ret i1 %cmp\r\n}\r\n\r\n```\r\nI will post a fix later.\r\n"
+      }
+    ]
+  }
+}

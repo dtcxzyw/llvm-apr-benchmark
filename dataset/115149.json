@@ -1,0 +1,430 @@
+{
+  "bug_id": "115149",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/115149",
+  "bug_type": "miscompilation",
+  "base_commit": "0f44d72e0ee74970cf696ff4c791f63e0c3fa9b4",
+  "knowledge_cutoff": "2024-11-06T11:22:14Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InstCombine"
+  ],
+  "hints": {
+    "fix_commit": "929cbe7f596733f85cd274485acc19442dd34a80",
+    "components": [
+      "InstCombine"
+    ],
+    "files": [
+      "llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp": [
+        [
+          545,
+          551
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp": [
+        "InstCombinerImpl::foldPHIArgGEPIntoPHI"
+      ]
+    }
+  },
+  "patch": "commit 929cbe7f596733f85cd274485acc19442dd34a80\nAuthor: Antonio Frighetto <me@antoniofrighetto.com>\nDate:   Tue Nov 12 19:02:04 2024 +0100\n\n    [InstCombine] Intersect nowrap flags between geps while folding into phi\n    \n    A miscompilation issue has been addressed with refined checking.\n    \n    Fixes: https://github.com/llvm/llvm-project/issues/115149.\n\ndiff --git a/llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp b/llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp\nindex cb5c44730512..1fcf1c570add 100644\n--- a/llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp\n+++ b/llvm/lib/Transforms/InstCombine/InstCombinePHI.cpp\n@@ -545,7 +545,8 @@ Instruction *InstCombinerImpl::foldPHIArgGEPIntoPHI(PHINode &PN) {\n   // especially bad when the PHIs are in the header of a loop.\n   bool NeededPhi = false;\n \n-  GEPNoWrapFlags NW = GEPNoWrapFlags::all();\n+  // Remember flags of the first phi-operand getelementptr.\n+  GEPNoWrapFlags NW = FirstInst->getNoWrapFlags();\n \n   // Scan to see if all operands are the same opcode, and all have one user.\n   for (Value *V : drop_begin(PN.incoming_values())) {\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InstCombine/opaque-ptr.ll",
+      "commands": [
+        "opt -S -passes=instcombine < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "phi_of_gep_flags_1",
+          "test_body": "define ptr @phi_of_gep_flags_1(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr inbounds i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr nusw nuw i32, ptr %p, i64 1\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  ret ptr %phi\n}\n"
+        }
+      ]
+    },
+    {
+      "file": "llvm/test/Transforms/InstCombine/phi.ll",
+      "commands": [
+        "opt < %s -passes=instcombine -S"
+      ],
+      "tests": [
+        {
+          "test_name": "test15b",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i64 @test15a(i64)\n\ndefine i64 @test15b(i64 %A, i1 %b) {\nentry:\n  %i0 = zext i64 %A to i128\n  %i1 = shl i128 %i0, 64\n  %i = or i128 %i1, %i0\n  br i1 %b, label %one, label %two\n\none:                                              ; preds = %two, %entry\n  %x = phi i128 [ %i, %entry ], [ %y, %two ]\n  %x1 = lshr i128 %x, 64\n  %x2 = trunc i128 %x1 to i64\n  %c = call i64 @test15a(i64 %x2)\n  %c1 = zext i64 %c to i128\n  br label %two\n\ntwo:                                              ; preds = %one, %entry\n  %y = phi i128 [ %i, %entry ], [ %c1, %one ]\n  %y1 = lshr i128 %y, 64\n  %y2 = trunc i128 %y1 to i64\n  %d = call i64 @test15a(i64 %y2)\n  %d1 = trunc i64 %d to i1\n  br i1 %d1, label %one, label %end\n\nend:                                              ; preds = %two\n  %g = trunc i128 %y to i64\n  ret i64 %g\n}\n"
+        },
+        {
+          "test_name": "test5_undef",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test5_undef(i32 %A, i1 %cond) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ undef, %Loop ]\n  br i1 %cond, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 %B\n}\n"
+        },
+        {
+          "test_name": "test26",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i1 @test26a()\n\ndefine i1 @test26(i32 %n) {\nentry:\n  %a = alloca i32, align 4\n  %i = ptrtoint ptr %a to i64\n  %b = call i1 @test26a()\n  br label %one\n\none:                                              ; preds = %three, %two, %entry\n  %x = phi i64 [ %y, %two ], [ %w, %three ], [ %i, %entry ]\n  %c = call i1 @test26a()\n  switch i32 %n, label %end [\n    i32 2, label %two\n    i32 3, label %three\n  ]\n\ntwo:                                              ; preds = %three, %one\n  %y = phi i64 [ %x, %one ], [ %w, %three ]\n  %d = call i1 @test26a()\n  switch i32 %n, label %end [\n    i32 10, label %one\n    i32 30, label %three\n  ]\n\nthree:                                            ; preds = %two, %one\n  %w = phi i64 [ %y, %two ], [ %x, %one ]\n  %e = call i1 @test26a()\n  br i1 %e, label %one, label %two\n\nend:                                              ; preds = %two, %one\n  %f = phi i64 [ %x, %one ], [ %y, %two ]\n  %g = inttoptr i64 %f to ptr\n  store i32 10, ptr %g, align 4\n  %z = call i1 @test26a()\n  ret i1 %z\n}\n"
+        },
+        {
+          "test_name": "wrong_gep_arg_into_phi",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i64 @wrong_gep_arg_into_phi(ptr noundef %ptr) {\nentry:\n  %add.ptr = getelementptr i8, ptr %ptr, i64 1\n  br label %for.cond\n\nfor.cond:                                         ; preds = %for.cond, %entry\n  %.pn = phi ptr [ %add.ptr, %entry ], [ %incdec.ptr, %for.cond ]\n  %val = load i8, ptr %.pn, align 1\n  %cond = icmp ne i8 %val, 0\n  %incdec.ptr = getelementptr inbounds nuw i8, ptr %.pn, i64 1\n  br i1 %cond, label %for.cond, label %exit\n\nexit:                                             ; preds = %for.cond\n  ret i64 0\n}\n"
+        },
+        {
+          "test_name": "pr57488_icmp_of_phi",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @pr57488_icmp_of_phi(ptr %ptr.base, i64 %len) {\nstart:\n  %end = getelementptr inbounds i64, ptr %ptr.base, i64 %len\n  %len.zero = icmp eq i64 %len, 0\n  br i1 %len.zero, label %exit, label %loop\n\nloop:                                             ; preds = %loop, %start\n  %accum = phi i8 [ %accum.next, %loop ], [ 1, %start ]\n  %ptr = phi ptr [ %ptr.next, %loop ], [ %ptr.base, %start ]\n  %ptr.next = getelementptr inbounds i64, ptr %ptr, i64 1\n  %accum.bool = icmp ne i8 %accum, 0\n  %val = load i64, ptr %ptr, align 8\n  %val.zero = icmp eq i64 %val, 0\n  %and = and i1 %accum.bool, %val.zero\n  %accum.next = zext i1 %and to i8\n  %exit.cond = icmp eq ptr %ptr.next, %end\n  br i1 %exit.cond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %start\n  %res = phi i1 [ true, %start ], [ %and, %loop ]\n  ret i1 %res\n}\n"
+        },
+        {
+          "test_name": "PR24766",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @PR24766(i8 %x1, i8 %x2, i8 %condition) {\nentry:\n  %conv = sext i8 %condition to i32\n  switch i32 %conv, label %epilog [\n    i32 0, label %sw1\n    i32 1, label %sw2\n  ]\n\nsw1:                                              ; preds = %entry\n  %cmp1 = icmp eq i8 %x1, %x2\n  %frombool1 = zext i1 %cmp1 to i8\n  br label %epilog\n\nsw2:                                              ; preds = %entry\n  %cmp2 = icmp sle i8 %x1, %x2\n  %frombool2 = zext i1 %cmp2 to i8\n  br label %epilog\n\nepilog:                                           ; preds = %sw2, %sw1, %entry\n  %conditionMet = phi i8 [ 0, %entry ], [ %frombool2, %sw2 ], [ %frombool1, %sw1 ]\n  %tobool = icmp ne i8 %conditionMet, 0\n  ret i1 %tobool\n}\n"
+        },
+        {
+          "test_name": "test22",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine void @test22() {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %phi = phi i32 [ 0, %entry ], [ %y, %loop ]\n  %y = add i32 %phi, 1\n  %o = or i32 %y, %phi\n  %e = icmp eq i32 %o, %y\n  br i1 %e, label %loop, label %ret\n\nret:                                              ; preds = %loop\n  ret void\n}\n"
+        },
+        {
+          "test_name": "cmp_eq_phi_node_can_fold_1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_eq_phi_node_can_fold_1(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp eq i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test14a",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i640 @test14a(i320 %A, i320 %B, i1 %b1) {\nBB0:\n  %a = zext i320 %A to i640\n  %b = zext i320 %B to i640\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %C = phi i640 [ %a, %BB0 ], [ %b, %Loop ]\n  br i1 %b1, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i640 %C\n}\n"
+        },
+        {
+          "test_name": "test6",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test6(i16 %A, i1 %b) {\nBB0:\n  %X = zext i16 %A to i32\n  br i1 %b, label %BB1, label %BB2\n\nBB1:                                              ; preds = %BB0\n  %Y = zext i16 %A to i32\n  br label %BB2\n\nBB2:                                              ; preds = %BB1, %BB0\n  %c = phi i32 [ %X, %BB0 ], [ %Y, %BB1 ]\n  ret i32 %c\n}\n"
+        },
+        {
+          "test_name": "test20",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test20(i1 %cond) {\n  %a = alloca i32, align 4\n  %b = alloca i32, align 4\n  %c = alloca i32, align 4\n  br i1 %cond, label %true, label %false\n\ntrue:                                             ; preds = %0\n  br label %ret\n\nfalse:                                            ; preds = %0\n  br label %ret\n\nret:                                              ; preds = %false, %true\n  %p = phi ptr [ %a, %true ], [ %b, %false ]\n  %r = icmp eq ptr %p, %c\n  ret i1 %r\n}\n"
+        },
+        {
+          "test_name": "test14b",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i160 @test14b(i320 %pA, i320 %pB, i1 %b1) {\nBB0:\n  %a = trunc i320 %pA to i160\n  %b = trunc i320 %pB to i160\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %C = phi i160 [ %a, %BB0 ], [ %b, %Loop ]\n  br i1 %b1, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i160 %C\n}\n"
+        },
+        {
+          "test_name": "test18",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test18(i1 %cond) {\n  %zero = alloca i32, align 4\n  %one = alloca i32, align 4\n  br i1 %cond, label %true, label %false\n\ntrue:                                             ; preds = %0\n  br label %ret\n\nfalse:                                            ; preds = %0\n  br label %ret\n\nret:                                              ; preds = %false, %true\n  %ptr = phi ptr [ %zero, %true ], [ %one, %false ]\n  %isnull = icmp eq ptr %ptr, null\n  ret i1 %isnull\n}\n"
+        },
+        {
+          "test_name": "test12",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i64 @test12(i1 %cond, ptr %Ptr, i64 %Val) {\nentry:\n  %t41 = ptrtoint ptr %Ptr to i64\n  %t42 = zext i64 %t41 to i128\n  br i1 %cond, label %end, label %two\n\ntwo:                                              ; preds = %entry\n  %t36 = zext i64 %Val to i128\n  %t37 = shl i128 %t36, 64\n  %ins39 = or i128 %t42, %t37\n  br label %end\n\nend:                                              ; preds = %two, %entry\n  %t869.0 = phi i128 [ %t42, %entry ], [ %ins39, %two ]\n  %t32 = trunc i128 %t869.0 to i64\n  %t29 = lshr i128 %t869.0, 64\n  %t30 = trunc i128 %t29 to i64\n  %t2 = add i64 %t32, %t30\n  ret i64 %t2\n}\n"
+        },
+        {
+          "test_name": "cmp_sgt_phi_node_cant_fold_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_sgt_phi_node_cant_fold_2(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %sub_is_zero1, label %join\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp sgt i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "cmp_eq_phi_node_can_fold_3",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_eq_phi_node_can_fold_3(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp eq i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test25",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i1 @test25a()\n\ndefine i1 @test25() {\nentry:\n  %a = alloca i32, align 4\n  %i = ptrtoint ptr %a to i64\n  %b = call i1 @test25a()\n  br i1 %b, label %one, label %two\n\none:                                              ; preds = %two, %entry\n  %x = phi i64 [ %y, %two ], [ %i, %entry ]\n  %c = call i1 @test25a()\n  br i1 %c, label %two, label %end\n\ntwo:                                              ; preds = %one, %entry\n  %y = phi i64 [ %x, %one ], [ %i, %entry ]\n  %d = call i1 @test25a()\n  br i1 %d, label %one, label %end\n\nend:                                              ; preds = %two, %one\n  %f = phi i64 [ %x, %one ], [ %y, %two ]\n  %g = inttoptr i64 %f to ptr\n  store i32 10, ptr %g, align 4\n  %z = call i1 @test25a()\n  ret i1 %z\n}\n"
+        },
+        {
+          "test_name": "cmp_slt_phi_node_can_fold_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_slt_phi_node_can_fold_2(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %join, label %sub_is_zero1\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp slt i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "inttoptr_of_phi",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i64 @inttoptr_of_phi(i1 %c, ptr %arg.ptr, ptr %arg.ptr2) {\nentry:\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %entry\n  %arg.ptr2.val = load i64, ptr %arg.ptr2, align 8\n  br label %join\n\nelse:                                             ; preds = %entry\n  %arg.int.ptr = ptrtoint ptr %arg.ptr to i64\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %int.ptr = phi i64 [ %arg.ptr2.val, %if ], [ %arg.int.ptr, %else ]\n  %ptr = inttoptr i64 %int.ptr to ptr\n  %v = load i64, ptr %ptr, align 8\n  ret i64 %v\n}\n"
+        },
+        {
+          "test_name": "phi_allnonzeroconstant",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_allnonzeroconstant(i1 %c, i32 %a, i32 %b) {\nentry:\n  br i1 %c, label %if.then, label %if.else\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.else:                                          ; preds = %entry\n  call void @dummy()\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then\n  %x.0 = phi i32 [ 1, %if.then ], [ 2, %if.else ]\n  %or = or i32 %x.0, %a\n  %cmp1 = icmp eq i32 %or, 0\n  ret i1 %cmp1\n}\n\ndeclare void @dummy()\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_ne",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_ne(i32 %n, i32 %s, ptr nocapture readonly %P) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %0 = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %0\n  %1 = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %a.0 = phi i32 [ %1, %if.then ], [ %n, %entry ]\n  %cmp1 = icmp ne i32 %a.0, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "test1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test1(i32 %A, i1 %b) {\nBB0:\n  br i1 %b, label %BB1, label %BB2\n\nBB1:                                              ; preds = %BB0\n  %B = phi i32 [ %A, %BB0 ]\n  ret i32 %B\n\nBB2:                                              ; preds = %BB0\n  ret i32 %A\n}\n"
+        },
+        {
+          "test_name": "test25b",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i1 @test25a()\n\ndefine i1 @test25b(i1 %ci, i64 %ai, i64 %bi) {\nentry:\n  br i1 %ci, label %then, label %else\n\nthen:                                             ; preds = %entry\n  br label %else\n\nelse:                                             ; preds = %then, %entry\n  %i = phi i64 [ %ai, %entry ], [ %bi, %then ]\n  %b = call i1 @test25a()\n  br i1 %b, label %one, label %two\n\none:                                              ; preds = %two, %else\n  %x = phi i64 [ %y, %two ], [ %i, %else ]\n  %c = call i1 @test25a()\n  br i1 %c, label %two, label %end\n\ntwo:                                              ; preds = %one, %else\n  %y = phi i64 [ %x, %one ], [ %i, %else ]\n  %d = call i1 @test25a()\n  br i1 %d, label %one, label %end\n\nend:                                              ; preds = %two, %one\n  %f = phi i64 [ %x, %one ], [ %y, %two ]\n  %g = inttoptr i64 %f to ptr\n  store i32 10, ptr %g, align 4\n  %z = call i1 @test25a()\n  ret i1 %z\n}\n"
+        },
+        {
+          "test_name": "cmp_sgt_phi_node_cant_fold_1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_sgt_phi_node_cant_fold_1(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp sgt i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_ne_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_ne_2(i32 %n, i32 %s, ptr nocapture readonly %P) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  %tobool2 = icmp slt i32 %n, %s\n  br i1 %tobool2, label %if.else, label %if.end\n\nif.else:                                          ; preds = %if.then\n  %0 = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %0\n  %1 = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then, %entry\n  %a.0 = phi i32 [ %1, %if.else ], [ %n, %entry ], [ 2, %if.then ]\n  %cmp1 = icmp ne i32 %a.0, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "test4",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test4(i1 %b) {\nBB0:\n  ret i32 7\n\nLoop:                                             ; preds = %L2, %Loop\n  %B = phi i32 [ %B, %L2 ], [ %B, %Loop ]\n  br i1 %b, label %L2, label %Loop\n\nL2:                                               ; preds = %Loop\n  br label %Loop\n}\n"
+        },
+        {
+          "test_name": "test_dead_phi_web",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine void @test_dead_phi_web(i64 %index, i1 %cond) {\nentry:\n  br label %BB0\n\nBB0:                                              ; preds = %BB4, %entry\n  %a = phi float [ 0.000000e+00, %entry ], [ %x, %BB4 ]\n  switch i64 %index, label %BB4 [\n    i64 0, label %BB1\n    i64 1, label %BB2\n    i64 2, label %BB3\n  ]\n\nBB1:                                              ; preds = %BB0\n  br i1 %cond, label %BB2, label %BB4\n\nBB2:                                              ; preds = %BB1, %BB0\n  %b = phi float [ 2.000000e+00, %BB0 ], [ %a, %BB1 ]\n  br i1 %cond, label %BB3, label %BB4\n\nBB3:                                              ; preds = %BB2, %BB0\n  %c = phi float [ 3.000000e+00, %BB0 ], [ %b, %BB2 ]\n  br label %BB4\n\nBB4:                                              ; preds = %BB3, %BB2, %BB1, %BB0\n  %x = phi float [ %a, %BB0 ], [ %a, %BB1 ], [ %b, %BB2 ], [ %c, %BB3 ]\n  br i1 %cond, label %BB0, label %BB5\n\nBB5:                                              ; preds = %BB4\n  ret void\n}\n"
+        },
+        {
+          "test_name": "add_two_phi_node_cannt_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @add_two_phi_node_cannt_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ 0, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ 1, %entry ]\n  %add = add i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "test_dead_cycle_two_insts",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test_dead_cycle_two_insts(i32 %A, i1 %cond) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ %D, %Loop ]\n  %C = add i32 %B, 123\n  %D = lshr i32 %C, 1\n  br i1 %cond, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 0\n}\n"
+        },
+        {
+          "test_name": "or_two_phi_node_can_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @or_two_phi_node_can_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ 0, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ 0, %entry ]\n  %add = or i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq_oricmp",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq_oricmp(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or i32 %phi, %val\n  %cmp1 = icmp eq i32 %orphi, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "test16",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\n; Function Attrs: nounwind\ndefine i32 @test16(ptr addrspace(1) %pointer1, i32 %flag, ptr %pointer2) #0 {\nentry:\n  %retval = alloca i32, align 4\n  %pointer1.addr = alloca ptr addrspace(1), align 4\n  %flag.addr = alloca i32, align 4\n  %pointer2.addr = alloca ptr, align 4\n  %res = alloca i32, align 4\n  store ptr addrspace(1) %pointer1, ptr %pointer1.addr, align 8\n  store i32 %flag, ptr %flag.addr, align 4\n  store ptr %pointer2, ptr %pointer2.addr, align 8\n  store i32 10, ptr %res, align 4\n  %t = load i32, ptr %flag.addr, align 4\n  %tobool = icmp ne i32 %t, 0\n  br i1 %tobool, label %if.then, label %if.else\n\nreturn:                                           ; preds = %if.end\n  %t7 = load i32, ptr %retval, align 4\n  ret i32 %t7\n\nif.end:                                           ; preds = %if.else, %if.then\n  %t6 = load i32, ptr %res, align 4\n  store i32 %t6, ptr %retval, align 4\n  br label %return\n\nif.then:                                          ; preds = %entry\n  %t1 = load ptr addrspace(1), ptr %pointer1.addr, align 8\n  %arrayidx = getelementptr i32, ptr addrspace(1) %t1, i32 0\n  %t2 = load i32, ptr addrspace(1) %arrayidx, align 4\n  store i32 %t2, ptr %res, align 4\n  br label %if.end\n\nif.else:                                          ; preds = %entry\n  %t3 = load ptr, ptr %pointer2.addr, align 8\n  %arrayidx4 = getelementptr i32, ptr %t3, i32 0\n  %t5 = load i32, ptr %arrayidx4, align 4\n  store i32 %t5, ptr %res, align 4\n  br label %if.end\n}\n\nattributes #0 = { nounwind }\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_ne_oricmp_commuted",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_ne_oricmp_commuted(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or i32 %val, %phi\n  %cmp1 = icmp ne i32 %orphi, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "add_two_phi_node_can_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @add_two_phi_node_can_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ 0, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ 0, %entry ]\n  %add = add i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "cmp_slt_phi_node_cant_fold_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_slt_phi_node_cant_fold_2(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %sub_is_zero1, label %join\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp slt i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test17",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i32 @ext()\n\ndefine i32 @test17(i1 %a) {\nentry:\n  br i1 %a, label %bb1, label %bb2\n\nbb1:                                              ; preds = %entry\n  %0 = tail call i32 @ext()\n  br label %bb2\n\nbb2:                                              ; preds = %bb1, %entry\n  %cond = phi i1 [ true, %bb1 ], [ false, %entry ]\n  %val = phi i32 [ %0, %bb1 ], [ 0, %entry ]\n  %res = select i1 %cond, i32 %val, i32 0\n  ret i32 %res\n}\n"
+        },
+        {
+          "test_name": "test5_poison",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test5_poison(i32 %A, i1 %cond) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ poison, %Loop ]\n  br i1 %cond, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 %B\n}\n"
+        },
+        {
+          "test_name": "test8",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine ptr @test8(ptr %A, i1 %b) {\nBB0:\n  %X = getelementptr inbounds { i32, i32 }, ptr %A, i32 0, i32 1\n  br i1 %b, label %BB1, label %BB2\n\nBB1:                                              ; preds = %BB0\n  %Y = getelementptr { i32, i32 }, ptr %A, i32 0, i32 1\n  br label %BB2\n\nBB2:                                              ; preds = %BB1, %BB0\n  %c = phi ptr [ %X, %BB0 ], [ %Y, %BB1 ]\n  ret ptr %c\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq_or_disjoint_icmp",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq_or_disjoint_icmp(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or disjoint i32 %phi, %val\n  %cmp1 = icmp eq i32 %orphi, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "test_dead_cycle",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test_dead_cycle(i32 %A, i1 %cond) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ %C, %Loop ]\n  %C = add i32 %B, 123\n  br i1 %cond, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 0\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq_multiuse_andicmp",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq_multiuse_andicmp(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %andphi = and i32 %phi, %val\n  %cmp1 = icmp eq i32 %andphi, 0\n  br i1 %cmp1, label %next, label %cleanup\n\nnext:                                             ; preds = %if.end\n  %bool2 = icmp eq i32 %phi, 0\n  br label %cleanup\n\ncleanup:                                          ; preds = %next, %if.end\n  %final = phi i1 [ %cmp1, %if.end ], [ %bool2, %next ]\n  ret i1 %final\n}\n"
+        },
+        {
+          "test_name": "test9",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test9(ptr %A, ptr %B) {\nentry:\n  %c = icmp eq ptr %A, null\n  br i1 %c, label %bb1, label %bb\n\nbb:                                               ; preds = %entry\n  %C = load i32, ptr %B, align 1\n  br label %bb2\n\nbb1:                                              ; preds = %entry\n  %D = load i32, ptr %A, align 1\n  br label %bb2\n\nbb2:                                              ; preds = %bb1, %bb\n  %E = phi i32 [ %C, %bb ], [ %D, %bb1 ]\n  ret i32 %E\n}\n"
+        },
+        {
+          "test_name": "mul_two_phi_node_can_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @mul_two_phi_node_can_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ 1, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ 1, %entry ]\n  %add = mul i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "test_dead_UnaryOp_cycle",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test_dead_UnaryOp_cycle(double %A, i1 %cond) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi double [ %A, %BB0 ], [ %C, %Loop ]\n  %C = fneg double %B\n  br i1 %cond, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 0\n}\n"
+        },
+        {
+          "test_name": "PR51435",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @PR51435(ptr %ptr, ptr %atomic_ptr, i1 %c) {\nentry:\n  %x = load i32, ptr %ptr, align 4\n  br i1 %c, label %if, label %end\n\nif:                                               ; preds = %entry\n  %y = load atomic i32, ptr %atomic_ptr acquire, align 4\n  br label %end\n\nend:                                              ; preds = %if, %entry\n  %cond = phi i32 [ %x, %entry ], [ %y, %if ]\n  ret i32 %cond\n}\n"
+        },
+        {
+          "test_name": "test_dead_cycle_intrin",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.uadd.sat.i32(i32, i32) #0\n\ndefine i32 @test_dead_cycle_intrin(i32 %A, i1 %cond) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ %C, %Loop ]\n  %C = call i32 @llvm.uadd.sat.i32(i32 %B, i32 123)\n  br i1 %cond, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 0\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "test11",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i1 @test11a()\n\ndefine i1 @test11() {\nentry:\n  %a = alloca i32, align 4\n  %i = ptrtoint ptr %a to i64\n  %b = call i1 @test11a()\n  br i1 %b, label %one, label %two\n\none:                                              ; preds = %two, %entry\n  %x = phi i64 [ %i, %entry ], [ %y, %two ]\n  %c = call i1 @test11a()\n  br i1 %c, label %two, label %end\n\ntwo:                                              ; preds = %one, %entry\n  %y = phi i64 [ %i, %entry ], [ %x, %one ]\n  %d = call i1 @test11a()\n  br i1 %d, label %one, label %end\n\nend:                                              ; preds = %two, %one\n  %f = phi i64 [ %x, %one ], [ %y, %two ]\n  %g = inttoptr i64 %f to ptr\n  store i32 10, ptr %g, align 4\n  %z = call i1 @test11a()\n  ret i1 %z\n}\n"
+        },
+        {
+          "test_name": "cmp_eq_phi_node_can_fold_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_eq_phi_node_can_fold_2(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %sub_is_zero1, label %join\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp eq i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "PR24766_two_constants_two_var",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @PR24766_two_constants_two_var(i8 %x1, i8 %x2, i8 %condition) {\nentry:\n  %conv = sext i8 %condition to i32\n  switch i32 %conv, label %epilog [\n    i32 0, label %sw1\n    i32 1, label %sw2\n    i32 2, label %sw3\n  ]\n\nsw1:                                              ; preds = %entry\n  %cmp1 = icmp eq i8 %x1, %x2\n  %frombool1 = zext i1 %cmp1 to i8\n  br label %epilog\n\nsw2:                                              ; preds = %entry\n  %cmp2 = icmp sle i8 %x1, %x2\n  %frombool2 = zext i1 %cmp2 to i8\n  br label %epilog\n\nsw3:                                              ; preds = %entry\n  %cmp3 = icmp sge i8 %x1, %x2\n  %frombool3 = zext i1 %cmp3 to i8\n  br label %epilog\n\nepilog:                                           ; preds = %sw3, %sw2, %sw1, %entry\n  %conditionMet = phi i8 [ 0, %entry ], [ %frombool2, %sw2 ], [ %frombool1, %sw1 ], [ 1, %sw3 ]\n  %tobool = icmp ne i8 %conditionMet, 0\n  ret i1 %tobool\n}\n"
+        },
+        {
+          "test_name": "cmp_sgt_phi_node_can_fold_1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_sgt_phi_node_can_fold_1(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp sgt i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test27",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test27(i1 %b) {\nentry:\n  br label %done\n\ndone:                                             ; preds = %entry\n  %y = phi i32 [ undef, %entry ]\n  ret i32 %y\n}\n"
+        },
+        {
+          "test_name": "test23",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test23(i32 %A, i1 %pb, ptr %P) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ 42, %Loop ]\n  %D = add i32 %B, 19\n  store i32 %D, ptr %P, align 4\n  br i1 %pb, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  %E = add i32 %B, 19\n  ret i32 %E\n}\n"
+        },
+        {
+          "test_name": "phi_allnonzerononconstant",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_allnonzerononconstant(i1 %c, i32 %a, ptr nonnull %b1, ptr nonnull %b2) {\nentry:\n  br i1 %c, label %if.then, label %if.else\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.else:                                          ; preds = %entry\n  call void @dummy()\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then\n  %x.0 = phi ptr [ %b1, %if.then ], [ %b2, %if.else ]\n  %cmp1 = icmp eq ptr %x.0, null\n  ret i1 %cmp1\n}\n\ndeclare void @dummy()\n"
+        },
+        {
+          "test_name": "cmp_slt_phi_node_can_fold_1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_slt_phi_node_can_fold_1(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp slt i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "phi_op_in_loop",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare void @use(i32)\n\ndefine void @phi_op_in_loop(i1 %c, i32 %x) {\n  br label %loop\n\nloop:                                             ; preds = %loop.latch, %0\n  br i1 %c, label %if, label %loop.latch\n\nif:                                               ; preds = %loop\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %if, %loop\n  %phi = phi i32 [ %x, %if ], [ 0, %loop ]\n  %and = and i32 %phi, 1\n  call void @use(i32 %and)\n  br label %loop\n}\n"
+        },
+        {
+          "test_name": "and_two_phi_node_can_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @and_two_phi_node_can_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ -1, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ -1, %entry ]\n  %add = and i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "test3",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test3(i32 %A, i1 %b) {\nBB0:\n  br label %Loop\n\nLoop:                                             ; preds = %Loop, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ %B, %Loop ]\n  br i1 %b, label %Loop, label %Exit\n\nExit:                                             ; preds = %Loop\n  ret i32 %B\n}\n"
+        },
+        {
+          "test_name": "cmp_ne_phi_node_can_fold_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_ne_phi_node_can_fold_2(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %sub_is_zero1, label %join\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp ne i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_ne_oricmp",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_ne_oricmp(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or i32 %phi, %val\n  %cmp1 = icmp ne i32 %orphi, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "cmp_slt_phi_node_cant_fold_1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_slt_phi_node_cant_fold_1(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp slt i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq_oricmp_commuted",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq_oricmp_commuted(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or i32 %val, %phi\n  %cmp1 = icmp eq i32 %orphi, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "cmp_eq_phi_node_can_fold_4",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_eq_phi_node_can_fold_4(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %join, label %sub_is_zero1\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp eq i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test21",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test21(i1 %c1, i1 %c2) {\n  %a = alloca i32, align 4\n  %b = alloca i32, align 4\n  %c = alloca i32, align 4\n  br i1 %c1, label %true, label %false\n\ntrue:                                             ; preds = %0\n  br label %loop\n\nfalse:                                            ; preds = %0\n  br label %loop\n\nloop:                                             ; preds = %loop, %false, %true\n  %p = phi ptr [ %a, %true ], [ %b, %false ], [ %p, %loop ]\n  %r = icmp eq ptr %p, %c\n  br i1 %c2, label %ret, label %loop\n\nret:                                              ; preds = %loop\n  ret i1 %r\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq_multiuse_oricmp",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq_multiuse_oricmp(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or i32 %phi, %val\n  %cmp1 = icmp eq i32 %orphi, 0\n  br i1 %cmp1, label %next, label %cleanup\n\nnext:                                             ; preds = %if.end\n  %bool2 = icmp eq i32 %phi, 0\n  br label %cleanup\n\ncleanup:                                          ; preds = %next, %if.end\n  %final = phi i1 [ %cmp1, %if.end ], [ %bool2, %next ]\n  ret i1 %final\n}\n"
+        },
+        {
+          "test_name": "simplify_context_instr",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare void @use(i32)\n\ndefine void @simplify_context_instr(ptr %ptr.base, i64 %n) {\nentry:\n  %ptr.end = getelementptr inbounds i8, ptr %ptr.base, i64 %n\n  br label %loop\n\nloop:                                             ; preds = %latch, %entry\n  %ptr = phi ptr [ %ptr.next, %latch ], [ %ptr.base, %entry ]\n  %phi = phi i1 [ %cmp, %latch ], [ true, %entry ]\n  %v = load i8, ptr %ptr, align 1\n  %cmp = icmp eq i8 %v, 95\n  br i1 %cmp, label %latch, label %if\n\nif:                                               ; preds = %loop\n  %sel = select i1 %phi, i32 117, i32 100\n  call void @use(i32 %sel)\n  br label %latch\n\nlatch:                                            ; preds = %if, %loop\n  %ptr.next = getelementptr inbounds i8, ptr %ptr, i64 1\n  %cmp.i.not = icmp eq ptr %ptr.next, %ptr.end\n  br i1 %cmp.i.not, label %exit, label %loop\n\nexit:                                             ; preds = %latch\n  ret void\n}\n"
+        },
+        {
+          "test_name": "main",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine void @main(i1 %cond, i16 %x) {\nentry:\n  br label %for.cond\n\nfor.cond:                                         ; preds = %g.exit, %entry\n  %p = phi double [ %conv, %g.exit ], [ undef, %entry ]\n  br i1 %cond, label %for.end, label %for.body\n\nfor.body:                                         ; preds = %for.cond\n  %conv = sitofp i16 %x to double\n  unreachable\n\ng.exit:                                           ; No predecessors!\n  br label %for.cond\n\nfor.end:                                          ; preds = %for.cond\n  store double %p, ptr undef, align 8\n  ret void\n}\n"
+        },
+        {
+          "test_name": "cmp_ne_phi_node_can_fold_3",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_ne_phi_node_can_fold_3(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp ne i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "cmp_ne_phi_node_can_fold_4",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_ne_phi_node_can_fold_4(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %join, label %sub_is_zero1\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp ne i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "phi_op_self_simplify",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare void @use(i32)\n\ndefine i32 @phi_op_self_simplify() {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i32 [ 1, %entry ], [ %iv.add2, %loop ]\n  %iv.add = xor i32 %iv, -1\n  call void @use(i32 %iv.add)\n  %iv.add2 = xor i32 %iv, -1\n  br label %loop\n}\n"
+        },
+        {
+          "test_name": "phi_op_self_simplify_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare i1 @get.i1()\n\ndefine i32 @phi_op_self_simplify_2(i32 %x) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop.latch, %loop, %entry\n  %phi = phi i32 [ %x, %entry ], [ %or, %loop ], [ 10, %loop.latch ]\n  %or = or i32 %phi, 1\n  %c1 = call i1 @get.i1()\n  br i1 %c1, label %loop.latch, label %loop\n\nloop.latch:                                       ; preds = %loop\n  %c2 = call i1 @get.i1()\n  br i1 %c2, label %exit, label %loop\n\nexit:                                             ; preds = %loop.latch\n  ret i32 %or\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq_2(i32 %n, i32 %s, ptr nocapture readonly %P) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  %tobool2 = icmp slt i32 %n, %s\n  br i1 %tobool2, label %if.else, label %if.end\n\nif.else:                                          ; preds = %if.then\n  %0 = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %0\n  %1 = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.else, %if.then, %entry\n  %a.0 = phi i32 [ %1, %if.else ], [ %n, %entry ], [ 2, %if.then ]\n  %cmp1 = icmp eq i32 %a.0, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "cmp_sgt_phi_node_can_fold_2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_sgt_phi_node_can_fold_2(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %join, label %sub_is_zero\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  %8 = sub nsw i32 %7, 49\n  %9 = icmp eq i32 %8, 0\n  br i1 %9, label %join, label %sub_is_zero1\n\nsub_is_zero1:                                     ; preds = %sub_is_zero\n  %10 = getelementptr inbounds i8, ptr %C, i64 2\n  %11 = load i8, ptr %10, align 1\n  %12 = zext i8 %11 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero1, %sub_is_zero, %0\n  %13 = phi i32 [ %3, %0 ], [ %8, %sub_is_zero ], [ %12, %sub_is_zero1 ]\n  %cmp = icmp sgt i32 %13, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "cmp_ne_phi_node_can_fold_1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @cmp_ne_phi_node_can_fold_1(ptr %C) {\n  %1 = load i8, ptr %C, align 1\n  %2 = zext i8 %1 to i32\n  %3 = sub nsw i32 %2, 48\n  %4 = icmp eq i32 %3, 0\n  br i1 %4, label %sub_is_zero, label %join\n\nsub_is_zero:                                      ; preds = %0\n  %5 = getelementptr inbounds i8, ptr %C, i64 1\n  %6 = load i8, ptr %5, align 1\n  %7 = zext i8 %6 to i32\n  br label %join\n\njoin:                                             ; preds = %sub_is_zero, %0\n  %8 = phi i32 [ %3, %0 ], [ %7, %sub_is_zero ]\n  %cmp = icmp ne i32 %8, 0\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test10",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test10(ptr %A, ptr %B) {\nentry:\n  %c = icmp eq ptr %A, null\n  br i1 %c, label %bb1, label %bb\n\nbb:                                               ; preds = %entry\n  %C = load i32, ptr %B, align 16\n  br label %bb2\n\nbb1:                                              ; preds = %entry\n  %D = load i32, ptr %A, align 32\n  br label %bb2\n\nbb2:                                              ; preds = %bb1, %bb\n  %E = phi i32 [ %C, %bb ], [ %D, %bb1 ]\n  ret i32 %E\n}\n"
+        },
+        {
+          "test_name": "test19",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test19(i1 %cond, double %x) {\n  br i1 %cond, label %true, label %false\n\ntrue:                                             ; preds = %0\n  br label %ret\n\nfalse:                                            ; preds = %0\n  br label %ret\n\nret:                                              ; preds = %false, %true\n  %p = phi double [ %x, %true ], [ 0x7FF0000000000000, %false ]\n  %cmp = fcmp ule double %x, %p\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test24",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test24(i32 %A, i1 %cond) {\nBB0:\n  %X = add nuw nsw i32 %A, 1\n  br i1 %cond, label %BB1, label %BB2\n\nBB1:                                              ; preds = %BB0\n  %Y = add nuw i32 %A, 1\n  br label %BB2\n\nBB2:                                              ; preds = %BB1, %BB0\n  %C = phi i32 [ %X, %BB0 ], [ %Y, %BB1 ]\n  ret i32 %C\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_ne_multiuse_andicmp",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_ne_multiuse_andicmp(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %andphi = and i32 %phi, %val\n  %cmp1 = icmp ne i32 %andphi, 0\n  br i1 %cmp1, label %next, label %cleanup\n\nnext:                                             ; preds = %if.end\n  %bool2 = icmp ne i32 %phi, 0\n  br label %cleanup\n\ncleanup:                                          ; preds = %next, %if.end\n  %final = phi i1 [ %cmp1, %if.end ], [ %bool2, %next ]\n  ret i1 %final\n}\n"
+        },
+        {
+          "test_name": "PR24766_no_constants",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @PR24766_no_constants(i8 %x1, i8 %x2, i8 %condition, i1 %another_condition) {\nentry:\n  %frombool0 = zext i1 %another_condition to i8\n  %conv = sext i8 %condition to i32\n  switch i32 %conv, label %epilog [\n    i32 0, label %sw1\n    i32 1, label %sw2\n  ]\n\nsw1:                                              ; preds = %entry\n  %cmp1 = icmp eq i8 %x1, %x2\n  %frombool1 = zext i1 %cmp1 to i8\n  br label %epilog\n\nsw2:                                              ; preds = %entry\n  %cmp2 = icmp sle i8 %x1, %x2\n  %frombool2 = zext i1 %cmp2 to i8\n  br label %epilog\n\nepilog:                                           ; preds = %sw2, %sw1, %entry\n  %conditionMet = phi i8 [ %frombool0, %entry ], [ %frombool2, %sw2 ], [ %frombool1, %sw1 ]\n  %tobool = icmp ne i8 %conditionMet, 0\n  ret i1 %tobool\n}\n"
+        },
+        {
+          "test_name": "test2",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @test2(i32 %A, i1 %b) {\nBB0:\n  br i1 %b, label %BB1, label %BB2\n\nBB1:                                              ; preds = %BB0\n  br label %BB2\n\nBB2:                                              ; preds = %BB1, %BB0\n  %B = phi i32 [ %A, %BB0 ], [ %A, %BB1 ]\n  ret i32 %B\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_eq",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_eq(i32 %n, i32 %s, ptr nocapture readonly %P) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %0 = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %0\n  %1 = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %a.0 = phi i32 [ %1, %if.then ], [ %n, %entry ]\n  %cmp1 = icmp eq i32 %a.0, 0\n  ret i1 %cmp1\n}\n"
+        },
+        {
+          "test_name": "xor_two_phi_node_can_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @xor_two_phi_node_can_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ 0, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ 0, %entry ]\n  %add = xor i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "PR24766_two_constants",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @PR24766_two_constants(i8 %x1, i8 %x2, i8 %condition) {\nentry:\n  %conv = sext i8 %condition to i32\n  switch i32 %conv, label %epilog [\n    i32 0, label %sw1\n    i32 1, label %sw2\n  ]\n\nsw1:                                              ; preds = %entry\n  %cmp1 = icmp eq i8 %x1, %x2\n  %frombool1 = zext i1 %cmp1 to i8\n  br label %epilog\n\nsw2:                                              ; preds = %entry\n  %cmp2 = icmp sle i8 %x1, %x2\n  %frombool2 = zext i1 %cmp2 to i8\n  br label %epilog\n\nepilog:                                           ; preds = %sw2, %sw1, %entry\n  %conditionMet = phi i8 [ 0, %entry ], [ 1, %sw2 ], [ %frombool1, %sw1 ]\n  %tobool = icmp ne i8 %conditionMet, 0\n  ret i1 %tobool\n}\n"
+        },
+        {
+          "test_name": "sub_two_phi_node_cant_fold",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i32 @sub_two_phi_node_cant_fold(i1 %c, i32 %i, i32 %j) {\nentry:\n  br i1 %c, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %x = phi i32 [ 0, %if.then ], [ %j, %entry ]\n  %y = phi i32 [ %i, %if.then ], [ 0, %entry ]\n  %add = sub i32 %y, %x\n  ret i32 %add\n}\n"
+        },
+        {
+          "test_name": "test13",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare void @test13f(double, i32)\n\ndefine void @test13(i1 %cond, i32 %V1, double %Vald) {\nentry:\n  %t42 = zext i32 %V1 to i128\n  br i1 %cond, label %end, label %two\n\ntwo:                                              ; preds = %entry\n  %Val = bitcast double %Vald to i64\n  %t36 = zext i64 %Val to i128\n  %t37 = shl i128 %t36, 64\n  %ins39 = or i128 %t42, %t37\n  br label %end\n\nend:                                              ; preds = %two, %entry\n  %t869.0 = phi i128 [ %t42, %entry ], [ %ins39, %two ]\n  %t32 = trunc i128 %t869.0 to i32\n  %t29 = lshr i128 %t869.0, 64\n  %t30 = trunc i128 %t29 to i64\n  %t31 = bitcast i64 %t30 to double\n  call void @test13f(double %t31, i32 %t32)\n  ret void\n}\n"
+        },
+        {
+          "test_name": "phi_knownnonzero_ne_multiuse_oricmp_commuted",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @phi_knownnonzero_ne_multiuse_oricmp_commuted(i32 %n, i32 %s, ptr %P, i32 %val) {\nentry:\n  %tobool = icmp slt i32 %n, %s\n  br i1 %tobool, label %if.end, label %if.then\n\nif.then:                                          ; preds = %entry\n  %load = load i32, ptr %P, align 4\n  %cmp = icmp eq i32 %n, %load\n  %sel = select i1 %cmp, i32 1, i32 2\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %phi = phi i32 [ %sel, %if.then ], [ %n, %entry ]\n  %orphi = or i32 %val, %phi\n  %cmp1 = icmp ne i32 %orphi, 0\n  br i1 %cmp1, label %next, label %cleanup\n\nnext:                                             ; preds = %if.end\n  %bool2 = icmp ne i32 %phi, 0\n  br label %cleanup\n\ncleanup:                                          ; preds = %next, %if.end\n  %final = phi i1 [ %cmp1, %if.end ], [ %bool2, %next ]\n  ret i1 %final\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[clang] Miscompile with -O3 and -O0/1/2 since 18.1.0",
+    "body": "When I compiled this code with -O0/1/2, its output is 0. However, with -O3, it returned 143:\r\n\r\n```c\r\nint printf(const char *, ...);\r\nchar a, b;\r\nint c;\r\nchar *e = &b;\r\nint f(char *g, int *k) {\r\n  char *d = g + *k;\r\n  for (; *d && *d <= ' '; d++)\r\n    ;\r\n  if (*d)\r\n    return 0;\r\n  return 1;\r\n}\r\nint l(int g) {\r\n  char h[] = {a, a, a};\r\n  int i[] = {g};\r\n  int j = f(h, i);\r\n  return j;\r\n}\r\nlong m() {\r\n  *e = 255;\r\n  for (; l(b + 1);)\r\n    return 0;\r\n  for (;;)\r\n    ;\r\n}\r\nint main() {\r\n  m();\r\n  printf(\"%d\\n\", c);\r\n}\r\n```\r\n\r\nDetails can be found here: https://godbolt.org/z/dnvvTPror",
+    "author": "cardigan1008",
+    "labels": [
+      "miscompilation",
+      "llvm:instcombine"
+    ],
+    "comments": [
+      {
+        "author": "antoniofrighetto",
+        "body": "This looks like a nasty one. Getting the optimized IR via -O3 and setting noinline/optnone to main, we get: https://llvm.godbolt.org/z/vaPvs6d16. \r\n\r\nThis is the initial assembly output with -O1 (which leads to the infinite loop):\r\n\r\n```asm\r\nmain:                                   # @main\r\n        push    rax\r\n        mov     rax, qword ptr [e]\r\n        mov     byte ptr [rax], -1\r\n        movsx   rax, byte ptr [b]\r\n        mov     cl, byte ptr [a]\r\n        mov     byte ptr [rsp + 6], cl\r\n        mov     byte ptr [rsp + 7], cl\r\n        lea     rdx, [rsp + 5]\r\n        add     rdx, rax\r\n        mov     rax, rdx\r\n.LBB0_1:                                # %for.cond.i.i.i\r\n        add     rax, 1\r\n        mov     cl, byte ptr [rdx + 1]\r\n        ...\r\n```\r\nWhereas this is with -O0 (returns 0):\r\n```asm\r\nmain:                                   # @main\r\n        sub     rsp, 24\r\n        mov     rax, qword ptr [e]\r\n        mov     byte ptr [rax], -1\r\n        movsx   rcx, byte ptr [b]\r\n        mov     al, byte ptr [a]\r\n        mov     byte ptr [rsp + 22], al\r\n        mov     byte ptr [rsp + 23], al\r\n        lea     rax, [rsp + 21]\r\n        add     rax, rcx\r\n        mov     qword ptr [rsp + 8], rax        # 8-byte Spill\r\n.LBB0_1:                                # %for.cond.i.i.i\r\n        mov     rcx, qword ptr [rsp + 8]        # 8-byte Reload\r\n        mov     rax, rcx\r\n        add     rax, 1\r\n        mov     dl, byte ptr [rcx + 1]\r\n```\r\nIn the optimized one, $rdx is set to point to $rsp+0x5, part of the stack slot containing $rax (undef), later dereferenced to set the condition leading to the loop. Initially I thought some bug in regalloc, but to me it seems more something in prologepiloginserter. Function prologue / epilogue seems set up correctly with triple arm64-apple-macosx."
+      },
+      {
+        "author": "antoniofrighetto",
+        "body": "Looking at the IR better, it seems like InstCombine performs a wrong optimization immediately after inlining `l` into `m`, probably related with default argument conversion done by operator + (which should include integer promotion on types smaller than integer). Alive2 seems to confirm it: https://alive2.llvm.org/ce/z/XAzrip."
+      },
+      {
+        "author": "antoniofrighetto",
+        "body": "Reduced to:\r\n```llvm\r\n@a = global i8 0, align 1\r\n\r\ndefine i64 @src(i8 noundef %arg) {\r\nentry:\r\n  %h.i = alloca [3 x i8], align 1\r\n  %conv = sext i8 %arg to i32\r\n  %add = add nsw i32 %conv, 1\r\n  %2 = load i8, ptr @a, align 1\r\n  store i8 %2, ptr %h.i, align 1\r\n  %idx.ext.i.i = sext i32 %add to i64\r\n  %add.ptr.i.i = getelementptr inbounds i8, ptr %h.i, i64 %idx.ext.i.i\r\n  br label %for.cond.i.i\r\n\r\nfor.cond.i.i:                                     ; preds = %for.cond.i.i, %entry\r\n  %d.0.i.i = phi ptr [ %add.ptr.i.i, %entry ], [ %incdec.ptr.i.i, %for.cond.i.i ]\r\n  %3 = load i8, ptr %d.0.i.i, align 1\r\n  %tobool.not.i.i = icmp ne i8 %3, 0\r\n  %incdec.ptr.i.i = getelementptr inbounds nuw i8, ptr %d.0.i.i, i64 1\r\n  br i1 %tobool.not.i.i, label %for.cond.i.i, label %l.exit\r\n\r\nl.exit:                                           ; preds = %for.cond.i.i\r\n  ret i64 0\r\n}\r\n```\r\nWrong sext of add of sext simplified to sext leads to wrong gep offset: https://alive2.llvm.org/ce/z/JaR4j9."
+      },
+      {
+        "author": "AZero13",
+        "body": "Can we backport this to 19.x?"
+      },
+      {
+        "author": "antoniofrighetto",
+        "body": "Should be fixed in 929cbe7f596733f85cd274485acc19442dd34a80, thanks for reporting!"
+      },
+      {
+        "author": "AZero13",
+        "body": "@antoniofrighetto can we please backport this "
+      }
+    ]
+  }
+}

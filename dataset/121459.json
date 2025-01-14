@@ -1,0 +1,313 @@
+{
+  "bug_id": "121459",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/121459",
+  "bug_type": "miscompilation",
+  "base_commit": "68d265666e708bad1c63b419b6275aaba1a7dcd2",
+  "knowledge_cutoff": "2025-01-02T09:03:32Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InstCombine"
+  ],
+  "hints": {
+    "fix_commit": "a4d92400a6db9566d84cb4b900149e36e117f452",
+    "components": [
+      "InstCombine"
+    ],
+    "files": [
+      "llvm/lib/Transforms/InstCombine/InstructionCombining.cpp"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/InstCombine/InstructionCombining.cpp": [
+        [
+          2782,
+          2787
+        ],
+        [
+          2838,
+          2843
+        ],
+        [
+          2847,
+          2852
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/InstCombine/InstructionCombining.cpp": [
+        "foldGEPOfPhi"
+      ]
+    }
+  },
+  "patch": "commit a4d92400a6db9566d84cb4b900149e36e117f452\nAuthor: Yingwei Zheng <dtcxzyw2333@gmail.com>\nDate:   Fri Jan 3 23:19:57 2025 +0800\n\n    [InstCombine] Fix GEPNoWrapFlags propagation in `foldGEPOfPhi` (#121572)\n    \n    Closes https://github.com/llvm/llvm-project/issues/121459.\n\ndiff --git a/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp b/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp\nindex 934156f04f7f..f63de1f0d410 100644\n--- a/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp\n+++ b/llvm/lib/Transforms/InstCombine/InstructionCombining.cpp\n@@ -2782,6 +2782,7 @@ static Instruction *foldGEPOfPhi(GetElementPtrInst &GEP, PHINode *PN,\n   // loop iteration).\n   if (Op1 == &GEP)\n     return nullptr;\n+  GEPNoWrapFlags NW = Op1->getNoWrapFlags();\n \n   int DI = -1;\n \n@@ -2838,6 +2839,8 @@ static Instruction *foldGEPOfPhi(GetElementPtrInst &GEP, PHINode *PN,\n         }\n       }\n     }\n+\n+    NW &= Op2->getNoWrapFlags();\n   }\n \n   // If not all GEPs are identical we'll have to create a new PHI node.\n@@ -2847,6 +2850,8 @@ static Instruction *foldGEPOfPhi(GetElementPtrInst &GEP, PHINode *PN,\n     return nullptr;\n \n   auto *NewGEP = cast<GetElementPtrInst>(Op1->clone());\n+  NewGEP->setNoWrapFlags(NW);\n+\n   if (DI == -1) {\n     // All the GEPs feeding the PHI are identical. Clone one down into our\n     // BB so that it can be merged with the current GEP.\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InstCombine/opaque-ptr.ll",
+      "commands": [
+        "opt -S -passes='instcombine<no-verify-fixpoint>' < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "gep_of_phi_of_gep_different_type",
+          "test_body": "define ptr @gep_of_phi_of_gep_different_type(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr i64, ptr %p, i64 2\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  %gep = getelementptr i32, ptr %phi, i64 1\n  ret ptr %gep\n}\n"
+        },
+        {
+          "test_name": "compare_geps_same_indices_different_types",
+          "test_body": "define i1 @compare_geps_same_indices_different_types(ptr %a, ptr %b, i64 %idx) {\n  %a2 = getelementptr i32, ptr %a, i64 %idx\n  %b2 = getelementptr i64, ptr %b, i64 %idx\n  %c = icmp eq ptr %a2, %b2\n  ret i1 %c\n}\n"
+        },
+        {
+          "test_name": "dse",
+          "test_body": "define void @dse(ptr %p) {\n  store i32 0, ptr %p, align 4\n  store i8 1, ptr %p, align 1\n  ret void\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type3",
+          "test_body": "define ptr @geps_combinable_different_elem_type3(ptr %a) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i32 0, i32 1\n  %a3 = getelementptr i8, ptr %a2, i64 8\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type_extra_use2",
+          "test_body": "declare void @use(ptr)\n\ndefine ptr @geps_combinable_different_elem_type_extra_use2(ptr %a, i64 %idx) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i64 %idx\n  call void @use(ptr %a2)\n  %a3 = getelementptr i8, ptr %a2, i64 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "cmp_load_gep_global_different_load_type",
+          "test_body": "@ary = external constant [4 x i8]\n\ndefine i1 @cmp_load_gep_global_different_load_type(i64 %idx) {\n  %gep = getelementptr [4 x i8], ptr @ary, i64 0, i64 %idx\n  %load = load i16, ptr %gep, align 2\n  %cmp = icmp eq i16 %load, 3\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "bitcast_and_addrspacecast_eliminable",
+          "test_body": "define ptr addrspace(1) @bitcast_and_addrspacecast_eliminable(ptr %a) {\n  %c = addrspacecast ptr %a to ptr addrspace(1)\n  ret ptr addrspace(1) %c\n}\n"
+        },
+        {
+          "test_name": "varargs_cast_typed_to_opaque_different_size",
+          "test_body": "declare void @varargs(...)\n\ndefine void @varargs_cast_typed_to_opaque_different_size(ptr %a) {\n  call void (...) @varargs(ptr byval(i64) %a)\n  ret void\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type_extra_use1",
+          "test_body": "declare void @use(ptr)\n\ndefine ptr @geps_combinable_different_elem_type_extra_use1(ptr %a) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i32 0, i32 1\n  call void @use(ptr %a2)\n  %a3 = getelementptr i8, ptr %a2, i64 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "gep_constexpr_2",
+          "test_body": "@g = external global i8\n\ndefine ptr @gep_constexpr_2(ptr %a) {\n  ret ptr getelementptr (i8, ptr @g, i32 3)\n}\n"
+        },
+        {
+          "test_name": "load_bitcast_2",
+          "test_body": "define ptr @load_bitcast_2(ptr %a) {\n  %c = load ptr, ptr %a, align 8\n  ret ptr %c\n}\n"
+        },
+        {
+          "test_name": "bitcast_opaque_to_typed",
+          "test_body": "define ptr @bitcast_opaque_to_typed(ptr %a) {\n  ret ptr %a\n}\n"
+        },
+        {
+          "test_name": "bitcast_typed_to_opaque_constexpr",
+          "test_body": "@g = external global i8\n\ndefine ptr @bitcast_typed_to_opaque_constexpr() {\n  ret ptr @g\n}\n"
+        },
+        {
+          "test_name": "bitcast_typed_to_opaque",
+          "test_body": "define ptr @bitcast_typed_to_opaque(ptr %a) {\n  ret ptr %a\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type2",
+          "test_body": "define ptr @geps_combinable_different_elem_type2(ptr %a) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i32 0, i32 1\n  %a3 = getelementptr i8, ptr %a2, i64 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "select_of_gep",
+          "test_body": "define ptr @select_of_gep(i1 %c, ptr %p) {\n  %gep1 = getelementptr i32, ptr %p, i64 1\n  %gep2 = getelementptr i32, ptr %p, i64 2\n  %s = select i1 %c, ptr %gep1, ptr %gep2\n  ret ptr %s\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type9",
+          "test_body": "define ptr @geps_combinable_different_elem_type9(ptr %a, i64 %idx) {\n  %a2 = getelementptr inbounds { { i32, i32 } }, ptr %a, i64 %idx, i32 0, i32 1\n  %a3 = getelementptr inbounds i8, ptr %a2, i32 -4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type5",
+          "test_body": "define ptr @geps_combinable_different_elem_type5(ptr %a) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i32 0, i32 1\n  %a3 = getelementptr i8, ptr %a2, i64 -4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "phi_of_gep_flags_1",
+          "test_body": "define ptr @phi_of_gep_flags_1(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr inbounds i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr nusw nuw i32, ptr %p, i64 1\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  ret ptr %phi\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_scalable",
+          "test_body": "define ptr @geps_combinable_scalable(ptr %a, i64 %idx) {\n  %a2 = getelementptr inbounds <vscale x 2 x i32>, ptr %a, i64 1\n  %a3 = getelementptr inbounds i8, ptr %a2, i32 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "phi_of_gep_different_type",
+          "test_body": "define ptr @phi_of_gep_different_type(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr i64, ptr %p, i64 1\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  ret ptr %phi\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type8",
+          "test_body": "define ptr @geps_combinable_different_elem_type8(ptr %a, i64 %idx) {\n  %a2 = getelementptr inbounds { { i32, i32 } }, ptr %a, i64 %idx, i32 0, i32 1\n  %a3 = getelementptr inbounds i8, ptr %a2, i32 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_scalable_vector_array",
+          "test_body": "define ptr @geps_combinable_scalable_vector_array(ptr %a, i64 %idx) {\n  %a2 = getelementptr inbounds [4 x <vscale x 2 x i32>], ptr %a, i64 1\n  %a3 = getelementptr inbounds i8, ptr %a2, i32 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "compare_gep_with_base",
+          "test_body": "define i1 @compare_gep_with_base(ptr %p, i64 %idx) {\n  %gep = getelementptr inbounds i32, ptr %p, i64 %idx\n  %c = icmp eq ptr %gep, %p\n  ret i1 %c\n}\n"
+        },
+        {
+          "test_name": "geps_combinable",
+          "test_body": "define ptr @geps_combinable(ptr %a) {\n  %a2 = getelementptr { i32, { i32, i32 } }, ptr %a, i32 0, i32 1\n  %a3 = getelementptr { i32, i32 }, ptr %a2, i32 0, i32 1\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type1",
+          "test_body": "define ptr @geps_combinable_different_elem_type1(ptr %a) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i32 0, i32 1\n  %a3 = getelementptr { i32, i32 }, ptr %a2, i32 0, i32 1\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "gep_constexpr_1",
+          "test_body": "define ptr @gep_constexpr_1(ptr %a) {\n  ret ptr getelementptr (i16, ptr null, i32 3)\n}\n"
+        },
+        {
+          "test_name": "bitcast_opaque_to_opaque",
+          "test_body": "define ptr @bitcast_opaque_to_opaque(ptr %a) {\n  ret ptr %a\n}\n"
+        },
+        {
+          "test_name": "compare_geps_same_indices",
+          "test_body": "define i1 @compare_geps_same_indices(ptr %a, ptr %b, i64 %idx) {\n  %a2 = getelementptr i32, ptr %a, i64 %idx\n  %b2 = getelementptr i32, ptr %b, i64 %idx\n  %c = icmp eq ptr %a2, %b2\n  ret i1 %c\n}\n"
+        },
+        {
+          "test_name": "cmp_load_gep_global_different_gep_type",
+          "test_body": "@ary = external constant [4 x i8]\n\ndefine i1 @cmp_load_gep_global_different_gep_type(i64 %idx) {\n  %gep = getelementptr [4 x i16], ptr @ary, i64 0, i64 %idx\n  %load = load i16, ptr %gep, align 2\n  %cmp = icmp eq i16 %load, 3\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "varargs_cast_typed_to_opaque_same_type",
+          "test_body": "declare void @varargs(...)\n\ndefine void @varargs_cast_typed_to_opaque_same_type(ptr %a) {\n  call void (...) @varargs(ptr byval(i32) %a)\n  ret void\n}\n"
+        },
+        {
+          "test_name": "gep_of_phi_of_gep_flags1",
+          "test_body": "define ptr @gep_of_phi_of_gep_flags1(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr inbounds i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr i32, ptr %p, i64 2\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  %gep = getelementptr i32, ptr %phi, i64 1\n  ret ptr %gep\n}\n"
+        },
+        {
+          "test_name": "indexed_compare",
+          "test_body": "define ptr @indexed_compare(ptr %A, i64 %offset) {\nentry:\n  %tmp = getelementptr inbounds i32, ptr %A, i64 %offset\n  br label %bb\n\nbb:                                               ; preds = %bb, %entry\n  %RHS = phi ptr [ %RHS.next, %bb ], [ %tmp, %entry ]\n  %LHS = getelementptr inbounds i32, ptr %A, i32 100\n  %RHS.next = getelementptr inbounds i32, ptr %RHS, i64 1\n  %cond = icmp ult ptr %LHS, %RHS\n  br i1 %cond, label %bb2, label %bb\n\nbb2:                                              ; preds = %bb\n  ret ptr %RHS\n}\n"
+        },
+        {
+          "test_name": "phi_of_gep",
+          "test_body": "define ptr @phi_of_gep(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr i32, ptr %p, i64 1\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  ret ptr %phi\n}\n"
+        },
+        {
+          "test_name": "varargs_cast_opaque_to_typed",
+          "test_body": "declare void @varargs(...)\n\ndefine void @varargs_cast_opaque_to_typed(ptr %a) {\n  call void (...) @varargs(ptr byval(i8) %a)\n  ret void\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type6",
+          "test_body": "define ptr @geps_combinable_different_elem_type6(ptr %a, i64 %idx) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i64 %idx\n  %a3 = getelementptr i8, ptr %a2, i64 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "load_bitcast_1",
+          "test_body": "define ptr @load_bitcast_1(ptr %a) {\n  %b = load ptr, ptr %a, align 8\n  ret ptr %b\n}\n"
+        },
+        {
+          "test_name": "addrspacecast_opaque_to_typed",
+          "test_body": "define ptr @addrspacecast_opaque_to_typed(ptr addrspace(1) %a) {\n  %b = addrspacecast ptr addrspace(1) %a to ptr\n  ret ptr %b\n}\n"
+        },
+        {
+          "test_name": "cmp_gep_same_base_different_type",
+          "test_body": "define i1 @cmp_gep_same_base_different_type(ptr %ptr, i64 %idx1, i64 %idx2) {\n  %gep1 = getelementptr inbounds i32, ptr %ptr, i64 %idx1\n  %gep2 = getelementptr inbounds i64, ptr %ptr, i64 %idx2\n  %cmp = icmp ult ptr %gep1, %gep2\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "select_of_gep_flags_1",
+          "test_body": "define ptr @select_of_gep_flags_1(i1 %c, ptr %p) {\n  %gep1 = getelementptr inbounds i32, ptr %p, i64 1\n  %gep2 = getelementptr nusw nuw i32, ptr %p, i64 2\n  %s = select i1 %c, ptr %gep1, ptr %gep2\n  ret ptr %s\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type4",
+          "test_body": "define ptr @geps_combinable_different_elem_type4(ptr %a) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i32 0, i32 1\n  %a3 = getelementptr i8, ptr %a2, i64 10\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "cmp_load_gep_global",
+          "test_body": "@ary = external constant [4 x i8]\n\ndefine i1 @cmp_load_gep_global(i64 %idx) {\n  %gep = getelementptr [4 x i8], ptr @ary, i64 0, i64 %idx\n  %load = load i8, ptr %gep, align 1\n  %cmp = icmp eq i8 %load, 3\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "call_cast_byval",
+          "test_body": "declare void @call_byval(i64, ptr byval(i64))\n\ndefine void @call_cast_byval(ptr %p, ptr %p2) {\n  call void @call_byval(ptr %p, ptr byval(double) %p2)\n  ret void\n}\n"
+        },
+        {
+          "test_name": "select_of_gep_flags_2",
+          "test_body": "define ptr @select_of_gep_flags_2(i1 %c, ptr %p) {\n  %gep1 = getelementptr nuw i32, ptr %p, i64 1\n  %gep2 = getelementptr nusw nuw i32, ptr %p, i64 2\n  %s = select i1 %c, ptr %gep1, ptr %gep2\n  ret ptr %s\n}\n"
+        },
+        {
+          "test_name": "geps_combinable_different_elem_type7",
+          "test_body": "define ptr @geps_combinable_different_elem_type7(ptr %a, i64 %idx) {\n  %a2 = getelementptr { i32, i32 }, ptr %a, i64 %idx, i32 1\n  %a3 = getelementptr i8, ptr %a2, i64 4\n  ret ptr %a3\n}\n"
+        },
+        {
+          "test_name": "addrspacecast_typed_to_opaque_constexpr",
+          "test_body": "@g = external global i8\n\ndefine ptr addrspace(1) @addrspacecast_typed_to_opaque_constexpr() {\n  ret ptr addrspace(1) addrspacecast (ptr @g to ptr addrspace(1))\n}\n"
+        },
+        {
+          "test_name": "indexed_compare_different_types",
+          "test_body": "define ptr @indexed_compare_different_types(ptr %A, i64 %offset) {\nentry:\n  %tmp = getelementptr inbounds i32, ptr %A, i64 %offset\n  br label %bb\n\nbb:                                               ; preds = %bb, %entry\n  %RHS = phi ptr [ %RHS.next, %bb ], [ %tmp, %entry ]\n  %LHS = getelementptr inbounds i64, ptr %A, i32 100\n  %RHS.next = getelementptr inbounds i32, ptr %RHS, i64 1\n  %cond = icmp ult ptr %LHS, %RHS\n  br i1 %cond, label %bb2, label %bb\n\nbb2:                                              ; preds = %bb\n  ret ptr %RHS\n}\n"
+        },
+        {
+          "test_name": "compare_gep_with_base_vector1",
+          "test_body": "define <2 x i1> @compare_gep_with_base_vector1(<2 x ptr> %p, i64 %idx) {\n  %gep = getelementptr inbounds i32, <2 x ptr> %p, i64 %idx\n  %c = icmp eq <2 x ptr> %gep, %p\n  ret <2 x i1> %c\n}\n"
+        },
+        {
+          "test_name": "compare_geps_same_indices_scalar_vector_base_mismatch",
+          "test_body": "define <4 x i1> @compare_geps_same_indices_scalar_vector_base_mismatch(ptr %ptr, <4 x ptr> %ptrs) {\n  %gep1 = getelementptr i16, <4 x ptr> %ptrs, <4 x i64> <i64 1, i64 2, i64 3, i64 4>\n  %gep2 = getelementptr i16, ptr %ptr, <4 x i64> <i64 1, i64 2, i64 3, i64 4>\n  %cmp = icmp eq <4 x ptr> %gep1, %gep2\n  ret <4 x i1> %cmp\n}\n"
+        },
+        {
+          "test_name": "gep_of_phi_of_gep",
+          "test_body": "define ptr @gep_of_phi_of_gep(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr i32, ptr %p, i64 2\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  %gep = getelementptr i32, ptr %phi, i64 1\n  ret ptr %gep\n}\n"
+        },
+        {
+          "test_name": "const_fold_call_with_func_type_mismatch",
+          "test_body": "declare float @fmodf(float, float)\n\ndefine i32 @const_fold_call_with_func_type_mismatch() {\n  %v = call i32 @fmodf(float 0x40091EB860000000, float 2.000000e+00)\n  ret i32 %v\n}\n"
+        },
+        {
+          "test_name": "call",
+          "test_body": "define void @call(ptr %a) {\n  call void %a()\n  ret void\n}\n"
+        },
+        {
+          "test_name": "cmp_gep_same_base_same_type",
+          "test_body": "define i1 @cmp_gep_same_base_same_type(ptr %ptr, i64 %idx1, i64 %idx2) {\n  %gep1 = getelementptr inbounds i32, ptr %ptr, i64 %idx1\n  %gep2 = getelementptr inbounds i32, ptr %ptr, i64 %idx2\n  %cmp = icmp ult ptr %gep1, %gep2\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "gep_of_addrspace_cast",
+          "test_body": "define ptr addrspace(1) @gep_of_addrspace_cast(ptr %ptr) {\n  %cast1 = addrspacecast ptr %ptr to ptr addrspace(1)\n  %gep = getelementptr inbounds i32, ptr addrspace(1) %cast1, i64 1\n  ret ptr addrspace(1) %gep\n}\n"
+        },
+        {
+          "test_name": "addrspacecast_opaque_to_opaque",
+          "test_body": "define ptr @addrspacecast_opaque_to_opaque(ptr addrspace(1) %a) {\n  %b = addrspacecast ptr addrspace(1) %a to ptr\n  ret ptr %b\n}\n"
+        },
+        {
+          "test_name": "gep_of_phi_of_gep_flags2",
+          "test_body": "define ptr @gep_of_phi_of_gep_flags2(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr nuw i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr nuw i32, ptr %p, i64 2\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  %gep = getelementptr i32, ptr %phi, i64 1\n  ret ptr %gep\n}\n"
+        },
+        {
+          "test_name": "gep_constexpr_3",
+          "test_body": "@g = external global i8\n\ndefine ptr addrspace(1) @gep_constexpr_3(ptr %a) {\n  ret ptr addrspace(1) getelementptr ([0 x i8], ptr addrspace(1) addrspacecast (ptr @g to ptr addrspace(1)), i64 0, i32 3)\n}\n"
+        },
+        {
+          "test_name": "phi_of_gep_flags_2",
+          "test_body": "define ptr @phi_of_gep_flags_2(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:                                               ; preds = %0\n  %gep1 = getelementptr nusw nuw i32, ptr %p, i64 1\n  br label %join\n\nelse:                                             ; preds = %0\n  %gep2 = getelementptr nuw i32, ptr %p, i64 1\n  br label %join\n\njoin:                                             ; preds = %else, %if\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  ret ptr %phi\n}\n"
+        },
+        {
+          "test_name": "compare_gep_with_base_vector2",
+          "test_body": "define <2 x i1> @compare_gep_with_base_vector2(<2 x ptr> %p, <2 x i64> %idx) {\n  %gep = getelementptr inbounds i32, <2 x ptr> %p, <2 x i64> %idx\n  %c = icmp eq <2 x ptr> %gep, %p\n  ret <2 x i1> %c\n}\n"
+        },
+        {
+          "test_name": "varargs_cast_typed_to_opaque_different_type",
+          "test_body": "declare void @varargs(...)\n\ndefine void @varargs_cast_typed_to_opaque_different_type(ptr %a) {\n  call void (...) @varargs(ptr byval(float) %a)\n  ret void\n}\n"
+        },
+        {
+          "test_name": "addrspacecast_typed_to_opaque",
+          "test_body": "define ptr @addrspacecast_typed_to_opaque(ptr addrspace(1) %a) {\n  %b = addrspacecast ptr addrspace(1) %a to ptr\n  ret ptr %b\n}\n"
+        },
+        {
+          "test_name": "select_of_gep_different_type",
+          "test_body": "define ptr @select_of_gep_different_type(i1 %c, ptr %p) {\n  %gep1 = getelementptr i32, ptr %p, i64 1\n  %gep2 = getelementptr i64, ptr %p, i64 2\n  %s = select i1 %c, ptr %gep1, ptr %gep2\n  ret ptr %s\n}\n"
+        },
+        {
+          "test_name": "call_cast_ptr_to_int",
+          "test_body": "declare void @call_i64(i64)\n\ndefine void @call_cast_ptr_to_int(ptr %p) {\n  call void @call_i64(ptr %p)\n  ret void\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[InstCombine] GEPNoWrapFlags is propagated incorrectly",
+    "body": "Alive2: https://alive2.llvm.org/ce/z/3ME7S7\n```\ndefine ptr @src(i1 %c, ptr %p) {\n  br i1 %c, label %if, label %else\n\nif:\n  %gep1 = getelementptr inbounds i32, ptr %p, i64 1\n  br label %join\n\nelse:\n  %gep2 = getelementptr i64, ptr %p, i64 2\n  br label %join\n\njoin:\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  %gep = getelementptr i32, ptr %phi, i64 1\n  ret ptr %gep\n}\n```\n```\n\n----------------------------------------\ndefine ptr @src(i1 %c, ptr %p) {\n#0:\n  br i1 %c, label %if, label %else\n\nelse:\n  %gep2 = gep ptr %p, 8 x i64 2\n  br label %join\n\nif:\n  %gep1 = gep inbounds ptr %p, 4 x i64 1\n  br label %join\n\njoin:\n  %phi = phi ptr [ %gep1, %if ], [ %gep2, %else ]\n  %gep = gep ptr %phi, 4 x i64 1\n  ret ptr %gep\n}\n=>\ndefine ptr @src(i1 %c, ptr %p) {\n#0:\n  br i1 %c, label %if, label %else\n\nelse:\n  br label %join\n\nif:\n  br label %join\n\njoin:\n  %#1 = phi i64 [ 4, %if ], [ 16, %else ]\n  %#2 = gep inbounds nuw ptr %p, 1 x i64 %#1\n  %gep = gep ptr %#2, 1 x i64 4\n  ret ptr %gep\n}\nTransformation doesn't verify!\n\nERROR: Target is more poisonous than source\n\nExample:\ni1 %c = #x0 (0)\nptr %p = null\n\nSource:\n  >> Jump to %else\nptr %gep2 = pointer(non-local, block_id=0, offset=16) / Address=#x0000000000000010\n  >> Jump to %join\nptr %phi = pointer(non-local, block_id=0, offset=16) / Address=#x0000000000000010\nptr %gep = pointer(non-local, block_id=0, offset=20) / Address=#x0000000000000014\n\nSOURCE MEMORY STATE\n===================\nNON-LOCAL BLOCKS:\nBlock 0 >\tsize: 0\talign: 1\talloc type: 0\talive: false\taddress: 0\nBlock 1 >\tsize: 0\talign: 1\talloc type: 0\talive: true\taddress: 1\n\nTarget:\n  >> Jump to %else\n  >> Jump to %join\ni64 %#1 = #x0000000000000010 (16)\nptr %#2 = poison\nptr %gep = poison\nSource value: pointer(non-local, block_id=0, offset=20) / Address=#x0000000000000014\nTarget value: poison\n\nSummary:\n  0 correct transformations\n  1 incorrect transformations\n  0 failed-to-prove transformations\n  0 Alive2 errors\n```\n",
+    "author": "dtcxzyw",
+    "labels": [
+      "miscompilation",
+      "llvm:instcombine"
+    ],
+    "comments": []
+  }
+}
