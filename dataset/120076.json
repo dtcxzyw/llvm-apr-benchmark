@@ -57,14 +57,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "gather",
-        "size",
-        "getOpcode",
         "BoUpSLP::collectValuesToDemote",
         "BoUpSLP::getVectorElementSize",
         "BoUpSLP::computeMinimumValueSizes",
         "TreeEntry",
-        "reorder",
         "isGather"
       ]
     }

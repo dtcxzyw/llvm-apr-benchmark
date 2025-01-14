@@ -48,16 +48,9 @@
     },
     "bug_location_funcname": {
       "llvm/include/llvm/IR/PatternMatch.h": [
-        "m_c_Xor",
-        "m_AllOnes",
-        "m_ConstantInt",
-        "m_c_BinOp",
         "isValue",
-        "m_Zero",
-        "m_Specific",
         "BinaryOp_match",
-        "MaxMin_match",
-        "m_Not"
+        "MaxMin_match"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
         "foldSelectICmpEq"

@@ -30,12 +30,8 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "BoUpSLP::buildTree_rec",
-        "size",
         "newTreeEntry",
-        "setOperandsInOrder",
-        "add",
-        "getOperand",
-        "getNumOperands"
+        "setOperandsInOrder"
       ]
     }
   },

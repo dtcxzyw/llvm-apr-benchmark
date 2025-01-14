@@ -47,30 +47,22 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorizationPlanner.h": [
-        "() const",
         "setInsertPoint",
         "createOverflowingOp",
         "VPBuilder",
         "LoopVectorizationPlanner"
       ],
       "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "end",
         "VPBasicBlock",
         "dropPoisonGeneratingFlags",
         "VPlan",
         "getDebugLoc",
-        "getParent",
-        "set",
         "VPRecipeBase",
-        "print",
         "VPRecipeWithIRFlags",
         "VPInstruction"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanPatternMatch.h": [
-        "m_Mul",
-        "BinaryRecipe_match",
-        "m_Binary",
-        "m_VPValue"
+        "BinaryRecipe_match"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
         "VPlanTransforms::dropPoisonGeneratingRecipes"

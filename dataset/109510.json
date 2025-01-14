@@ -30,7 +30,6 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
         "removeRedundantExpandSCEVRecipes",
-        "licm",
         "mergeBlocksIntoPredecessors",
         "legalizeAndOptimizeInductions",
         "VPlanTransforms::optimize",

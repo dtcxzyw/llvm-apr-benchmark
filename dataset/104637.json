@@ -27,8 +27,7 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "getTreeEntry",
         "newTreeEntry",
-        "BoUpSLP::buildTree_rec",
-        "gather"
+        "BoUpSLP::buildTree_rec"
       ]
     }
   },

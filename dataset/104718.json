@@ -29,7 +29,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/IR/Verifier.cpp": [
-        "verify",
         "Verifier::visitFunction"
       ]
     }

@@ -50,7 +50,6 @@
         "VPRecipeBuilder::tryToBlend"
       ],
       "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "clone",
         "VPSingleDefRecipe",
         "VPRecipeBase",
         "getNumIncomingValues",
@@ -60,8 +59,7 @@
         "VPInstruction",
         "getMask",
         "getIncomingValue",
-        "VPlan",
-        "size"
+        "VPlan"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
         "VPBlendRecipe::print"

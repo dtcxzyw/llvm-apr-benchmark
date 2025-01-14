@@ -29,7 +29,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "add",
         "BoUpSLP::vectorizeTree",
         "getWidenedType",
         "BoUpSLP::getTreeCost"

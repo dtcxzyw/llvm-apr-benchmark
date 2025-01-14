@@ -49,22 +49,15 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "size",
         "EdgeInfo",
         "inversePermutation",
         "reorderScalars",
         "getVectorFactor",
-        "add",
-        "getNumElements",
         "BoUpSLP::gather",
         "isSplat",
-        "empty",
         "isUndefVector",
-        "eraseInstruction",
         "TreeEntry",
         "BoUpSLP::processBuildVector",
-        "getNumOperands",
-        "getOperand",
         "getWidenedType",
         "buildUseMask"
       ]

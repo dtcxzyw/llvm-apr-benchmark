@@ -27,8 +27,7 @@
       "llvm/lib/Transforms/Scalar/LoopStrengthReduce.cpp": [
         "createIterCountExpr",
         "SalvageDVI",
-        "createOffsetExpr",
-        "get"
+        "createOffsetExpr"
       ]
     }
   },

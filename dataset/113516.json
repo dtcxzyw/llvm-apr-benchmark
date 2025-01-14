@@ -27,7 +27,6 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "isGather",
         "BoUpSLP::vectorizeTree",
-        "empty",
         "getTreeEntry",
         "EdgeInfo"
       ]

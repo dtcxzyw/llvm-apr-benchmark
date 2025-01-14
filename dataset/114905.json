@@ -30,8 +30,6 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "isBoolLogicOp",
-        "swap",
-        "size",
         "getRdxOperand",
         "createOp"
       ]

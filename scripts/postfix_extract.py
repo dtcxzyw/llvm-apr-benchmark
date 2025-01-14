@@ -205,7 +205,7 @@ for file in patchset.modified_files:
                     break
                 func_name_node = decl[0]
             func_name = func_name_node.text.decode("utf-8")
-            if func_name in patch:
+            if func_name in patch and llvm_helper.is_interesting_funcname(func_name):
                 modified_funcs.add(func_name)
     modified_funcs_valid = list()
     for func in modified_funcs:
@@ -300,12 +300,12 @@ for file in test_patchset:
 issue_comments = []
 comments = session.get(issue["comments_url"]).json()
 for comment in comments:
-    issue_comments.append(
-        {
-            "author": comment["user"]["login"],
-            "body": comment["body"],
-        }
-    )
+    comment_obj = {
+        "author": comment["user"]["login"],
+        "body": comment["body"],
+    }
+    if llvm_helper.is_valid_comment(comment_obj):
+        issue_comments.append(comment_obj)
 normalized_issue = {
     "title": issue["title"],
     "body": issue["body"],
@@ -336,5 +336,4 @@ metadata = {
 print(json.dumps(metadata, indent=2))
 with open(data_json_path, "w") as f:
     json.dump(metadata, f, indent=2)
-    f.write("\n")
 print(f"Saved to {data_json_path}")

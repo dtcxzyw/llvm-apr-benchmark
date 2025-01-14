@@ -29,9 +29,7 @@
         "getSameOpcode",
         "InstructionsState",
         "isOpcodeOrAlt",
-        "swap",
-        "isAltShuffle",
-        "getOpcode"
+        "isAltShuffle"
       ]
     }
   },

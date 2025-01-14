@@ -31,10 +31,8 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "getSameOpcode",
         "newTreeEntry",
-        "size",
         "getTreeEntry",
         "BoUpSLP::buildTree_rec",
-        "valid",
         "isGather",
         "BoUpSLP::collectValuesToDemote"
       ]

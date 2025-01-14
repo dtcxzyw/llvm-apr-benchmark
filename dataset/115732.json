@@ -43,13 +43,10 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "isUndefVector",
         "TreeEntry",
-        "eraseInstruction",
         "BoUpSLP::gather",
         "createShuffle",
         "createFreeze",
         "BoUpSLP::setInsertPointAfterBundle",
-        "size",
-        "getNumElements",
         "buildUseMask"
       ]
     }

@@ -44,13 +44,11 @@
         "SCEV"
       ],
       "llvm/lib/Analysis/ScalarEvolution.cpp": [
-        "rewrite",
         "SCEVShiftRewriter",
         "ScalarEvolution::isGuaranteedNotToBePoison",
         "impliesPoison",
         "ScalarEvolution::isSCEVExprNeverPoison",
         "ScalarEvolution::createAddRecFromPHI",
-        "follow",
         "SCEVInitRewriter",
         "ScalarEvolution::getSequentialMinMaxExpr"
       ]

@@ -36,10 +36,8 @@
         "transformMaskAfterShuffle",
         "getVF",
         "ShuffleCostEstimator",
-        "size",
         "getVectorFactor",
         "createShuffle",
-        "empty",
         "BoUpSLP",
         "BaseShuffleAnalysis"
       ]

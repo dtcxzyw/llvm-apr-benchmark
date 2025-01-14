@@ -29,7 +29,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/LICM.cpp": [
-        "eraseInstruction",
         "hoistMulAddAssociation"
       ]
     }

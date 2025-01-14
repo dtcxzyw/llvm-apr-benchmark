@@ -35,10 +35,7 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "hasFullVectorsOrPowerOf2",
         "TreeEntry",
-        "BoUpSLP::tryToVectorizeGatheredLoads",
-        "get",
-        "size",
-        "gather"
+        "BoUpSLP::tryToVectorizeGatheredLoads"
       ]
     }
   },

@@ -39,9 +39,7 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "TreeEntry",
         "getWidenedType",
-        "size",
-        "BoUpSLP::isGatherShuffledSingleRegisterEntry",
-        "clear"
+        "BoUpSLP::isGatherShuffledSingleRegisterEntry"
       ]
     }
   },

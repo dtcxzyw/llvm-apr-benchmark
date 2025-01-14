@@ -45,8 +45,7 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineSimplifyDemanded.cpp": [
         "InstCombinerImpl::SimplifyDemandedBits",
-        "InstCombinerImpl::SimplifyDemandedUseBits",
-        "getBitWidth"
+        "InstCombinerImpl::SimplifyDemandedUseBits"
       ]
     }
   },

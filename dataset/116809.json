@@ -40,7 +40,6 @@
     },
     "bug_location_funcname": {
       "llvm/include/llvm/Analysis/MemorySSAUpdater.h": [
-        "getMemorySSA",
         "MemorySSAUpdater"
       ],
       "llvm/lib/Analysis/MemorySSAUpdater.cpp": [

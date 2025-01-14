@@ -27,12 +27,7 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "EdgeInfo",
         "TreeEntry",
-        "getOperand",
-        "size",
-        "getOpcode",
         "BoUpSLP::getEntryCost",
-        "gather",
-        "empty",
         "isGather"
       ]
     }

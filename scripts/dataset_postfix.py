@@ -26,19 +26,26 @@ def verify_issue(issue):
         data = json.load(f)
 
     # Remove unrelated comments
-    def is_valid_comment(comment):
-        if comment["author"] == "llvmbot":
-            return False
-        if comment["body"].startswith("/cherry-pick"):
-            return False
-        return True
-
     comments = data["issue"]["comments"]
-    data["issue"]["comments"] = [x for x in comments if is_valid_comment(x)]
+    data["issue"]["comments"] = [x for x in comments if llvm_helper.is_valid_comment(x)]
+
+    # Remove unrelated func names
+    funcname = data["hints"]["bug_location_funcname"]
+    new_funcname = dict()
+    for key in funcname.keys():
+        funcname_list = []
+        for name in funcname[key]:
+            if llvm_helper.is_interesting_funcname(name):
+                funcname_list.append(name)
+        if len(funcname_list) != 0:
+            new_funcname[key] = funcname_list
+        else:
+            print(f"{issue} Warning: Invalid funcname info")
+
+    data["hints"]["bug_location_funcname"] = new_funcname
 
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
-        f.write("\n")
 
 
 task_list = []

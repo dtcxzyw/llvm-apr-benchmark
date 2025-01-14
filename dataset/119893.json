@@ -43,14 +43,12 @@
         "CmpPredicate"
       ],
       "llvm/lib/IR/Instructions.cpp": [
-        "llvm::hash_value",
         "CmpPredicate::getSwapped",
         "CmpInst::getInversePredicate"
       ],
       "llvm/lib/Transforms/Scalar/EarlyCSE.cpp": [
         "getHashValueImpl",
         "EarlyCSE",
-        "end",
         "SimpleValue"
       ]
     }

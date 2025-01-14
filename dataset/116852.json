@@ -26,8 +26,7 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "BoUpSLP::gather",
-        "TreeEntry",
-        "eraseInstruction"
+        "TreeEntry"
       ]
     }
   },

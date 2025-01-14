@@ -66,16 +66,12 @@
         "GVNPass::processInstruction",
         "GVNPass::performScalarPRE",
         "GVNPass::processAssumeIntrinsic",
-        "Expression",
-        "get"
+        "Expression"
       ],
       "llvm/lib/Transforms/Scalar/NewGVN.cpp": [
         "patchAndReplaceAllUsesWith",
-        "insert",
-        "push_back",
         "NewGVN::findPHIOfOpsLeader",
-        "NewGVN::eliminateInstructions",
-        "some"
+        "NewGVN::eliminateInstructions"
       ],
       "llvm/lib/Transforms/Utils/Local.cpp": [
         "llvm::patchReplacementInstruction"

@@ -25,7 +25,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp": [
-        "getType",
         "InductiveRangeCheck::parseRangeCheckICmp",
         "InductiveRangeCheckElimination"
       ]

@@ -54,15 +54,9 @@
         "VPBasicBlock::splitAt"
       ],
       "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "iterator",
-        "print",
-        "set",
-        "end",
-        "getParent",
         "VPBasicBlock",
         "VPRegionBlock",
         "isReplicator",
-        "empty",
         "VPlanIngredient"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanValue.h": [

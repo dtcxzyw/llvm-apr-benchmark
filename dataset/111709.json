@@ -86,10 +86,7 @@
         "SizeOffsetAPInt",
         "knownSize",
         "SizeOffsetValue",
-        "unknown",
-        "anyKnown",
-        "operator==",
-        "operator!="
+        "anyKnown"
       ],
       "llvm/lib/Analysis/MemoryBuiltins.cpp": [
         "ObjectSizeOffsetVisitor::visitIntToPtrInst",

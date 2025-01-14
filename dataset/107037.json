@@ -51,10 +51,7 @@
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         "analyzedReductionRoot",
         "createOp",
-        "add",
         "isVectorized",
-        "get",
-        "size",
         "emitScaleForReusedOps",
         "allConstant"
       ]
