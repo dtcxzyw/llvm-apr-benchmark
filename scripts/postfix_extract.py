@@ -18,7 +18,7 @@ import requests
 import json
 import llvm_helper
 import sys
-import funcname_loc
+import hints
 from unidiff import PatchSet
 import re
 import subprocess
@@ -155,13 +155,10 @@ patchset = PatchSet(patch)
 # Line level
 bug_location_lineno = {}
 for file in patchset:
-    location = []
-    for hunk in file:
-        min_lineno = min(x.source_line_no for x in hunk.source_lines())
-        max_lineno = max(x.source_line_no for x in hunk.source_lines())
-        location.append([min_lineno, max_lineno])
-    bug_location_lineno[file.path] = location
-    files.append(file.path)
+    location = hints.get_line_loc(file)
+    if len(location) != 0:
+        bug_location_lineno[file.path] = location
+        files.append(file.path)
 
 
 # Function level
@@ -170,7 +167,7 @@ bug_location_funcname = {}
 for file in patchset.modified_files:
     print(f"Parsing {file.path}")
     source_code = llvm_helper.git_execute(["show", f"{base_commit}:{file.path}"])
-    modified_funcs_valid = funcname_loc.get_funcname_loc(file, source_code)
+    modified_funcs_valid = hints.get_funcname_loc(file, source_code)
     if len(modified_funcs_valid) != 0:
         bug_location_funcname[file.path] = list(modified_funcs_valid)
 

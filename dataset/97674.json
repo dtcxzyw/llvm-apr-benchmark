@@ -18,10 +18,6 @@
     "bug_location_lineno": {
       "llvm/lib/Analysis/LazyValueInfo.cpp": [
         [
-          1370,
-          1375
-        ],
-        [
           1723,
           1729
         ],
@@ -33,8 +29,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/LazyValueInfo.cpp": [
-        "LazyValueInfo::getConstantOnEdge",
-        "LazyValueInfoImpl::getEdgeValueLocal"
+        "LazyValueInfo::getConstantOnEdge"
       ]
     }
   },

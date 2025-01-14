@@ -20,10 +20,6 @@
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         [
-          8221,
-          8226
-        ],
-        [
           8233,
           8238
         ]

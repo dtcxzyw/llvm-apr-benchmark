@@ -19,13 +19,13 @@ import llvm_helper
 import json
 
 max_build_jobs = os.cpu_count()
-max_build_jobs = 12
+max_build_jobs = 8
 
 
 def verify_issue(issue):
     with open(os.path.join(llvm_helper.dataset_dir, issue)) as f:
         data = json.load(f)
-    if data["verified"]:
+    if data.get("verified", False):
         return
     print(data["issue"]["title"])
     base_commit = data["base_commit"]

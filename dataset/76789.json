@@ -14,17 +14,10 @@
       "BasicAliasAnalysis"
     ],
     "files": [
-      "llvm/include/llvm/Analysis/AliasAnalysis.h",
       "llvm/lib/Analysis/AliasAnalysis.cpp",
       "llvm/lib/Analysis/BasicAliasAnalysis.cpp"
     ],
     "bug_location_lineno": {
-      "llvm/include/llvm/Analysis/AliasAnalysis.h": [
-        [
-          154,
-          159
-        ]
-      ],
       "llvm/lib/Analysis/AliasAnalysis.cpp": [
         [
           883,

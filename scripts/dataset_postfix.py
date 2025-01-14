@@ -18,7 +18,7 @@ import os
 import sys
 import llvm_helper
 import json
-import funcname_loc
+import hints
 from unidiff import PatchSet
 
 
@@ -31,7 +31,9 @@ def verify_issue(issue):
     comments = data["issue"]["comments"]
     data["issue"]["comments"] = [x for x in comments if llvm_helper.is_valid_comment(x)]
 
-    # Update func names
+    # Update hints
+    files = []
+    bug_location_lineno = {}
     base_commit = data["base_commit"]
     fix_commit = data["hints"]["fix_commit"]
     patchset = PatchSet(
@@ -39,11 +41,17 @@ def verify_issue(issue):
             ["show", fix_commit, "--", "llvm/lib/*", "llvm/include/*"]
         )
     )
+    for file in patchset:
+        location = hints.get_line_loc(file)
+        if len(location) != 0:
+            bug_location_lineno[file.path] = location
+            files.append(file.path)
+    data["hints"]["files"] = sorted(files)
+    data["hints"]["bug_location_lineno"] = bug_location_lineno
     bug_location_funcname = dict()
-
     for file in patchset:
         source_code = llvm_helper.git_execute(["show", f"{base_commit}:{file.path}"])
-        modified_funcs_valid = funcname_loc.get_funcname_loc(file, source_code)
+        modified_funcs_valid = hints.get_funcname_loc(file, source_code)
         if len(modified_funcs_valid) != 0:
             bug_location_funcname[file.path] = sorted(list(modified_funcs_valid))
     if len(bug_location_funcname) == 0:

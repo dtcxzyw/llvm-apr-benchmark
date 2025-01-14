@@ -18,10 +18,6 @@
     "bug_location_lineno": {
       "llvm/lib/Transforms/IPO/AttributorAttributes.cpp": [
         [
-          5690,
-          5695
-        ],
-        [
           5899,
           5908
         ]
@@ -29,7 +25,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/IPO/AttributorAttributes.cpp": [
-        "AANoCapture::isImpliedByIR",
         "AANoCaptureImpl::updateImpl"
       ]
     }

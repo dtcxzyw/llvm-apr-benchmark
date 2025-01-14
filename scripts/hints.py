@@ -15,7 +15,7 @@
 
 import tree_sitter_cpp
 from tree_sitter import Language, Parser, Tree
-from unidiff import PatchedFile
+from unidiff import PatchedFile, Hunk
 
 CXX_LANGUAGE = Language(tree_sitter_cpp.language())
 cxx_parser = Parser(CXX_LANGUAGE)
@@ -51,9 +51,31 @@ def intersect_location(ranges, beg, end):
     return False
 
 
+def is_valid_hunk(hunk: Hunk):
+    if hunk.removed != 0:
+        return True
+    for line in hunk:
+        if line.is_added and not line.value.strip().startswith("//"):
+            return True
+    return False
+
+
+def get_line_loc(patch: PatchedFile):
+    line_location = []
+    for hunk in patch:
+        if not is_valid_hunk(hunk):
+            continue
+        min_lineno = min(x.source_line_no for x in hunk.source_lines())
+        max_lineno = max(x.source_line_no for x in hunk.source_lines())
+        line_location.append([min_lineno, max_lineno])
+    return line_location
+
+
 def get_funcname_loc(patch: PatchedFile, source_code: str):
     line_location = []
     for hunk in patch:
+        if not is_valid_hunk(hunk):
+            continue
         min_lineno = min(x.source_line_no for x in hunk.source_lines())
         max_lineno = max(x.source_line_no for x in hunk.source_lines())
         line_location.append([min_lineno, max_lineno])
