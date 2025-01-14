@@ -59,9 +59,10 @@ knowledge_cutoff = issue["created_at"]
 timeline = session.get(issue["timeline_url"]).json()
 fix_commit = None
 fix_commit_map = {
-    "77553": None,  # Deprecated constant expr
     "78024": None,  # Reverted
     "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
+    "85568": None,  # Object bug
+    "86280": None,  # Object bug
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
     "108618": None,  # Multi-commit fix
     "109581": None,  # Too many unrelated changes
@@ -234,6 +235,7 @@ def remove_target_suffix(path):
         "PowerPC",
         "LoongArch",
         "AMDGPU",
+        "SystemZ",
     ]
     for target in targets:
         path = path.removesuffix("/" + target)
@@ -248,18 +250,29 @@ lit_test_dir = set(
 )
 tests = []
 runline_pattern = re.compile(r"; RUN: (.+)\| FileCheck")
-testname_pattern = re.compile(r"define .+ @(\w+)\(")
+testname_pattern = re.compile(r"define .+ @([.\w]+)\(")
+# Workaround for invalid IR (constant expr/x86_mmx)
+retrieve_test_from_main = {
+    "77553",
+    "81793",
+    "82052",
+    "83127",
+    "83931",
+    "89500",
+    "91178",
+}
+test_commit = "origin/main" if issue_id in retrieve_test_from_main else fix_commit
 for file in test_patchset:
     test_names = set()
-    test_file = llvm_helper.git_execute(["show", f"{fix_commit}:{file.path}"])
+    test_file = llvm_helper.git_execute(["show", f"{test_commit}:{file.path}"])
     for hunk in file:
         matched = re.search(testname_pattern, hunk.section_header)
-        if not matched:
-            continue
-        test_names.add(matched.group(1))
-    if len(test_names) == 0:
-        for match in re.findall(testname_pattern, test_file):
-            test_names.add(match.strip())
+        if matched:
+            test_names.add(matched.group(1))
+        for line in hunk.target:
+            for match in re.findall(testname_pattern, line):
+                test_names.add(match.strip())
+    print(file.path, test_names)
     commands = []
     for match in re.findall(runline_pattern, test_file):
         commands.append(match.strip())
