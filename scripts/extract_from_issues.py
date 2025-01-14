@@ -33,8 +33,9 @@ session.headers.update(
     }
 )
 
-issue_id_begin = 76663 # Since 2024-01-01
+issue_id_begin = 76663  # Since 2024-01-01
 issue_id_end = 122733
+
 
 def wait(progress):
     try:
@@ -76,7 +77,14 @@ def fetch(issue_id):
             has_valid_label = True
         if "llvm" in label_name or label_name == "vectorizers":
             is_llvm_middleend = True
-        for key in ["backend", "clang:", "clangd", "clang-tidy", "mlir:", "tools:"]:
+        for key in [
+            "backend",
+            "clang:",
+            "clangd",
+            "clang-tidy",
+            "mlir:",
+            "tools:",
+        ]:
             if key in label_name:
                 return False
         if label_name in [
@@ -90,6 +98,7 @@ def fetch(issue_id):
             "llvm:codegen",
             "llvm-reduce",
             "llvm:bitcode",
+            "BOLT",
         ]:
             return False
     if not has_valid_label:
@@ -112,6 +121,7 @@ for issue_id in progress:
     progress.set_description(f"Success {success}")
     cache_file = os.path.join(cache_dir, str(issue_id))
     if os.path.exists(cache_file):
+        progress.refresh()
         continue
     while True:
         try:

@@ -59,18 +59,23 @@ knowledge_cutoff = issue["created_at"]
 timeline = session.get(issue["timeline_url"]).json()
 fix_commit = None
 fix_commit_map = {
-    "108618": None,
-    "109581": None,
-    "110819": None,
-    "112633": None,
+    "77553": None,  # Deprecated constant expr
+    "78024": None,  # Reverted
+    "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
+    "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
+    "108618": None,  # Multi-commit fix
+    "109581": None,  # Too many unrelated changes
+    "110819": None,  # Outdated issue
+    "112633": None,  # Multi-commit fix
 }
+
 
 def is_valid_fix(commit):
     if commit is None:
         return False
     try:
-        branches = llvm_helper.git_execute(['branch', '--contains', commit])
-        if 'main\n' not in branches:
+        branches = llvm_helper.git_execute(["branch", "--contains", commit])
+        if "main\n" not in branches:
             return False
         changed_files = (
             subprocess.check_output(
@@ -260,18 +265,22 @@ for file in test_patchset:
         commands.append(match.strip())
     subtests = []
     for test_name in test_names:
-        test_body = subprocess.check_output(
-            ["llvm-extract", f"--func={test_name}", "-S", "-"], input=test_file.encode()
-        ).decode()
-        test_body = test_body.removeprefix(
-            "; ModuleID = '<stdin>'\nsource_filename = \"<stdin>\"\n"
-        ).removeprefix("\n")
-        subtests.append(
-            {
-                "test_name": test_name,
-                "test_body": test_body,
-            }
-        )
+        try:
+            test_body = subprocess.check_output(
+                ["llvm-extract", f"--func={test_name}", "-S", "-"],
+                input=test_file.encode(),
+            ).decode()
+            test_body = test_body.removeprefix(
+                "; ModuleID = '<stdin>'\nsource_filename = \"<stdin>\"\n"
+            ).removeprefix("\n")
+            subtests.append(
+                {
+                    "test_name": test_name,
+                    "test_body": test_body,
+                }
+            )
+        except Exception:
+            pass
     tests.append({"file": file.path, "commands": commands, "tests": subtests})
 
 # Extract full issue context
