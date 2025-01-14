@@ -12,9 +12,6 @@
     "components": [
       "LoopPeel"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/LoopPeel.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/LoopPeel.cpp": [
         [

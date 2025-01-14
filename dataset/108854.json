@@ -12,9 +12,6 @@
     "components": [
       "SimplifyCFG"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/SimplifyCFG.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/SimplifyCFG.cpp": [
         [

@@ -12,9 +12,6 @@
     "components": [
       "CloneFunction"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/CloneFunction.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/CloneFunction.cpp": [
         [

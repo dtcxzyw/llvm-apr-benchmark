@@ -12,9 +12,6 @@
     "components": [
       "ValueTracking"
     ],
-    "files": [
-      "llvm/lib/Analysis/ValueTracking.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/ValueTracking.cpp": [
         [

@@ -13,11 +13,6 @@
       "MemorySSAUpdater",
       "LICM"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/MemorySSAUpdater.h",
-      "llvm/lib/Analysis/MemorySSAUpdater.cpp",
-      "llvm/lib/Transforms/Scalar/LICM.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/MemorySSAUpdater.h": [
         [

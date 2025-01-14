@@ -13,10 +13,6 @@
       "LoopVectorize",
       "VPRecipeBuilder"
     ],
-    "files": [
-      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp",
-      "llvm/lib/Transforms/Vectorize/VPRecipeBuilder.h"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         [

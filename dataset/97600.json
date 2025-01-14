@@ -13,10 +13,6 @@
       "IR",
       "ValueTracking"
     ],
-    "files": [
-      "llvm/lib/Analysis/ValueTracking.cpp",
-      "llvm/lib/IR/Value.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/ValueTracking.cpp": [
         [

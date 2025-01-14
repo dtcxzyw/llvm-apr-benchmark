@@ -12,9 +12,6 @@
     "components": [
       "Reassociate"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/Reassociate.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/Reassociate.cpp": [
         [

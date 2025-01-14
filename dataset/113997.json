@@ -15,11 +15,6 @@
       "NewGVN",
       "Local"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/GVN.cpp",
-      "llvm/lib/Transforms/Scalar/NewGVN.cpp",
-      "llvm/lib/Transforms/Utils/Local.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/GVN.cpp": [
         [

@@ -13,9 +13,6 @@
     "components": [
       "MemoryDependenceAnalysis"
     ],
-    "files": [
-      "llvm/lib/Analysis/MemoryDependenceAnalysis.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/MemoryDependenceAnalysis.cpp": [
         [

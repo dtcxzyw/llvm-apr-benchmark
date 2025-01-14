@@ -12,11 +12,6 @@
     "components": [
       "LoopVectorize"
     ],
-    "files": [
-      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp",
-      "llvm/lib/Transforms/Vectorize/VPlan.h",
-      "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         [

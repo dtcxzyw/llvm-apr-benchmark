@@ -12,9 +12,6 @@
     "components": [
       "MemCpyOptimizer"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp": [
         [

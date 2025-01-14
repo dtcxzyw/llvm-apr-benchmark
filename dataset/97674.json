@@ -12,9 +12,6 @@
     "components": [
       "LazyValueInfo"
     ],
-    "files": [
-      "llvm/lib/Analysis/LazyValueInfo.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/LazyValueInfo.cpp": [
         [

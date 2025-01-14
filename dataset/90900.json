@@ -12,9 +12,6 @@
     "components": [
       "DemoteRegToStack"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/DemoteRegToStack.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/DemoteRegToStack.cpp": [
         [

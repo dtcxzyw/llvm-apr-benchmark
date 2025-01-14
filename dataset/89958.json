@@ -12,10 +12,6 @@
     "components": [
       "ScalarEvolution"
     ],
-    "files": [
-      "llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h",
-      "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h": [
         [

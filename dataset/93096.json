@@ -12,9 +12,6 @@
     "components": [
       "SCCPSolver"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/SCCPSolver.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/SCCPSolver.cpp": [
         [

@@ -32,7 +32,6 @@ def verify_issue(issue):
     data["issue"]["comments"] = [x for x in comments if llvm_helper.is_valid_comment(x)]
 
     # Update hints
-    files = []
     bug_location_lineno = {}
     base_commit = data["base_commit"]
     fix_commit = data["hints"]["fix_commit"]
@@ -45,8 +44,6 @@ def verify_issue(issue):
         location = hints.get_line_loc(file)
         if len(location) != 0:
             bug_location_lineno[file.path] = location
-            files.append(file.path)
-    data["hints"]["files"] = sorted(files)
     data["hints"]["bug_location_lineno"] = bug_location_lineno
     bug_location_funcname = dict()
     for file in patchset:
@@ -58,6 +55,8 @@ def verify_issue(issue):
         if issue.removesuffix(".json") not in ["88297"]:
             print(f"{issue} Warning: bug_location_funcname is empty")
     data["hints"]["bug_location_funcname"] = bug_location_funcname
+    # Migration
+    data["hints"].pop("files")
 
     with open(path, "w") as f:
         json.dump(data, f, indent=2)

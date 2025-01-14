@@ -13,12 +13,6 @@
       "JumpThreading",
       "BasicAliasAnalysis"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/AliasAnalysis.h",
-      "llvm/include/llvm/Analysis/BasicAliasAnalysis.h",
-      "llvm/lib/Analysis/BasicAliasAnalysis.cpp",
-      "llvm/lib/Transforms/Scalar/JumpThreading.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/AliasAnalysis.h": [
         [

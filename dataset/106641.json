@@ -12,9 +12,6 @@
     "components": [
       "LoopVectorize"
     ],
-    "files": [
-      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         [

@@ -12,9 +12,6 @@
     "components": [
       "InstCombine"
     ],
-    "files": [
-      "llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp": [
         [

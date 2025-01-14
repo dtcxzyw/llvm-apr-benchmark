@@ -13,11 +13,6 @@
       "ScalarEvolution",
       "SimplifyIndVar"
     ],
-    "files": [
-      "llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h",
-      "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp",
-      "llvm/lib/Transforms/Utils/SimplifyIndVar.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h": [
         [

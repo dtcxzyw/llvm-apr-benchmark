@@ -12,9 +12,6 @@
     "components": [
       "AttributorAttributes"
     ],
-    "files": [
-      "llvm/lib/Transforms/IPO/AttributorAttributes.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/IPO/AttributorAttributes.cpp": [
         [

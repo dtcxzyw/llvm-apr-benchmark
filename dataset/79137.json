@@ -13,9 +13,6 @@
     "components": [
       "LoopAccessAnalysis"
     ],
-    "files": [
-      "llvm/lib/Analysis/LoopAccessAnalysis.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/LoopAccessAnalysis.cpp": [
         [

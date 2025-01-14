@@ -12,9 +12,6 @@
     "components": [
       "InductiveRangeCheckElimination"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/InductiveRangeCheckElimination.cpp": [
         [

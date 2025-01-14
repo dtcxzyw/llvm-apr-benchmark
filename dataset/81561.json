@@ -12,9 +12,6 @@
     "components": [
       "ValueMapper"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/ValueMapper.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/ValueMapper.cpp": [
         [

@@ -12,9 +12,6 @@
     "components": [
       "IR"
     ],
-    "files": [
-      "llvm/lib/IR/AsmWriter.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/IR/AsmWriter.cpp": [
         [

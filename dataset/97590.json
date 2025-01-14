@@ -12,9 +12,6 @@
     "components": [
       "InlineCost"
     ],
-    "files": [
-      "llvm/lib/Analysis/InlineCost.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/InlineCost.cpp": [
         [

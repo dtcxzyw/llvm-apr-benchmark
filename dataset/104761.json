@@ -12,10 +12,6 @@
     "components": [
       "LoopCacheAnalysis"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/LoopCacheAnalysis.h",
-      "llvm/lib/Analysis/LoopCacheAnalysis.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/LoopCacheAnalysis.h": [
         [

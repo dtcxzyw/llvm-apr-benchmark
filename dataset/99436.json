@@ -13,11 +13,6 @@
       "InstCombine",
       "ValueTracking"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/ValueTracking.h",
-      "llvm/lib/Analysis/ValueTracking.cpp",
-      "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/ValueTracking.h": [
         [

@@ -12,9 +12,6 @@
     "components": [
       "PromoteMemoryToRegister"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/PromoteMemoryToRegister.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/PromoteMemoryToRegister.cpp": [
         [

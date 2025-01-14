@@ -12,9 +12,6 @@
     "components": [
       "LowerSwitch"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/LowerSwitch.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/LowerSwitch.cpp": [
         [

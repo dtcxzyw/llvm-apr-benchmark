@@ -12,9 +12,6 @@
     "components": [
       "ScalarEvolution"
     ],
-    "files": [
-      "llvm/lib/Analysis/ScalarEvolution.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/ScalarEvolution.cpp": [
         [

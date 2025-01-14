@@ -12,9 +12,6 @@
     "components": [
       "ConstantFold"
     ],
-    "files": [
-      "llvm/lib/Analysis/ConstantFolding.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/ConstantFolding.cpp": [
         [

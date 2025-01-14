@@ -135,7 +135,7 @@ class Environment:
 
     def get_hint_files(self):
         self.use_knowledge("hint:files", self.knowledge_cutoff)
-        return self.data["hints"]["files"]
+        return sorted(self.data["hints"]["bug_location_lineno"].keys())
 
     def get_hint_bug_functions(self):
         self.use_knowledge("hint:bug_functions", self.knowledge_cutoff)

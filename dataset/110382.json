@@ -12,9 +12,6 @@
     "components": [
       "VectorCombine"
     ],
-    "files": [
-      "llvm/lib/Transforms/Vectorize/VectorCombine.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/VectorCombine.cpp": [
         [

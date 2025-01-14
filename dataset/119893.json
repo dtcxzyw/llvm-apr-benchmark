@@ -13,11 +13,6 @@
       "EarlyCSE",
       "IR"
     ],
-    "files": [
-      "llvm/include/llvm/IR/CmpPredicate.h",
-      "llvm/lib/IR/Instructions.cpp",
-      "llvm/lib/Transforms/Scalar/EarlyCSE.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/IR/CmpPredicate.h": [
         [

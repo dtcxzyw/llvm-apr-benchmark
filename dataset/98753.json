@@ -12,9 +12,6 @@
     "components": [
       "InstructionSimplify"
     ],
-    "files": [
-      "llvm/lib/Analysis/InstructionSimplify.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/InstructionSimplify.cpp": [
         [

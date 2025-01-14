@@ -12,9 +12,6 @@
     "components": [
       "SimplifyIndVar"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/SimplifyIndVar.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/SimplifyIndVar.cpp": [
         [

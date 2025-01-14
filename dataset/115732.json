@@ -12,9 +12,6 @@
     "components": [
       "SLPVectorizer"
     ],
-    "files": [
-      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
         [

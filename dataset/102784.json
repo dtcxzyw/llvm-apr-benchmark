@@ -16,13 +16,6 @@
       "LoopFuse",
       "TypeMetadataUtils"
     ],
-    "files": [
-      "llvm/include/llvm/Support/GenericDomTree.h",
-      "llvm/lib/Analysis/TypeMetadataUtils.cpp",
-      "llvm/lib/Transforms/Scalar/AlignmentFromAssumptions.cpp",
-      "llvm/lib/Transforms/Scalar/LoopFuse.cpp",
-      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Support/GenericDomTree.h": [
         [

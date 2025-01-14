@@ -145,8 +145,6 @@ if "/AsmParser/" in changed_files or "/Bitcode/" in changed_files:
 
 # Component level
 components = llvm_helper.infer_related_components(changed_files.split("\n"))
-# File level
-files = []
 # Extract patch
 patch = llvm_helper.git_execute(
     ["show", fix_commit, "--", "llvm/lib/*", "llvm/include/*"]
@@ -158,7 +156,6 @@ for file in patchset:
     location = hints.get_line_loc(file)
     if len(location) != 0:
         bug_location_lineno[file.path] = location
-        files.append(file.path)
 
 
 # Function level
@@ -277,7 +274,6 @@ metadata = {
     "hints": {
         "fix_commit": fix_commit,
         "components": list(components),
-        "files": files,
         "bug_location_lineno": bug_location_lineno,
         "bug_location_funcname": bug_location_funcname,
     },

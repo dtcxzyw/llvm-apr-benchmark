@@ -12,9 +12,6 @@
     "components": [
       "Coroutines"
     ],
-    "files": [
-      "llvm/lib/Transforms/Coroutines/CoroSplit.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Coroutines/CoroSplit.cpp": [
         [

@@ -12,10 +12,6 @@
     "components": [
       "MemorySSAUpdater"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/MemorySSAUpdater.h",
-      "llvm/lib/Analysis/MemorySSAUpdater.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/MemorySSAUpdater.h": [
         [

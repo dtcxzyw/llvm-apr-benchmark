@@ -12,10 +12,6 @@
     "components": [
       "InstCombine"
     ],
-    "files": [
-      "llvm/lib/Transforms/InstCombine/InstCombineInternal.h",
-      "llvm/lib/Transforms/InstCombine/InstCombineNegator.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/InstCombine/InstCombineInternal.h": [
         [

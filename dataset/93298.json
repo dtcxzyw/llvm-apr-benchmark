@@ -12,9 +12,6 @@
     "components": [
       "DeadStoreElimination"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp": [
         [

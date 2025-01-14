@@ -16,9 +16,6 @@
     "components": [
       "IR"
     ],
-    "files": [
-      "llvm/lib/IR/Verifier.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/IR/Verifier.cpp": [
         [

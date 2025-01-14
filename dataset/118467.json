@@ -12,9 +12,6 @@
     "components": [
       "AggressiveInstCombine"
     ],
-    "files": [
-      "llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp": [
         [

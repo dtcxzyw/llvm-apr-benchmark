@@ -15,13 +15,6 @@
       "InstructionSimplify",
       "GlobalOpt"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/ConstantFolding.h",
-      "llvm/lib/Analysis/ConstantFolding.cpp",
-      "llvm/lib/Analysis/InstructionSimplify.cpp",
-      "llvm/lib/Transforms/IPO/Attributor.cpp",
-      "llvm/lib/Transforms/IPO/GlobalOpt.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/ConstantFolding.h": [
         [

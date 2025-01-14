@@ -12,9 +12,6 @@
     "components": [
       "SimplifyLibCalls"
     ],
-    "files": [
-      "llvm/lib/Transforms/Utils/SimplifyLibCalls.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Utils/SimplifyLibCalls.cpp": [
         [

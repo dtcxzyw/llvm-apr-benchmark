@@ -15,12 +15,6 @@
       "InstCombine",
       "ConstantFold"
     ],
-    "files": [
-      "llvm/lib/Analysis/InstructionSimplify.cpp",
-      "llvm/lib/IR/ConstantFold.cpp",
-      "llvm/lib/Transforms/InstCombine/InstCombineInternal.h",
-      "llvm/lib/Transforms/InstCombine/InstCombineMulDivRem.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/InstructionSimplify.cpp": [
         [

@@ -12,10 +12,6 @@
     "components": [
       "MemoryBuiltins"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/MemoryBuiltins.h",
-      "llvm/lib/Analysis/MemoryBuiltins.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/MemoryBuiltins.h": [
         [

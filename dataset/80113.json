@@ -12,9 +12,6 @@
     "components": [
       "BDCE"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/BDCE.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/BDCE.cpp": [
         [

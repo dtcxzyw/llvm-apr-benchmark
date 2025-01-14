@@ -12,9 +12,6 @@
     "components": [
       "LoopStrengthReduce"
     ],
-    "files": [
-      "llvm/lib/Transforms/Scalar/LoopStrengthReduce.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Scalar/LoopStrengthReduce.cpp": [
         [

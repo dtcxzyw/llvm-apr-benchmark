@@ -12,10 +12,6 @@
     "components": [
       "ValueTracking"
     ],
-    "files": [
-      "llvm/include/llvm/Analysis/SimplifyQuery.h",
-      "llvm/lib/Analysis/ValueTracking.cpp"
-    ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/SimplifyQuery.h": [
         [

@@ -47,8 +47,9 @@ for name in os.listdir(llvm_helper.dataset_dir):
                 components[component] = 1
             else:
                 components[component] += 1
-        changed_files_count.append(len(hints["files"]))
-        if len(hints["files"]) == 1:
+        changed_files = len(hints["bug_location_lineno"])
+        changed_files_count.append(changed_files)
+        if changed_files == 1:
             single_file_fix_count += 1
         issue = data["issue"]
         for label in issue["labels"]:
