@@ -67,14 +67,6 @@
       {
         "author": "alexey-bataev",
         "body": "> It appears that the actual problematic commit is the following:\r\n> \r\n> ```\r\n> commit 66775f8ccdcc8264ef349518e1c59d96d4227823\r\n> Author: Alexey Bataev <a.bataev@outlook.com>\r\n> Date:   Mon Oct 16 12:50:29 2023 -0700\r\n> \r\n>     [SLP]Fix PR69196: Instruction does not dominate all uses\r\n>     \r\n>     During emission of the postponed gathers, need to insert them before\r\n>     user instruction to avoid use before definition crash.\r\n> ```\r\n> \r\n> For compiler builds prior to this change, the test passes, and the correct code is generated as follows:\r\n> \r\n> ```\r\n> define void @a_(double %c__fetch.3) {\r\n> alloca_0:\r\n>   %0 = insertelement <2 x double> <double poison, double 0.000000e+00>, double %c__fetch.3, i32 0\r\n>   %1 = fmul <2 x double> zeroinitializer, %0\r\n>   %2 = shufflevector <2 x double> %0, <2 x double> <double 0.000000e+00, double poison>, <2 x i32> <i32 2, i32 0>\r\n>   %3 = fmul <2 x double> zeroinitializer, %2\r\n>   br label %loop.69\r\n> \r\n> loop.69:                                          ; preds = %loop.69, %alloca_0\r\n>   %t50.02 = phi double [ 0.000000e+00, %alloca_0 ], [ %9, %loop.69 ]\r\n>   %4 = phi <2 x double> [ zeroinitializer, %alloca_0 ], [ %11, %loop.69 ]\r\n>   %5 = fmul <2 x double> %4, %3\r\n>   %6 = extractelement <2 x double> %5, i32 0\r\n>   %7 = extractelement <2 x double> %5, i32 1\r\n>   %8 = fadd double %6, %7\r\n>   %9 = fadd double %8, %c__fetch.3\r\n>   %10 = fmul <2 x double> zeroinitializer, %1\r\n>   %11 = fadd <2 x double> zeroinitializer, %10\r\n>   br label %loop.69\r\n> }\r\n> ```\r\n> \r\n> Although the commit may seem quite old, there is a test case for which it causes incorrect code generation. Alexey, could you please revisit this change and address the code generation issue for the provided test case?\r\n\r\nThe actual problem is not in this commit, the fix is almost ready"
-      },
-      {
-        "author": "alexey-bataev",
-        "body": "/cherry-pick 4a0bbbcbcf6ebc87e794e7b86b9f4651bffcd806"
-      },
-      {
-        "author": "llvmbot",
-        "body": "<!--IGNORE-->\n>/cherry-pick 4a0bbbcbcf6ebc87e794e7b86b9f4651bffcd806\n\nError: Command failed due to missing milestone."
       }
     ]
   }

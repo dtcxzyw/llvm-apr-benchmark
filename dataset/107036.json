@@ -69,14 +69,6 @@
       {
         "author": "alexey-bataev",
         "body": "will fix it asap today"
-      },
-      {
-        "author": "DianQK",
-        "body": "/cherry-pick f381cd069965dabfeb277f30a4e532d7fd498f6e\r\n\r\nThanks for your quick fix!"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#107098"
       }
     ]
   }

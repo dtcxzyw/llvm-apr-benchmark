@@ -65,14 +65,6 @@
       {
         "author": "nikic",
         "body": "From a cursory look, the problem here is that the BECount of `loop2` depends on `%load`, and after peeling it should instead depend on a phi node, but instead still depends on `%load`. As the BECount does not dominate the loop, SCEV is invalid.\r\n\r\nThis issue sounds very familiar, we've fixed variants of this in the past."
-      },
-      {
-        "author": "nikic",
-        "body": "/cherry-pick 5bcc82d43388bb0daa122d5fe7ecda5eca27fc16"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#109624"
       }
     ]
   }

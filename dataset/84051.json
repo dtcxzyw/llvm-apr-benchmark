@@ -62,14 +62,6 @@
       {
         "author": "fhahn",
         "body": "Also reproduces with ASAn, looking now"
-      },
-      {
-        "author": "nikic",
-        "body": "/cherry-pick eb8f379567e8d014194faefe02ce92813e237afc"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#84946"
       }
     ]
   }

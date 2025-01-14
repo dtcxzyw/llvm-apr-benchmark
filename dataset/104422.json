@@ -58,10 +58,6 @@
       {
         "author": "nikic",
         "body": "This probably needs an LLVM 19 backport?\r\n\r\n/cherry-pick 65ac12d3c9877ecf5b97552364e7eead887d94eb 56140a8258a3498cfcd9f0f05c182457d43cbfd2"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#104747"
       }
     ]
   }

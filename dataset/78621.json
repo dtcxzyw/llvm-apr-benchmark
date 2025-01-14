@@ -120,14 +120,6 @@
       {
         "author": "nikic",
         "body": "> @fhahn I'm not familiar with how this pass works, so I have a question: will this pass still use min/max/etc. to infer facts about the arguments of those intrinsics? I'm just a bit confused by the terminology: I see that it adds \"constraints\" based on things like `icmp`, which on their own don't actually constrain anything unless you branch on the result (or do something similar).\r\n\r\nConstraints for icmps will only be added in branches that the icmp dominates (or code that an assume with an icmp dominates). The intrinsic handling was a bit special in that constraints are added unconditionally."
-      },
-      {
-        "author": "nikic",
-        "body": "/cherry-pick c83180c1248615cf6ea8842eb4e0cebebba4ab57 3d91d9613e294b242d853039209b40a0cb7853f2"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#80260"
       }
     ]
   }

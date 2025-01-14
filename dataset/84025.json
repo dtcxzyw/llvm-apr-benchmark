@@ -60,14 +60,6 @@
       {
         "author": "DianQK",
         "body": "> Looks like this bug is almost 11 years old: [feb3471](https://github.com/llvm/llvm-project/commit/feb34713d531d1f48c37116e8cab84814202d057)! Thanks for fixing\r\n\r\nBased on my experience, we likely have many more latent bugs. :)"
-      },
-      {
-        "author": "DianQK",
-        "body": "/cherry-pick e96c0c1d5e0a9916098b1a31acb006ea6c1108fb"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#84080"
       }
     ]
   }

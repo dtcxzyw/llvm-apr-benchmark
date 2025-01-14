@@ -90,10 +90,6 @@
       {
         "author": "yuxuanchen1997",
         "body": "The 3rd argument to `@llvm.coro.await.suspend` is the `await_suspend` function in C++. This happens when `await_suspend()` calls the same coroutine from its body. "
-      },
-      {
-        "author": "llvmbot",
-        "body": "\n@llvm/issue-subscribers-coroutines\n\nAuthor: Shoaib Meenai (smeenai)\n\n<details>\nFor the source file in https://gist.github.com/smeenai/fcd14380467e813a28f1ef8c5484b775 (reduced from a large example that uses libunifex; it's probably possible to reduce this further but I'm not at all familiar with coroutines), the following command succeeds with Clang 18 but fails with Clang 19 and trunk:\r\n\r\n```\r\n$ clang -c -o /dev/null coroutine_crash.cpp -std=c++20 -w\r\nclang: llvm/lib/Analysis/CGSCCPassManager.cpp:1167: LazyCallGraph::SCC &amp;updateCGAndAnalysisManagerForPass(llvm::LazyCallGraph &amp;, LazyCallGraph::SCC &amp;, LazyCallGraph::Node &amp;, llvm::CGSCCAnalysisManager &amp;, llvm::CGSCCUpdateResult &amp;, llvm::FunctionAnalysisManager &amp;, bool): Assertion `!UR.InvalidatedSCCs.count(C) &amp;&amp; \"Invalidated the current SCC!\"' failed.\r\n```\r\n\r\nI bisected this to #<!-- -->79712. CC @<!-- -->fpasserby, @<!-- -->ChuanqiXu9, and @<!-- -->yuxuanchen1997 \n</details>\n"
       }
     ]
   }

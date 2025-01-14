@@ -107,10 +107,6 @@
         "body": "Well, I guess the actual problem here is in LAA rather than LoopVectorize proper. Debug log:\r\n```\r\nLAA: Found a loop in test: loop\r\nLAA: Processing memory accesses...\r\n  AST: Alias Set Tracker: 2 alias sets for 2 pointer values.\r\n  AliasSet[0x8e36e00, 1] must alias, No access Memory locations: (ptr %cur.ptr, unknown before-or-after)\r\n  AliasSet[0x8e372b0, 1] must alias, No access Memory locations: (ptr %prev.ptr, unknown before-or-after)\r\n\r\nLAA:   Accesses(3):\r\n\t  %cur.ptr = getelementptr inbounds i8, ptr %arg.1, i64 %iv (write)\r\n\t  %prev.ptr = phi ptr [ %cur.ptr, %loop ], [ %arg, %preheader ] (read-only)\r\n\t  %cur.ptr = getelementptr inbounds i8, ptr %arg.1, i64 %iv (read)\r\nUnderlying objects for pointer   %cur.ptr = getelementptr inbounds i8, ptr %arg.1, i64 %iv\r\n  ptr %arg\r\nUnderlying objects for pointer   %cur.ptr = getelementptr inbounds i8, ptr %arg.1, i64 %iv\r\n  ptr %arg\r\nUnderlying objects for pointer   %prev.ptr = phi ptr [ %cur.ptr, %loop ], [ %arg, %preheader ]\r\n  ptr %arg\r\nLAA: May be able to perform a memory runtime check if needed.\r\nLAA: No unsafe dependent memory operations in loop.  We don't need runtime memory checks.\r\n```\r\n\r\nWhen constructing the AST we get the LocationSize to BeforeOrAfter, but we retain the AATags, which is generally not valid.\r\n\r\n@fhahn "
       },
       {
-        "author": "nikic",
-        "body": "/cherry-pick 543cf08636f3a3bb55dddba2e8cad787601647ba cd7ea4ea657ea41b42fcbd0e6b33faa46608d18e"
-      },
-      {
         "author": "github-actions[bot]",
         "body": "/pull-request llvm/llvm-project#79561"
       },

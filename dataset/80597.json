@@ -61,14 +61,6 @@
       {
         "author": "dtcxzyw",
         "body": "Reopen this issue to backport the fix to the 18.X release.\r\n"
-      },
-      {
-        "author": "tstellar",
-        "body": "/cherry-pick cb8d83a77c25e529f58eba17bb1ec76069a04e90"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#80731"
       }
     ]
   }

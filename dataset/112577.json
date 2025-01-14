@@ -58,22 +58,6 @@
       {
         "author": "AZero13",
         "body": "Do we plan on backporting this to 19.x @alexey-bataev "
-      },
-      {
-        "author": "alexey-bataev",
-        "body": "/cherry-pick 709abacdc350d63c61888607edb28ce272daa0a0"
-      },
-      {
-        "author": "llvmbot",
-        "body": "<!--IGNORE-->\nFailed to cherry-pick: 709abacdc350d63c61888607edb28ce272daa0a0\n\nhttps://github.com/llvm/llvm-project/actions/runs/11419324038\n\nPlease manually backport the fix and push it to your github fork.  Once this is done, please create a [pull request](https://github.com/llvm/llvm-project/compare)"
-      },
-      {
-        "author": "alexey-bataev",
-        "body": "/cherry-pick 825f9cb1b31aa91d23eba803003897490de74a20 709abacdc350d63c61888607edb28ce272daa0a0"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#113146"
       }
     ]
   }

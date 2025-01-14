@@ -68,14 +68,6 @@
       {
         "author": "DimitryAndric",
         "body": "This regressed with `llvmorg-19-init-02822-g`4db93e5d564 (\"[IndVars] Recompute flags if needed in widenIVUse of IV increment. (#82352)\") by @fhahn."
-      },
-      {
-        "author": "nikic",
-        "body": "/cherry-pick c9a5e1b665dbba898e9981fd7d48881947e6560e"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#106892"
       }
     ]
   }

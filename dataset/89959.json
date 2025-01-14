@@ -54,15 +54,6 @@
       "llvm:SCEV",
       "crash-on-valid"
     ],
-    "comments": [
-      {
-        "author": "nikic",
-        "body": "/cherry-pick 22da5a6e34ed6146752b24d9156a678b50fddaef"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#90182"
-      }
-    ]
+    "comments": []
   }
 }

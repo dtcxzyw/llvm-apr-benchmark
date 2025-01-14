@@ -302,14 +302,6 @@
       {
         "author": "RKSimon",
         "body": "Looks like foldShuffleToIdentity is attempting to fold the operand bundle on the fshl call"
-      },
-      {
-        "author": "davemgreen",
-        "body": "/cherry-pick c136d3237a3c6230cfe1ab3f0f6790f903c54a27"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#111796"
       }
     ]
   }

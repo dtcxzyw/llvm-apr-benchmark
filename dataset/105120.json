@@ -74,14 +74,6 @@
       {
         "author": "alexey-bataev",
         "body": "Yes"
-      },
-      {
-        "author": "alexey-bataev",
-        "body": "/cherry-pick e31252bf54dedadfe78b36d07ea6084156faa38a"
-      },
-      {
-        "author": "llvmbot",
-        "body": "<!--IGNORE-->\n>/cherry-pick e31252bf54dedadfe78b36d07ea6084156faa38a\n\nError: Command failed due to missing milestone."
       }
     ]
   }

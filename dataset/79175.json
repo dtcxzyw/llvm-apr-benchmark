@@ -128,14 +128,6 @@
         "body": "Somewhat reduced test case:\r\n```llvm\r\n; RUN: opt -S -passes=jump-threading < %s\r\n@f = external global i32\r\n\r\ndefine void @test(i64 %idx, i32 %val) {\r\nentry:\r\n  %cmp = icmp slt i64 %idx, 1\r\n  br i1 %cmp, label %for.body, label %return\r\n\r\nfor.body:\r\n  %f = load i32, ptr @f, align 4\r\n  %cmp1 = icmp eq i32 %f, 0\r\n  br i1 %cmp1, label %cond.end, label %cond.false\r\n\r\ncond.false:\r\n  br label %cond.end\r\n\r\ncond.end:\r\n  %phi = phi i32 [ %val, %cond.false ], [ 1, %for.body ]\r\n  %cmp.i = icmp sgt i32 %phi, 0\r\n  %sel = select i1 %cmp.i, i32 0, i32 %phi\r\n  %f.idx = getelementptr inbounds i32, ptr @f, i64 %idx\r\n  store i32 %sel, ptr %f.idx, align 4\r\n  %f.reload = load i32, ptr @f, align 4\r\n  %cmp3 = icmp slt i32 %f.reload, 1\r\n  br i1 %cmp3, label %return, label %return\r\n\r\nreturn:\r\n  ret void\r\n}\r\n```"
       },
       {
-        "author": "nikic",
-        "body": "/cherry-pick 89dae798cc77789a43e9a60173f647dae03a65fe 7143b451d71fe314730f7610d7908e3b9611815c 4f32f5d5720fbef06672714a62376f236a36aef5"
-      },
-      {
-        "author": "llvmbot",
-        "body": "/pull-request llvm/llvm-project#80274"
-      },
-      {
         "author": "EugeneZelenko",
         "body": "Not merged yet."
       },
