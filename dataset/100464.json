@@ -33,8 +33,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "LoopVectorizationCostModel::collectValuesToIgnore",
-        "requiresScalarEpilogue"
+        "LoopVectorizationCostModel::collectValuesToIgnore"
       ]
     }
   },

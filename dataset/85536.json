@@ -25,7 +25,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstructionCombining.cpp": [
-        "InstCombinerImpl::FoldOpIntoSelect",
         "foldOperationIntoSelectOperand"
       ]
     }

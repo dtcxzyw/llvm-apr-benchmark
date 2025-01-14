@@ -57,18 +57,15 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/InstructionSimplify.cpp": [
-        "simplifyDivRem",
-        "threadBinOpOverSelect"
+        "simplifyDivRem"
       ],
       "llvm/lib/IR/ConstantFold.cpp": [
         "llvm::ConstantFoldBinaryInstruction"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineMulDivRem.cpp": [
-        "simplifyIRemMulShl",
-        "simplifyValueKnownNonZero",
-        "foldIDivShl",
         "InstCombinerImpl::commonIDivTransforms",
-        "InstCombinerImpl::commonIRemTransforms"
+        "InstCombinerImpl::commonIRemTransforms",
+        "foldIDivShl"
       ]
     }
   },

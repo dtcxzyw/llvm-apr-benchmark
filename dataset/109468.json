@@ -39,20 +39,11 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "getMask",
-        "VPlan",
-        "VPCostContext",
-        "VPWidenMemoryRecipe",
-        "VPWidenLoadEVLRecipe",
-        "VPWidenStoreEVLRecipe"
-      ],
       "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
-        "VPWidenStoreEVLRecipe::print",
         "VPWidenLoadEVLRecipe::execute",
+        "VPWidenLoadEVLRecipe::print",
         "VPWidenStoreEVLRecipe::execute",
-        "VPWidenMemoryRecipe::computeCost",
-        "VPWidenLoadEVLRecipe::print"
+        "VPWidenStoreEVLRecipe::print"
       ]
     }
   },

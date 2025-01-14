@@ -29,11 +29,11 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
+        "VPlanTransforms::adjustFixedOrderRecurrences",
+        "VPlanTransforms::clearReductionWrapFlags",
         "collectUsersRecursively",
         "createScalarIVSteps",
-        "legalizeAndOptimizeInductions",
-        "VPlanTransforms::clearReductionWrapFlags",
-        "VPlanTransforms::adjustFixedOrderRecurrences"
+        "legalizeAndOptimizeInductions"
       ]
     }
   },

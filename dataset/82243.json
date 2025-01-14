@@ -55,19 +55,12 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h": [
-        "expand",
-        "SCEVExpander"
-      ],
       "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp": [
-        "SCEVExpander::hoistIVInc",
-        "LoopCompare"
+        "SCEVExpander::hoistIVInc"
       ],
       "llvm/lib/Transforms/Utils/SimplifyIndVar.cpp": [
-        "NarrowIVDefUse",
-        "WidenIV::widenIVUse",
         "WidenIV::createWideIV",
-        "WidenIV::widenWithVariantUse"
+        "WidenIV::widenIVUse"
       ]
     }
   },

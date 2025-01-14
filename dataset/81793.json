@@ -77,17 +77,16 @@
     "bug_location_funcname": {
       "llvm/lib/Analysis/ConstantFolding.cpp": [
         "FoldBitCast",
-        "llvm::ConstantFoldLoadThroughBitcast",
         "llvm::ConstantFoldLoadFromConstPtr",
         "llvm::ConstantFoldLoadFromUniformValue",
-        "llvm::IsConstantOffsetFromGlobal"
+        "llvm::ConstantFoldLoadThroughBitcast"
       ],
       "llvm/lib/Analysis/InstructionSimplify.cpp": [
         "llvm::simplifyLoadInst"
       ],
       "llvm/lib/Transforms/IPO/Attributor.cpp": [
-        "AA::isValidInScope",
-        "AA::getInitialValueForObj"
+        "AA::getInitialValueForObj",
+        "AA::isValidInScope"
       ],
       "llvm/lib/Transforms/IPO/GlobalOpt.cpp": [
         "CleanupConstantGlobalUsers"

@@ -39,12 +39,10 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/lib/Transforms/InstCombine/InstCombineInternal.h": [
-        "Negator"
-      ],
       "llvm/lib/Transforms/InstCombine/InstCombineNegator.cpp": [
+        "Negator::Negate",
         "Negator::Negator",
-        "Negator::getSortedOperandsOfBinOp",
+        "Negator::visitImpl",
         "Negator::~Negator"
       ]
     }

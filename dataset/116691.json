@@ -33,8 +33,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "hasFullVectorsOrPowerOf2",
-        "TreeEntry",
         "BoUpSLP::tryToVectorizeGatheredLoads"
       ]
     }

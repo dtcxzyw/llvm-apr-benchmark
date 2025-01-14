@@ -25,9 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineAndOrXor.cpp": [
-        "foldIsPowerOf2OrZero",
-        "InstCombinerImpl::foldAndOrOfICmps",
-        "foldAndOrOfICmpsWithConstEq"
+        "InstCombinerImpl::foldAndOrOfICmps"
       ]
     }
   },

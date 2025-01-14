@@ -39,17 +39,12 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/IR/CmpPredicate.h": [
-        "CmpPredicate"
-      ],
       "llvm/lib/IR/Instructions.cpp": [
         "CmpPredicate::getSwapped",
-        "CmpInst::getInversePredicate"
+        "llvm::hash_value"
       ],
       "llvm/lib/Transforms/Scalar/EarlyCSE.cpp": [
-        "getHashValueImpl",
-        "EarlyCSE",
-        "SimpleValue"
+        "getHashValueImpl"
       ]
     }
   },

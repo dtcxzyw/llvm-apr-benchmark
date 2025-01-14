@@ -29,11 +29,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/ConstraintElimination.cpp": [
-        "getConditionFact",
-        "FactOrCheck",
-        "State::addInfoForInductions",
-        "ConditionTy",
-        "isNe"
+        "State::addInfoForInductions"
       ]
     }
   },

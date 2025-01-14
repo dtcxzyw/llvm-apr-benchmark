@@ -29,8 +29,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
-        "VPFirstOrderRecurrencePHIRecipe::computeCost",
-        "VPFirstOrderRecurrencePHIRecipe::execute"
+        "VPFirstOrderRecurrencePHIRecipe::computeCost"
       ]
     }
   },

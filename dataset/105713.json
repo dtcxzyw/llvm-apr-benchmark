@@ -30,8 +30,6 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         "LoopVectorizationPlanner::computeBestVF",
-        "canTruncateToMinimalBitwidth",
-        "LoopVectorizationCostModel",
         "LoopVectorizationPlanner::cost"
       ]
     }

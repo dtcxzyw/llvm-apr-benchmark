@@ -33,9 +33,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/DFAJumpThreading.cpp": [
-        "SelectInstToUnfold",
-        "getInst",
-        "DFAJumpThreading"
+        "unfold"
       ]
     }
   },

@@ -33,8 +33,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/IPO/AttributorAttributes.cpp": [
-        "AAPointerInfoFloating::updateImpl",
-        "isUnassigned"
+        "AAPointerInfoFloating::updateImpl"
       ]
     }
   },

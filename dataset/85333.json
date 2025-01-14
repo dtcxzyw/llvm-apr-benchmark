@@ -25,8 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/GVNSink.cpp": [
-        "GVNSink::analyzeInstructionForSinking",
-        "LockstepReverseIterator"
+        "GVNSink::analyzeInstructionForSinking"
       ]
     }
   },

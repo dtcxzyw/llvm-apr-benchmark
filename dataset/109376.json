@@ -23,7 +23,11 @@
         ]
       ]
     },
-    "bug_location_funcname": {}
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "tryToReduce"
+      ]
+    }
   },
   "patch": "commit 3db0f8c895d4e814a18b754f9afbb1e03bd839a5\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Mon Sep 23 10:49:54 2024 -0700\n\n    [SLP]Update TrackedToOrig mappings after reduction vectorization\n    \n    Need to update mappings in TrackedToOrig to correctly provide mapping\n    between updated reduced value after vectorization and its original\n    value, otherwise the compiler might miss this update and it may cause\n    compiler crash later, when it tries to find the original instruction\n    mapping for the updated value.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/109376\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex a88702b81096..04b8fc09a724 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -18668,6 +18668,14 @@ public:\n         // Vectorize a tree.\n         Value *VectorizedRoot =\n             V.vectorizeTree(LocalExternallyUsedValues, InsertPt);\n+        // Update TrackedToOrig mapping, since the tracked values might be\n+        // updated.\n+        for (Value *RdxVal : Candidates) {\n+          Value *OrigVal = TrackedToOrig.at(RdxVal);\n+          Value *TransformedRdxVal = TrackedVals.at(OrigVal);\n+          if (TransformedRdxVal != RdxVal)\n+            TrackedToOrig.try_emplace(TransformedRdxVal, OrigVal);\n+        }\n \n         Builder.SetInsertPoint(InsertPt);\n \n",
   "tests": [

@@ -29,11 +29,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "getSameOpcode",
-        "newTreeEntry",
-        "getTreeEntry",
         "BoUpSLP::buildTree_rec",
-        "isGather",
         "BoUpSLP::collectValuesToDemote"
       ]
     }

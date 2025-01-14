@@ -25,11 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "adjustExtracts",
-        "getTreeEntry",
-        "ShuffleInstructionBuilder",
-        "castToScalarTyElem",
-        "BoUpSLP"
+        "castToScalarTyElem"
       ]
     }
   },

@@ -25,7 +25,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineAndOrXor.cpp": [
-        "visitMaskedMerge",
         "InstCombinerImpl::visitXor"
       ]
     }

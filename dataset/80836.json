@@ -41,9 +41,11 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "getCost",
         "Create",
-        "GeneratedRTChecks"
+        "GeneratedRTChecks",
+        "emitMemRuntimeChecks",
+        "emitSCEVChecks",
+        "getCost"
       ]
     }
   },

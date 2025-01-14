@@ -29,11 +29,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/Reassociate.cpp": [
-        "IncorporateWeight",
-        "LowerNegateToMultiply",
         "CarmichaelShift",
+        "IncorporateWeight",
         "LinearizeExprTree",
-        "isReassociableOp"
+        "LowerNegateToMultiply"
       ]
     }
   },

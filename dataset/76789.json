@@ -51,12 +51,9 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/Analysis/AliasAnalysis.h": [
-        "AliasResult",
-        "EarliestEscapeInfo"
-      ],
       "llvm/lib/Analysis/AliasAnalysis.cpp": [
-        "llvm::isEscapeSource"
+        "llvm::isEscapeSource",
+        "llvm::isNotVisibleOnUnwind"
       ],
       "llvm/lib/Analysis/BasicAliasAnalysis.cpp": [
         "BasicAAResult::aliasCheck",

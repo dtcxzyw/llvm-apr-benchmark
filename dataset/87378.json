@@ -10,7 +10,6 @@
   "hints": {
     "fix_commit": "6261c53c6f9c82bfca5df2ed5917876d748ed079",
     "components": [
-      "LoopVectorizationPlanner",
       "LoopVectorize"
     ],
     "files": [
@@ -45,18 +44,12 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorizationPlanner.h": [
-        "LoopVectorizationPlanner",
-        "createSelect",
-        "createInstruction",
         "createOr",
-        "tryInsertInstruction"
+        "createSelect"
       ],
       "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "WrapFlagsTy",
-        "VPSingleDefRecipe",
         "GEPFlagsTy",
         "VPInstruction",
-        "VPlan",
         "VPRecipeWithIRFlags"
       ]
     }

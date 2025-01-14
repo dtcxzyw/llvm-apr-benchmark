@@ -39,14 +39,10 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h": [
-        "SCEVExpander",
-        "expand"
-      ],
       "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp": [
-        "SCEVExpander::visitSignExtendExpr",
-        "SCEVExpander::visitUDivExpr",
-        "SCEVExpander::expandMinMaxExpr"
+        "SCEVExpander::expandMinMaxExpr",
+        "SCEVExpander::visitSMaxExpr",
+        "SCEVExpander::visitUDivExpr"
       ]
     }
   },

@@ -29,10 +29,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "TreeEntry",
-        "isGather",
-        "BoUpSLP::vectorizeTree",
-        "BoUpSLP::collectValuesToDemote"
+        "BoUpSLP::collectValuesToDemote",
+        "BoUpSLP::vectorizeTree"
       ]
     }
   },

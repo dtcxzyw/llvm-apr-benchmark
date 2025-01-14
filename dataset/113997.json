@@ -62,16 +62,14 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/GVN.cpp": [
-        "patchAndReplaceAllUsesWith",
-        "GVNPass::processInstruction",
         "GVNPass::performScalarPRE",
         "GVNPass::processAssumeIntrinsic",
-        "Expression"
+        "GVNPass::processInstruction",
+        "patchAndReplaceAllUsesWith"
       ],
       "llvm/lib/Transforms/Scalar/NewGVN.cpp": [
-        "patchAndReplaceAllUsesWith",
-        "NewGVN::findPHIOfOpsLeader",
-        "NewGVN::eliminateInstructions"
+        "NewGVN::eliminateInstructions",
+        "NewGVN::findPHIOfOpsLeader"
       ],
       "llvm/lib/Transforms/Utils/Local.cpp": [
         "llvm::patchReplacementInstruction"

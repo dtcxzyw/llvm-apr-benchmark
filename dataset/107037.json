@@ -49,11 +49,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "analyzedReductionRoot",
-        "createOp",
-        "isVectorized",
-        "emitScaleForReusedOps",
-        "allConstant"
+        "tryToReduce"
       ]
     }
   },

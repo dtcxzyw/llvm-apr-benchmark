@@ -33,7 +33,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineCompares.cpp": [
-        "transformToIndexedCompare",
         "InstCombinerImpl::foldGEPICmp"
       ]
     }

@@ -64,20 +64,17 @@
     "bug_location_funcname": {
       "llvm/include/llvm/Analysis/AliasAnalysis.h": [
         "AAQueryInfo",
-        "enableCrossIterationMode",
-        "AliasResult",
-        "AAResultBase",
-        "BatchAAResults"
+        "enableCrossIterationMode"
       ],
       "llvm/include/llvm/Analysis/BasicAliasAnalysis.h": [
         "BasicAAResult"
       ],
       "llvm/lib/Analysis/BasicAliasAnalysis.cpp": [
         "BasicAAResult::aliasCheck",
-        "isNotInCycle",
         "BasicAAResult::aliasGEP",
         "BasicAAResult::invalidate",
-        "BasicAAResult::isValueEqualInPotentialCycles"
+        "BasicAAResult::isValueEqualInPotentialCycles",
+        "BasicAAResult::subtractDecomposedGEPs"
       ],
       "llvm/lib/Transforms/Scalar/JumpThreading.cpp": [
         "JumpThreadingPass::simplifyPartiallyRedundantLoad"

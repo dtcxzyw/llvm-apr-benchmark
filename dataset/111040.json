@@ -25,9 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "setCallWideningDecision",
-        "LoopVectorizationCostModel::setVectorizedCallDecision",
-        "isUniformAfterVectorization"
+        "LoopVectorizationCostModel::setVectorizedCallDecision"
       ]
     }
   },

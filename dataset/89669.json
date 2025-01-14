@@ -41,11 +41,10 @@
     "bug_location_funcname": {
       "llvm/lib/Analysis/ValueTracking.cpp": [
         "llvm::isKnownNegation",
-        "matchMinMax",
-        "isKnownNonZero"
+        "matchMinMax"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineNegator.cpp": [
-        "Negator::getSortedOperandsOfBinOp"
+        "Negator::visitImpl"
       ]
     }
   },

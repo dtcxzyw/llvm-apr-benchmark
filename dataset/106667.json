@@ -45,20 +45,9 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "BoUpSLP::getOperandEntry",
-        "getTreeEntry",
-        "isOperandGatherNode",
-        "ShuffleInstructionBuilder",
-        "BoUpSLP::vectorizeOperand",
-        "doesNotNeedToBeScheduled",
-        "EdgeInfo",
-        "newTreeEntry",
-        "InstructionsState",
         "BoUpSLP::buildTree_rec",
-        "getSameOpcode",
-        "isGather",
-        "findLaneForValue",
-        "isSame"
+        "BoUpSLP::getOperandEntry",
+        "BoUpSLP::vectorizeOperand"
       ]
     }
   },

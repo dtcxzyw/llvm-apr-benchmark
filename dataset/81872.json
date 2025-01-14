@@ -10,8 +10,7 @@
   "hints": {
     "fix_commit": "6ef829941b38f7e8a28c4cba1ff25cd0ae9f7d3d",
     "components": [
-      "LoopVectorize",
-      "LoopVectorizationPlanner"
+      "LoopVectorize"
     ],
     "files": [
       "llvm/lib/Transforms/Vectorize/LoopVectorizationPlanner.h",
@@ -47,22 +46,14 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorizationPlanner.h": [
-        "setInsertPoint",
-        "createOverflowingOp",
         "VPBuilder",
-        "LoopVectorizationPlanner"
+        "clearInsertionPoint"
       ],
       "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "VPBasicBlock",
-        "dropPoisonGeneratingFlags",
-        "VPlan",
-        "getDebugLoc",
-        "VPRecipeBase",
-        "VPRecipeWithIRFlags",
-        "VPInstruction"
+        "hasNoSignedWrap"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanPatternMatch.h": [
-        "BinaryRecipe_match"
+        "m_Mul"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
         "VPlanTransforms::dropPoisonGeneratingRecipes"

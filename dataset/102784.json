@@ -65,8 +65,7 @@
     },
     "bug_location_funcname": {
       "llvm/include/llvm/Support/GenericDomTree.h": [
-        "DomTreeNodeBase",
-        "getNodeIndex"
+        "getNode"
       ],
       "llvm/lib/Analysis/TypeMetadataUtils.cpp": [
         "findCallsAtConstantOffset"
@@ -75,14 +74,11 @@
         "AlignmentFromAssumptionsPass::processAssumption"
       ],
       "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
-        "mergeLatch",
-        "isValid"
+        "fuseGuardedLoops",
+        "performFusion"
       ],
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "getValue",
-        "TreeEntry",
-        "BoUpSLP::collectUserStores",
-        "isValidElementType"
+        "BoUpSLP::collectUserStores"
       ]
     }
   },

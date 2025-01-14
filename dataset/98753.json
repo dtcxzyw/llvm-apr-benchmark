@@ -42,8 +42,8 @@
     "bug_location_funcname": {
       "llvm/lib/Analysis/InstructionSimplify.cpp": [
         "llvm::simplifyWithOpReplaced",
-        "simplifySelectWithICmpEq",
-        "simplifyAndOrWithICmpEq"
+        "simplifyAndOrWithICmpEq",
+        "simplifySelectWithICmpEq"
       ]
     }
   },

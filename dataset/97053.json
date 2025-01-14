@@ -33,9 +33,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineVectorOps.cpp": [
-        "getPreferredVectorIndex",
-        "InstCombinerImpl::visitExtractElementInst",
-        "cheapToScalarize"
+        "InstCombinerImpl::visitExtractElementInst"
       ]
     }
   },

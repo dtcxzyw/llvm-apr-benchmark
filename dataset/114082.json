@@ -25,10 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "ScheduleData",
-        "doesNotNeedToBeScheduled",
-        "isGather",
-        "isOneOf"
+        "BoUpSLP::getLastInstructionInBundle"
       ]
     }
   },

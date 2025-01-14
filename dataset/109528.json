@@ -25,7 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "VPRecipeBuilder::tryToWiden"
+        "VPRecipeBuilder::tryToWidenHistogram"
       ]
     }
   },

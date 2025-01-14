@@ -25,12 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "BaseShuffleAnalysis",
-        "getFullVectorNumberOfElements",
-        "getWidenedType",
-        "getShuffleCost",
-        "BoUpSLP",
-        "ShuffleCostEstimator"
+        "computeExtractCost"
       ]
     }
   },

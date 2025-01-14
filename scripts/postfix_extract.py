@@ -18,14 +18,11 @@ import requests
 import json
 import llvm_helper
 import sys
-import tree_sitter_cpp
-from tree_sitter import Language, Parser
+import funcname_loc
 from unidiff import PatchSet
 import re
 import subprocess
 
-CXX_LANGUAGE = Language(tree_sitter_cpp.language())
-cxx_parser = Parser(CXX_LANGUAGE)
 github_token = os.environ["LAB_GITHUB_TOKEN"]
 session = requests.Session()
 session.headers.update(
@@ -63,6 +60,7 @@ fix_commit_map = {
     "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
     "85568": None,  # Object bug
     "86280": None,  # Object bug
+    "88804": None,  # Duplicate of #88297
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
     "108618": None,  # Multi-commit fix
     "109581": None,  # Too many unrelated changes
@@ -167,55 +165,12 @@ for file in patchset:
 
 
 # Function level
-def traverse_tree(tree):
-    cursor = tree.walk()
-
-    reached_root = False
-    while reached_root == False:
-        yield cursor.node
-
-        if cursor.goto_first_child():
-            continue
-
-        if cursor.goto_next_sibling():
-            continue
-
-        retracing = True
-        while retracing:
-            if not cursor.goto_parent():
-                retracing = False
-                reached_root = True
-
-            if cursor.goto_next_sibling():
-                retracing = False
-
 
 bug_location_funcname = {}
 for file in patchset.modified_files:
     print(f"Parsing {file.path}")
     source_code = llvm_helper.git_execute(["show", f"{base_commit}:{file.path}"])
-    tree = cxx_parser.parse(bytes(source_code, "utf-8"))
-    modified_funcs = set()
-    for node in traverse_tree(tree):
-        if node.type == "function_definition":
-            func_name_node = node.children_by_field_name("declarator")[0]
-            while True:
-                decl = func_name_node.children_by_field_name("declarator")
-                if len(decl) == 0:
-                    break
-                func_name_node = decl[0]
-            func_name = func_name_node.text.decode("utf-8")
-            if func_name in patch and llvm_helper.is_interesting_funcname(func_name):
-                modified_funcs.add(func_name)
-    modified_funcs_valid = list()
-    for func in modified_funcs:
-        substr = False
-        for rhs in modified_funcs:
-            if func != rhs and func in rhs:
-                substr = True
-                break
-        if not substr:
-            modified_funcs_valid.append(func)
+    modified_funcs_valid = funcname_loc.get_funcname_loc(file, source_code)
     if len(modified_funcs_valid) != 0:
         bug_location_funcname[file.path] = list(modified_funcs_valid)
 

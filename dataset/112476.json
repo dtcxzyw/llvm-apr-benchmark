@@ -36,8 +36,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineCompares.cpp": [
-        "InstCombinerImpl::foldICmpAndShift",
-        "InstCombinerImpl::foldICmpAndConstConst"
+        "InstCombinerImpl::foldICmpAndConstConst",
+        "InstCombinerImpl::foldICmpAndShift"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
         "InstCombinerImpl::foldSelectEqualityTest"

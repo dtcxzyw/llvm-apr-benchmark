@@ -57,7 +57,9 @@ def infer_related_components(diff_files):
                     .removesuffix(".h")
                 )
                 if component_name != "":
-                    if component_name.startswith("VPlan"):
+                    if component_name.startswith("VPlan") or component_name.startswith(
+                        "LoopVectoriz"
+                    ):
                         component_name = "LoopVectorize"
                     if component_name.startswith("ScalarEvolution"):
                         component_name = "ScalarEvolution"
@@ -126,31 +128,3 @@ def is_valid_comment(comment):
     if comment["body"].startswith("/cherry-pick"):
         return False
     return True
-
-
-def is_interesting_funcname(name: str):
-    if name.startswith("m_"):
-        return False
-    if " " in name:
-        return False
-    if name in ["expand", "finalize"]:
-        return True
-    if name == name.lower():
-        return False
-    common_list = [
-        "getOperand",
-        "getNumElements",
-        "getParent",
-        "eraseInstruction",
-        "getNumOperands",
-        "getOperands",
-        "setOperand",
-        "getMemorySSA",
-        "getBitWidth",
-        "isSimple",
-        "getBlock",
-        "getType",
-        "getUse",
-        "getOpcode",
-    ]
-    return name not in common_list

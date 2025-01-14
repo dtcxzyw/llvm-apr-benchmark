@@ -29,7 +29,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VPRecipeBuilder.h": [
-        "VPRecipeBuilder"
+        "getVPValueOrAddLiveIn"
       ]
     }
   },

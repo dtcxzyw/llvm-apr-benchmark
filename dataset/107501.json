@@ -47,25 +47,15 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VPlan.cpp": [
-        "VPValue::replaceAllUsesWith",
-        "VPlanIngredient::print",
-        "hasConditionalTerminator",
         "VPBasicBlock::getEnclosingLoopRegion",
-        "VPBasicBlock::splitAt"
-      ],
-      "llvm/lib/Transforms/Vectorize/VPlan.h": [
-        "VPBasicBlock",
-        "VPRegionBlock",
-        "isReplicator",
-        "VPlanIngredient"
+        "VPBasicBlock::splitAt",
+        "VPValue::replaceAllUsesWith",
+        "hasConditionalTerminator"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanValue.h": [
-        "setUnderlyingValue",
-        "getUnderlyingValue",
-        "hasDefiningRecipe",
-        "VPValue",
-        "VPUser",
-        "isDefinedOutsideLoopRegions"
+        "getLiveInIRValue",
+        "isDefinedOutsideLoopRegions",
+        "setUnderlyingValue"
       ]
     }
   },

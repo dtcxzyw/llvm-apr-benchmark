@@ -25,7 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineNegator.cpp": [
-        "Negator::getSortedOperandsOfBinOp"
+        "Negator::visitImpl"
       ]
     }
   },

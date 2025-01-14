@@ -85,11 +85,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "ShuffleInstructionBuilder",
-        "isReverseOrder",
-        "BoUpSLP::vectorizeTree",
-        "getValue",
-        "getTreeEntry"
+        "BoUpSLP::vectorizeTree"
       ]
     }
   },

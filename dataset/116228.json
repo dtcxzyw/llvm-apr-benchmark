@@ -55,15 +55,13 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/Analysis/MemorySSAUpdater.h": [
-        "MemorySSAUpdater"
-      ],
       "llvm/lib/Analysis/MemorySSAUpdater.cpp": [
-        "MemorySSAUpdater::updateForClonedLoop",
-        "MemorySSAUpdater::updateForClonedBlockIntoPred",
         "MemorySSAUpdater::cloneUsesAndDefs",
-        "onlySingleValue",
-        "getNewDefiningAccessForClone"
+        "MemorySSAUpdater::privateUpdateExitBlocksForClonedLoop",
+        "MemorySSAUpdater::updateForClonedBlockIntoPred",
+        "MemorySSAUpdater::updateForClonedLoop",
+        "getNewDefiningAccessForClone",
+        "onlySingleValue"
       ]
     }
   },

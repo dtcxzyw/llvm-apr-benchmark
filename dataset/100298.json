@@ -60,19 +60,15 @@
     },
     "bug_location_funcname": {
       "llvm/include/llvm/Analysis/SimplifyQuery.h": [
-        "SimplifyQuery",
-        "CondContext",
-        "getWithInstruction"
+        "getWithCondContext"
       ],
       "llvm/lib/Analysis/ValueTracking.cpp": [
-        "isPowerOfTwoRecurrence",
-        "isKnownNonEqual",
         "ComputeNumSignBitsImpl",
-        "isNonEqualPHIs",
         "computeKnownBitsFromOperator",
-        "isKnownNonZeroFromOperator",
         "computeKnownFPClass",
-        "isKnownToBeAPowerOfTwo"
+        "isKnownNonZeroFromOperator",
+        "isKnownToBeAPowerOfTwo",
+        "isNonEqualPHIs"
       ]
     }
   },

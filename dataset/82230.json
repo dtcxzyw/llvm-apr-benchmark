@@ -29,11 +29,9 @@
     },
     "bug_location_funcname": {
       "llvm/lib/IR/AsmWriter.cpp": [
-        "incorporateFunction",
-        "getModuleFromDPI",
-        "SlotTracker",
         "DPValue::print",
-        "PrintCallingConv"
+        "PrintCallingConv",
+        "getModuleFromDPI"
       ]
     }
   },

@@ -25,10 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineVectorOps.cpp": [
-        "evaluateInDifferentElementOrder",
-        "InstCombinerImpl::visitShuffleVectorInst",
-        "canEvaluateShuffled",
-        "foldIdentityPaddedShuffles"
+        "InstCombinerImpl::visitShuffleVectorInst"
       ]
     }
   },

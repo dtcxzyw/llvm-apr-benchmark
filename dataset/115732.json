@@ -41,13 +41,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "isUndefVector",
-        "TreeEntry",
         "BoUpSLP::gather",
-        "createShuffle",
-        "createFreeze",
         "BoUpSLP::setInsertPointAfterBundle",
-        "buildUseMask"
+        "createFreeze",
+        "createShuffle"
       ]
     }
   },

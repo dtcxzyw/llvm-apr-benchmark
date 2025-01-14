@@ -29,8 +29,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VectorCombine.cpp": [
-        "VectorCombine::foldShuffleToIdentity",
-        "generateInstLaneVectorFromOperand"
+        "VectorCombine::foldShuffleToIdentity"
       ]
     }
   },

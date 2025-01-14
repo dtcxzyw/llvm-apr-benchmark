@@ -40,16 +40,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "getCost",
-        "LoopVectorizationCostModel::getGatherScatterCost",
-        "requiresScalarEpilogue",
-        "LoopVectorizationCostModel::getInterleaveGroupCost",
-        "isScalarEpilogueAllowed",
-        "getInterleavedAccessGroup"
+        "LoopVectorizationCostModel::getInterleaveGroupCost"
       ],
       "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
-        "VPInterleaveRecipe::computeCost",
-        "VPInterleaveRecipe::print"
+        "VPInterleaveRecipe::computeCost"
       ]
     }
   },

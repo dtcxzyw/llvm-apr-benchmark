@@ -46,13 +46,10 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Utils/SCCPSolver.cpp": [
         "SCCPInstVisitor::handleCallResult",
-        "getConstantRange",
-        "SCCPInstVisitor::visitBinaryOperator",
         "SCCPInstVisitor::handleExtractOfWithOverflow",
+        "SCCPInstVisitor::visitBinaryOperator",
         "SCCPInstVisitor::visitCastInst",
-        "getMaxWidenStepsOpts",
-        "markOverdefined",
-        "mergeInValue"
+        "getConstantRange"
       ]
     }
   },

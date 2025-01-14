@@ -29,9 +29,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Utils/Local.cpp": [
-        "llvm::TryToSimplifyUncondBranchFromEmptyBlock",
-        "CanPropagatePredecessorsForPHIs",
-        "CanRedirectPredsOfEmptyBBToSucc"
+        "CanRedirectPredsOfEmptyBBToSucc",
+        "llvm::TryToSimplifyUncondBranchFromEmptyBlock"
       ]
     }
   },

@@ -30,8 +30,7 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
         "InstCombinerImpl::foldSelectInstWithICmp",
-        "InstCombinerImpl::foldSelectValueEquivalence",
-        "foldSelectICmpEq"
+        "InstCombinerImpl::foldSelectValueEquivalence"
       ]
     }
   },

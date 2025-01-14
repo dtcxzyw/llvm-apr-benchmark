@@ -25,9 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "BoUpSLP::computeMinimumValueSizes",
-        "getMainOp",
-        "TreeEntry"
+        "BoUpSLP::computeMinimumValueSizes"
       ]
     }
   },

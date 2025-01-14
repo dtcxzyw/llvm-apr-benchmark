@@ -30,9 +30,7 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/IPO/AttributorAttributes.cpp": [
         "AANoCapture::isImpliedByIR",
-        "State",
-        "AANoCaptureImpl::updateImpl",
-        "indicatePessimisticFixpoint"
+        "AANoCaptureImpl::updateImpl"
       ]
     }
   },

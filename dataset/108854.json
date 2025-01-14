@@ -53,14 +53,11 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Utils/SimplifyCFG.cpp": [
-        "foldTwoEntryPHINode",
-        "dominatesMergePoint",
-        "isSafeToSpeculateStore",
-        "foldCondBranchOnValueKnownInPredecessor",
-        "addPredecessorToBlock",
-        "SimplifyCFGOpt::speculativelyExecuteBB",
         "SimplifyCFGOpt::simplifyOnce",
-        "computeSpeculationCost"
+        "SimplifyCFGOpt::speculativelyExecuteBB",
+        "computeSpeculationCost",
+        "dominatesMergePoint",
+        "foldTwoEntryPHINode"
       ]
     }
   },

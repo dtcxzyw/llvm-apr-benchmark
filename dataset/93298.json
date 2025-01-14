@@ -25,9 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp": [
-        "isOverwrite",
-        "getLocForWrite",
-        "DSEState"
+        "eliminateRedundantStoresOfExistingValues"
       ]
     }
   },

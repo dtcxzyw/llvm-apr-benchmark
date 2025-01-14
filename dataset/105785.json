@@ -25,9 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/ConstraintElimination.cpp": [
-        "checkAndReplaceCmp",
-        "ConstraintInfo",
-        "checkCondition"
+        "checkAndReplaceCmp"
       ]
     }
   },

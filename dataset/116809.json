@@ -39,11 +39,8 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/Analysis/MemorySSAUpdater.h": [
-        "MemorySSAUpdater"
-      ],
       "llvm/lib/Analysis/MemorySSAUpdater.cpp": [
-        "MemorySSAUpdater::changeToUnreachable",
+        "MemorySSAUpdater::createMemoryAccessBefore",
         "MemorySSAUpdater::createMemoryAccessInBB"
       ],
       "llvm/lib/Transforms/Scalar/LICM.cpp": [

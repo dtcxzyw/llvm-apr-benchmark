@@ -49,17 +49,9 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "EdgeInfo",
-        "inversePermutation",
-        "reorderScalars",
-        "getVectorFactor",
         "BoUpSLP::gather",
-        "isSplat",
-        "isUndefVector",
-        "TreeEntry",
         "BoUpSLP::processBuildVector",
-        "getWidenedType",
-        "buildUseMask"
+        "peekThroughShuffles"
       ]
     }
   },

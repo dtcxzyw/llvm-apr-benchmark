@@ -29,10 +29,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/ConstantFolding.cpp": [
-        "llvm::ConstantFoldFPInstOperands",
-        "llvm::FlushFPConstant",
+        "llvm::ConstantFoldBinaryOpOperands",
         "llvm::ConstantFoldCompareInstOperands",
-        "llvm::ConstantFoldBinaryOpOperands"
+        "llvm::ConstantFoldFPInstOperands",
+        "llvm::FlushFPConstant"
       ]
     }
   },

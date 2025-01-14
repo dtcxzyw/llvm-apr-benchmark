@@ -58,8 +58,8 @@
         "llvm::isSafeToSpeculativelyExecuteWithOpcode"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
-        "InstCombinerImpl::replaceInInstruction",
-        "InstCombinerImpl::foldSelectValueEquivalence"
+        "InstCombinerImpl::foldSelectValueEquivalence",
+        "InstCombinerImpl::replaceInInstruction"
       ]
     }
   },

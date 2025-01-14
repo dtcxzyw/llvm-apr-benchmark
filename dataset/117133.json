@@ -40,17 +40,11 @@
       ]
     },
     "bug_location_funcname": {
-      "llvm/include/llvm/Analysis/ScalarEvolution.h": [
-        "SCEV"
-      ],
       "llvm/lib/Analysis/ScalarEvolution.cpp": [
-        "SCEVShiftRewriter",
-        "ScalarEvolution::isGuaranteedNotToBePoison",
-        "impliesPoison",
-        "ScalarEvolution::isSCEVExprNeverPoison",
         "ScalarEvolution::createAddRecFromPHI",
-        "SCEVInitRewriter",
-        "ScalarEvolution::getSequentialMinMaxExpr"
+        "ScalarEvolution::getSequentialMinMaxExpr",
+        "ScalarEvolution::isGuaranteedNotToBePoison",
+        "ScalarEvolution::isSCEVExprNeverPoison"
       ]
     }
   },

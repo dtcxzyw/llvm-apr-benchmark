@@ -26,8 +26,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/MemoryDependenceAnalysis.cpp": [
-        "MemoryDependenceResults::getNonLocalPointerDepFromBB",
-        "RemoveFromReverseMap"
+        "MemoryDependenceResults::getNonLocalPointerDepFromBB"
       ]
     }
   },

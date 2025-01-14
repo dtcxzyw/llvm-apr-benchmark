@@ -57,8 +57,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "TreeEntry",
-        "BoUpSLP::vectorizeTree"
+        "BoUpSLP::vectorizeTree",
+        "tryToReduce"
       ]
     }
   },

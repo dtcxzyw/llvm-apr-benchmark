@@ -49,7 +49,6 @@
     "bug_location_funcname": {
       "llvm/lib/Analysis/LoopCacheAnalysis.cpp": [
         "CacheCost::computeLoopCacheCost",
-        "computeTripCount",
         "IndexedReference::computeRefCost",
         "IndexedReference::tryDelinearizeFixedSize"
       ]

@@ -30,7 +30,6 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         "LoopVectorizationCostModel::collectLoopUniforms",
-        "VPInterleaveRecipe::execute",
         "VPReplicateRecipe::execute"
       ]
     }

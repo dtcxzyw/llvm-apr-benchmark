@@ -25,9 +25,6 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/ConstraintElimination.cpp": [
-        "getCheck",
-        "FactOrCheck",
-        "getInstFact",
         "State::addInfoFor"
       ]
     }

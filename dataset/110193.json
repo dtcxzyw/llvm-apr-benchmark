@@ -25,10 +25,7 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "EdgeInfo",
-        "TreeEntry",
-        "BoUpSLP::getEntryCost",
-        "isGather"
+        "BoUpSLP::getEntryCost"
       ]
     }
   },
