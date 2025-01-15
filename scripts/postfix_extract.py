@@ -62,6 +62,7 @@ fix_commit_map = {
     "86280": None,  # Object bug
     "88804": None,  # Duplicate of #88297
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
+    "104718": None,  # Test change
     "108618": None,  # Multi-commit fix
     "109581": None,  # Too many unrelated changes
     "110819": None,  # Outdated issue

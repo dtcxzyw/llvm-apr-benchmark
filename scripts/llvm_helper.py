@@ -16,6 +16,8 @@
 import os
 import subprocess
 import re
+import tempfile
+from typing import List
 
 llvm_dir = os.environ["LAB_LLVM_DIR"]
 llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
@@ -128,3 +130,93 @@ def is_valid_comment(comment):
     if comment["body"].startswith("/cherry-pick"):
         return False
     return True
+
+
+def apply(patch: str):
+    try:
+        out = subprocess.check_output(
+            ["git", "-C", llvm_dir, "apply"],
+            cwd=llvm_dir,
+            stderr=subprocess.STDOUT,
+            input=patch.encode(),
+        ).decode("utf-8")
+        return (True, out)
+    except subprocess.CalledProcessError as e:
+        return (False, str(e) + "\n" + e.output)
+
+
+def alive2_check(src: bytes, tgt: bytes, additional_args: str):
+    try:
+        with tempfile.NamedTemporaryFile() as src_file:
+            with tempfile.NamedTemporaryFile() as tgt_file:
+                src_file.write(src)
+                tgt_file.write(tgt)
+                src_file.flush()
+                tgt_file.flush()
+
+                out = subprocess.check_output(
+                    [
+                        llvm_alive_tv,
+                        "--disable-undef-input",
+                        src_file.name,
+                        tgt_file.name,
+                    ]
+                    # + additional_args.strip().split(" "),
+                ).decode()
+                success = (
+                    "0 incorrect transformations" in out
+                    and "0 failed-to-prove transformations" in out
+                    and "0 Alive2 errors" in out
+                )
+                return (success, out)
+    except subprocess.CalledProcessError as e:
+        return (False, str(e) + "\n" + e.output.decode())
+
+
+def verify_dispatch(
+    repro: bool, input: str, args: str, type: str, additional_args: str
+):
+    args_list = (
+        args.replace("< %s", "-")
+        .replace("opt", os.path.join(llvm_build_dir, "bin/opt"))
+        .strip()
+        .split(" ")
+    )
+    try:
+        out = subprocess.check_output(
+            args_list, input=input.encode(), stderr=subprocess.STDOUT, timeout=1.0
+        )
+        if type == "miscompilation":
+            res, log = alive2_check(input.encode(), out, additional_args)
+            if repro == True:
+                res = not res
+            return (res, log)
+        return (True, out)
+    except subprocess.CalledProcessError as e:
+        return (repro and type == "crash", str(e) + "\n" + e.output.decode())
+    except subprocess.TimeoutExpired as e:
+        return (repro and type == "hang", "opt hang\n" + e.output.decode())
+
+
+def verify(
+    repro: bool, input: str, opt_args: List[str], type: str, additional_args: List[str]
+):
+    for args in opt_args:
+        res, log = verify_dispatch(repro, input, args, type, additional_args)
+        if not res:
+            return (False, args, log)
+    return (True, "", "")
+
+
+def verify_test_group(repro: bool, input, type: str):
+    for test in input:
+        file = test["file"]
+        commands = test["commands"]
+        tests = test["tests"]
+        for subtest in tests:
+            name = subtest["test_name"]
+            body = subtest["test_body"]
+            res, arg, log = verify(repro, body, commands, type, "")
+            if not res:
+                return (False, file + "\n" + name + "\n" + arg + "\n" + log)
+    return (True, "")

@@ -97,5 +97,6 @@
         "body": "Reduced testcase: https://alive2.llvm.org/ce/z/9fExrA\r\n```\r\n; bin/opt -passes=instcombine test.ll -S\r\ndefine i16 @src() {\r\nentry:\r\n  br label %for.inc\r\n\r\nfor.inc:\r\n  %storemerge6 = phi i32 [ -15, %entry ], [ %conv1, %for.inc ]\r\n  %add.i = add nsw i32 %storemerge6, 9\r\n  %conv1 = and i32 %add.i, 65535\r\n  %cmp = icmp ugt i32 %conv1, 5\r\n  br i1 %cmp, label %for.inc, label %for.end\r\n\r\nfor.end:\r\n  %conv2 = trunc nuw nsw i32 %conv1 to i16\r\n  %cmp3.i = icmp ugt i32 %conv1, 3\r\n  %0 = shl nuw i16 %conv2, 14\r\n  %cond.in.i = select i1 %cmp3.i, i16 %conv2, i16 %0\r\n  ret i16 %cond.in.i\r\n}\r\n```"
       }
     ]
-  }
+  },
+  "verified": true
 }

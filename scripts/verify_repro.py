@@ -23,7 +23,8 @@ max_build_jobs = 8
 
 
 def verify_issue(issue):
-    with open(os.path.join(llvm_helper.dataset_dir, issue)) as f:
+    path = os.path.join(llvm_helper.dataset_dir, issue)
+    with open(path) as f:
         data = json.load(f)
     if data.get("verified", False):
         return
@@ -34,6 +35,28 @@ def verify_issue(issue):
     if not res:
         print(log)
         return
+    bug_type = data["bug_type"]
+    res, log = llvm_helper.verify_test_group(
+        repro=True, input=data["tests"], type=bug_type
+    )
+    if not res:
+        print(log)
+        return
+    llvm_helper.apply(data["patch"])
+    res, log = llvm_helper.build(max_build_jobs)
+    if not res:
+        print(log)
+        return
+    res, log = llvm_helper.verify_test_group(
+        repro=False, input=data["tests"], type=bug_type
+    )
+    if not res:
+        print(log)
+        return
+    data["verified"] = True
+
+    with open(path, "w") as f:
+        json.dump(data, f, indent=2)
 
 
 task_list = []
