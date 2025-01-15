@@ -179,22 +179,51 @@ def alive2_check(src: bytes, tgt: bytes, additional_args: str):
         return (False, str(e) + "\n" + decode_output(e.output))
 
 
+def lli_check(tgt: bytes, expected_out: str):
+    try:
+        out = subprocess.check_output(
+            [os.path.join(llvm_build_dir, "bin/lli")],
+            input=tgt,
+            timeout=1.0,
+            stderr=subprocess.STDOUT,
+        ).decode()
+        if out == expected_out:
+            return (True, "success")
+        return (False, f"Expected '{expected_out}', but got '{out}'")
+    except subprocess.CalledProcessError as e:
+        return (False, str(e) + "\n" + decode_output(e.output))
+    except subprocess.TimeoutExpired as e:
+        return (False, str(e) + "\n" + decode_output(e.output))
+
+
 def verify_dispatch(
-    repro: bool, input: str, args: str, type: str, additional_args: str
+    repro: bool,
+    input: str,
+    args: str,
+    type: str,
+    additional_args: str,
+    lli_expected_out: str,
 ):
-    args_list = list(filter(lambda x: x != '',
-        args.replace("<", "")
-        .replace("%s", "-")
-        .replace("2>&1", "")
-        .replace("opt", os.path.join(llvm_build_dir, "bin/opt"))
-        .strip()
-        .split(" ")))
+    args_list = list(
+        filter(
+            lambda x: x != "",
+            args.replace("<", "")
+            .replace("%s", "-")
+            .replace("2>&1", "")
+            .replace("opt", os.path.join(llvm_build_dir, "bin/opt"))
+            .strip()
+            .split(" "),
+        )
+    )
     try:
         out = subprocess.check_output(
             args_list, input=input.encode(), stderr=subprocess.STDOUT, timeout=1.0
         )
         if type == "miscompilation":
-            res, log = alive2_check(input.encode(), out, additional_args)
+            if lli_expected_out is not None:
+                res, log = lli_check(out, lli_expected_out)
+            else:
+                res, log = alive2_check(input.encode(), out, additional_args)
             if repro == True:
                 res = not res
             return (res, log)
@@ -216,7 +245,9 @@ def verify_test_group(repro: bool, input, type: str):
             name = subtest["test_name"]
             body = subtest["test_body"]
             for args in commands:
-                res, log = verify_dispatch(repro, body, args, type, "")
+                res, log = verify_dispatch(
+                    repro, body, args, type, "", subtest.get("lli_expected_out")
+                )
                 test_res.append(
                     {
                         "file": file,
@@ -236,7 +267,7 @@ def verify_test_group(repro: bool, input, type: str):
 
 def verify_lit(test_commit, dirs, max_test_jobs):
     try:
-        git_execute(['checkout', test_commit, 'llvm/test'])
+        git_execute(["checkout", test_commit, "llvm/test"])
         test_dirs = [os.path.join(llvm_dir, x) for x in dirs]
         # NOTE: llvm-lit requires psutil
         out = subprocess.check_output(
@@ -250,7 +281,8 @@ def verify_lit(test_commit, dirs, max_test_jobs):
                 "--order",
                 "lexical",
                 "-s",
-            ] + test_dirs,
+            ]
+            + test_dirs,
             stderr=subprocess.STDOUT,
             timeout=300.0,
         ).decode()
