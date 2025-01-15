@@ -19,7 +19,6 @@ import llvm_helper
 import json
 
 max_build_jobs = os.cpu_count()
-max_build_jobs = 8
 
 
 def verify_issue(issue):
@@ -31,27 +30,33 @@ def verify_issue(issue):
     print(data["issue"]["title"])
     base_commit = data["base_commit"]
     llvm_helper.reset(base_commit)
+    print("Stage 1 build")
     res, log = llvm_helper.build(max_build_jobs)
     if not res:
         print(log)
         return
     bug_type = data["bug_type"]
+    print("Stage 1 verify")
     res, log = llvm_helper.verify_test_group(
         repro=True, input=data["tests"], type=bug_type
     )
     if not res:
-        print(log)
+        print("Failed to repro")
+        print(json.dumps(log, indent=2))
         return
     llvm_helper.apply(data["patch"])
+    print("Stage 2 build")
     res, log = llvm_helper.build(max_build_jobs)
     if not res:
         print(log)
         return
+    print("Stage 2 verify")
     res, log = llvm_helper.verify_test_group(
         repro=False, input=data["tests"], type=bug_type
     )
     if not res:
-        print(log)
+        print("Failed to fix")
+        print(json.dumps(llvm_helper.get_first_failed_test(log), indent=2))
         return
     data["verified"] = True
 

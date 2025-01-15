@@ -34,7 +34,7 @@ session.headers.update(
 )
 
 issue_id_begin = 76663  # Since 2024-01-01
-issue_id_end = 122733
+issue_id_end = 123006
 
 
 def wait(progress):
@@ -106,12 +106,15 @@ def fetch(issue_id):
     if not is_llvm_middleend:
         return False
 
-    out = subprocess.check_output(
-        ["python3", postfix_extract, str(issue_id)], stderr=subprocess.DEVNULL
-    ).decode()
-    if "This issue is marked as invalid" in out:
-        return False
-    return True
+    try:
+        out = subprocess.check_output(
+            ["python3", postfix_extract, str(issue_id)], stderr=subprocess.DEVNULL
+        ).decode()
+        if "This issue is marked as invalid" in out:
+            return False
+        return True
+    except subprocess.CalledProcessError:
+        return True
 
 
 os.makedirs(cache_dir, exist_ok=True)

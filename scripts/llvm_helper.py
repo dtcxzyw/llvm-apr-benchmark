@@ -100,8 +100,8 @@ def build(max_build_jobs: int):
                 llvm_dir + "/llvm",
                 "-G",
                 "Ninja",
+                "-DBUILD_SHARED_LIBS=ON",
                 "-DCMAKE_BUILD_TYPE=RelWithDebInfo",
-                "-DCMAKE_BUILD_SHARED_LIBS=ON",
                 "-DCMAKE_C_COMPILER_LAUNCHER=ccache",
                 "-DCMAKE_CXX_COMPILER_LAUNCHER=ccache",
                 "-DLLVM_ENABLE_ASSERTIONS=ON",
@@ -178,6 +178,8 @@ def verify_dispatch(
 ):
     args_list = (
         args.replace("< %s", "-")
+        .replace("%s", "-")
+        .replace("2>&1", "")
         .replace("opt", os.path.join(llvm_build_dir, "bin/opt"))
         .strip()
         .split(" ")
@@ -191,24 +193,16 @@ def verify_dispatch(
             if repro == True:
                 res = not res
             return (res, log)
-        return (True, out)
+        return (not repro, "success")
     except subprocess.CalledProcessError as e:
         return (repro and type == "crash", str(e) + "\n" + e.output.decode())
     except subprocess.TimeoutExpired as e:
         return (repro and type == "hang", "opt hang\n" + e.output.decode())
 
 
-def verify(
-    repro: bool, input: str, opt_args: List[str], type: str, additional_args: List[str]
-):
-    for args in opt_args:
-        res, log = verify_dispatch(repro, input, args, type, additional_args)
-        if not res:
-            return (False, args, log)
-    return (True, "", "")
-
-
 def verify_test_group(repro: bool, input, type: str):
+    test_res = []
+    overall_test_res = not repro
     for test in input:
         file = test["file"]
         commands = test["commands"]
@@ -216,7 +210,27 @@ def verify_test_group(repro: bool, input, type: str):
         for subtest in tests:
             name = subtest["test_name"]
             body = subtest["test_body"]
-            res, arg, log = verify(repro, body, commands, type, "")
-            if not res:
-                return (False, file + "\n" + name + "\n" + arg + "\n" + log)
-    return (True, "")
+            for args in commands:
+                res, log = verify_dispatch(repro, body, args, type, "")
+                test_res.append(
+                    {
+                        "file": file,
+                        "args": args,
+                        "name": name,
+                        "body": body,
+                        "result": res,
+                        "log": log,
+                    }
+                )
+                if repro:
+                    overall_test_res = overall_test_res or res
+                else:
+                    overall_test_res = overall_test_res and res
+    return (overall_test_res, test_res)
+
+
+def get_first_failed_test(test_result):
+    for res in test_result:
+        if not res["result"]:
+            return res
+    return None

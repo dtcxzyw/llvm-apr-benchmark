@@ -67,6 +67,7 @@ fix_commit_map = {
     "109581": None,  # Too many unrelated changes
     "110819": None,  # Outdated issue
     "112633": None,  # Multi-commit fix
+    "122166": None,  # Duplicate of #117308
 }
 
 

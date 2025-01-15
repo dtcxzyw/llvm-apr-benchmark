@@ -55,7 +55,7 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/RISCV/riscv-vector-reverse.ll",
       "commands": [
-        "-riscv-v-vector-bits-min=128 -disable-output < %s 2>&1"
+        "opt -passes=loop-vectorize,dce,instcombine -mtriple riscv64-linux-gnu -mattr=+v -debug-only=loop-vectorize -scalable-vectorization=on -riscv-v-vector-bits-min=128 -disable-output < %s 2>&1"
       ],
       "tests": [
         {
@@ -83,5 +83,6 @@
         "body": "@patrick-rivos thanks for the report. I think it would be best to keep filing separate issues, as the underlying issues usually are different. Although the fuzzers may generate many instances of the same issue as was the case for https://github.com/llvm/llvm-project/issues/99701. Not sure if there's an easy way to catch that other than waiting for a day or so after filing the first issue."
       }
     ]
-  }
+  },
+  "verified": true
 }
