@@ -58,6 +58,12 @@ def verify_issue(issue):
         print("Failed to fix")
         print(json.dumps(llvm_helper.get_first_failed_test(log), indent=2))
         return
+    print("Stage 2 lit check")
+    res, log = llvm_helper.verify_lit(test_commit=data["hints"]["fix_commit"], dirs=data["lit_test_dir"], max_test_jobs=max_build_jobs)
+    if not res:
+        print("Lit check failure")
+        print(log)
+        return
     data["verified"] = True
 
     with open(path, "w") as f:
@@ -75,4 +81,8 @@ task_list.sort()
 
 for idx, task in enumerate(task_list):
     print("Verifying", idx + 1, task.removesuffix(".json"))
-    verify_issue(task)
+    try:
+        verify_issue(task)
+    except Exception as e:
+        # print(e)
+        pass

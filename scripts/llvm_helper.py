@@ -17,7 +17,6 @@ import os
 import subprocess
 import re
 import tempfile
-from typing import List
 
 llvm_dir = os.environ["LAB_LLVM_DIR"]
 llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
@@ -89,6 +88,12 @@ def get_langref_desc(keywords, commit):
     return desc
 
 
+def decode_output(output):
+    if output is None:
+        return ""
+    return output.decode()
+
+
 def build(max_build_jobs: int):
     os.makedirs(llvm_build_dir, exist_ok=True)
     log = ""
@@ -110,18 +115,19 @@ def build(max_build_jobs: int):
                 "-DLLVM_APPEND_VC_REV=OFF",
                 "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon'",
                 "-DLLVM_PARALLEL_LINK_JOBS=4",
+                "-DLLVM_INCLUDE_EXAMPLES=OFF",
             ],
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
         ).decode()
         log += subprocess.check_output(
-            ["cmake", "--build", ".", "-j", str(max_build_jobs), "-t", "opt"],
+            ["cmake", "--build", ".", "-j", str(max_build_jobs)],
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
         ).decode()
         return (True, log)
     except subprocess.CalledProcessError as e:
-        return (False, log + "\n" + e.output.decode())
+        return (False, log + "\n" + decode_output(e.output))
 
 
 def is_valid_comment(comment):
@@ -142,7 +148,7 @@ def apply(patch: str):
         ).decode("utf-8")
         return (True, out)
     except subprocess.CalledProcessError as e:
-        return (False, str(e) + "\n" + e.output)
+        return (False, str(e) + "\n" + decode_output(e.output))
 
 
 def alive2_check(src: bytes, tgt: bytes, additional_args: str):
@@ -170,20 +176,19 @@ def alive2_check(src: bytes, tgt: bytes, additional_args: str):
                 )
                 return (success, out)
     except subprocess.CalledProcessError as e:
-        return (False, str(e) + "\n" + e.output.decode())
+        return (False, str(e) + "\n" + decode_output(e.output))
 
 
 def verify_dispatch(
     repro: bool, input: str, args: str, type: str, additional_args: str
 ):
-    args_list = (
-        args.replace("< %s", "-")
+    args_list = list(filter(lambda x: x != '',
+        args.replace("<", "")
         .replace("%s", "-")
         .replace("2>&1", "")
         .replace("opt", os.path.join(llvm_build_dir, "bin/opt"))
         .strip()
-        .split(" ")
-    )
+        .split(" ")))
     try:
         out = subprocess.check_output(
             args_list, input=input.encode(), stderr=subprocess.STDOUT, timeout=1.0
@@ -195,9 +200,9 @@ def verify_dispatch(
             return (res, log)
         return (not repro, "success")
     except subprocess.CalledProcessError as e:
-        return (repro and type == "crash", str(e) + "\n" + e.output.decode())
+        return (repro and type == "crash", str(e) + "\n" + decode_output(e.output))
     except subprocess.TimeoutExpired as e:
-        return (repro and type == "hang", "opt hang\n" + e.output.decode())
+        return (repro and type == "hang", str(e) + "\n" + decode_output(e.output))
 
 
 def verify_test_group(repro: bool, input, type: str):
@@ -227,6 +232,33 @@ def verify_test_group(repro: bool, input, type: str):
                 else:
                     overall_test_res = overall_test_res and res
     return (overall_test_res, test_res)
+
+
+def verify_lit(test_commit, dirs, max_test_jobs):
+    try:
+        git_execute(['checkout', test_commit, 'llvm/test'])
+        test_dirs = [os.path.join(llvm_dir, x) for x in dirs]
+        # NOTE: llvm-lit requires psutil
+        out = subprocess.check_output(
+            [
+                os.path.join(llvm_build_dir, "bin/llvm-lit"),
+                "--no-progress-bar",
+                "-j",
+                str(max_test_jobs),
+                "--max-failures",
+                "1",
+                "--order",
+                "lexical",
+                "-s",
+            ] + test_dirs,
+            stderr=subprocess.STDOUT,
+            timeout=300.0,
+        ).decode()
+        return (True, out)
+    except subprocess.CalledProcessError as e:
+        return (False, str(e) + "\n" + decode_output(e.output))
+    except subprocess.TimeoutExpired as e:
+        return (False, str(e) + "\n" + decode_output(e.output))
 
 
 def get_first_failed_test(test_result):

@@ -59,5 +59,6 @@
         "body": "> @alexey-bataev Hi, is there a way to backport this fix for llvm 19, I tried just cherry picking [f70f122](https://github.com/llvm/llvm-project/commit/f70f1228035c9610de38e0e376afdacb647c4ad9) but I ended up getting assertion failures of the form `/workspace/srcdir/llvm-project/llvm/lib/IR/Instruction.cpp:321: bool llvm::Instruction::comesBefore(const llvm::Instruction*) const: Assertion 'getParent() == Other->getParent() && \"cross-BB instruction order comparison\"' failed.'`. I can create an IR reproducer for that failure if need be. Thank you.\r\n> \r\n> EDIT: Would just adding a check that they're in the same basic block work?\r\n\r\nYes, check for the same parent should fix it"
       }
     ]
-  }
+  },
+  "verified": true
 }
