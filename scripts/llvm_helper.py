@@ -108,7 +108,7 @@ def build(max_build_jobs: int):
                 "-DLLVM_ABI_BREAKING_CHECKS=WITH_ASSERTS",
                 "-DLLVM_ENABLE_WARNINGS=OFF",
                 "-DLLVM_APPEND_VC_REV=OFF",
-                "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ'",
+                "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon'",
                 "-DLLVM_PARALLEL_LINK_JOBS=4",
             ],
             stderr=subprocess.STDOUT,

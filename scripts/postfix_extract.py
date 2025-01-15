@@ -187,6 +187,7 @@ def remove_target_suffix(path):
         "LoongArch",
         "AMDGPU",
         "SystemZ",
+        "Hexagon",
     ]
     for target in targets:
         path = path.removesuffix("/" + target)
@@ -245,7 +246,8 @@ for file in test_patchset:
             )
         except Exception:
             pass
-    tests.append({"file": file.path, "commands": commands, "tests": subtests})
+    if len(subtests) != 0:
+        tests.append({"file": file.path, "commands": commands, "tests": subtests})
 
 # Extract full issue context
 issue_comments = []
