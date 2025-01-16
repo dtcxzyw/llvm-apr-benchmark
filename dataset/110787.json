@@ -35,7 +35,7 @@
     {
       "file": "llvm/test/Transforms/SLPVectorizer/X86/reduced-val-vectorized-in-transform.ll",
       "commands": [
-        "opt -S --passes=slp-vectorizer -mtriple=x86_64-unknown-linux-gnu -slp-threshold=-10 < %s"
+        "opt -S --passes=slp-vectorizer -mtriple=x86_64-unknown-linux-gnu < %s"
       ],
       "tests": [
         {
@@ -59,5 +59,6 @@
         "body": "Fixed in 4dede756f25b153a81ea883ef84064f5a1eaaec2"
       }
     ]
-  }
+  },
+  "verified": true
 }

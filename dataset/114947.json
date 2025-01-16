@@ -42,36 +42,24 @@
       ],
       "tests": [
         {
-          "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_denormal_undef",
-          "test_body": "define i1 @no_fold_fcmp_denormal_double_ieee_dynamic_denormal_undef() #0 {\n  %cmp = fcmp une double 0x8000000000000, undef\n  ret i1 %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
-        },
-        {
-          "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat",
-          "test_body": "define <2 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat() #0 {\n  %cmp = fcmp une <2 x double> <double 2.000000e+00, double 4.000000e+00>, <double 2.000000e+00, double 8.000000e+00>\n  ret <2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
-        },
-        {
-          "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_scalable_vector_splat",
-          "test_body": "define <vscale x 2 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_scalable_vector_splat() #0 {\n  %cmp = fcmp une <vscale x 2 x double> splat (double 2.000000e+00), zeroinitializer\n  ret <vscale x 2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
-        },
-        {
           "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_vector_nonsplat",
           "test_body": "define <2 x i1> @no_fold_fcmp_denormal_double_ieee_dynamic_vector_nonsplat() #0 {\n  %cmp = fcmp une <2 x double> <double 0x8000000000000, double 1.000000e+00>, zeroinitializer\n  ret <2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         },
         {
-          "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_denormal_poison",
-          "test_body": "define i1 @no_fold_fcmp_denormal_double_ieee_dynamic_denormal_poison() #0 {\n  %cmp = fcmp une double 0x8000000000000, poison\n  ret i1 %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
+          "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat_undef",
+          "test_body": "define <3 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat_undef() #0 {\n  %cmp = fcmp une <3 x double> <double 2.000000e+00, double undef, double 4.000000e+00>, <double 1.000000e+00, double undef, double 4.000000e+00>\n  ret <3 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         },
         {
           "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_scalaable_vector_splat",
           "test_body": "define <vscale x 2 x i1> @no_fold_fcmp_denormal_double_ieee_dynamic_scalaable_vector_splat() #0 {\n  %cmp = fcmp une <vscale x 2 x double> splat (double 0x8000000000000), zeroinitializer\n  ret <vscale x 2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         },
         {
-          "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_vector_splat",
-          "test_body": "define <2 x i1> @no_fold_fcmp_denormal_double_ieee_dynamic_vector_splat() #0 {\n  %cmp = fcmp une <2 x double> splat (double 0x8000000000000), zeroinitializer\n  ret <2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
+          "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_denormal_undef",
+          "test_body": "define i1 @no_fold_fcmp_denormal_double_ieee_dynamic_denormal_undef() #0 {\n  %cmp = fcmp une double 0x8000000000000, undef\n  ret i1 %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         },
         {
-          "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat_undef",
-          "test_body": "define <3 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat_undef() #0 {\n  %cmp = fcmp une <3 x double> <double 2.000000e+00, double undef, double 4.000000e+00>, <double 1.000000e+00, double undef, double 4.000000e+00>\n  ret <3 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
+          "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat",
+          "test_body": "define <2 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_vector_nonsplat() #0 {\n  %cmp = fcmp une <2 x double> <double 2.000000e+00, double 4.000000e+00>, <double 2.000000e+00, double 8.000000e+00>\n  ret <2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         },
         {
           "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_vector_splat",
@@ -86,8 +74,20 @@
           "test_body": "define <2 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_zero() #0 {\n  %cmp = fcmp une <2 x double> zeroinitializer, zeroinitializer\n  ret <2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         },
         {
+          "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_denormal_poison",
+          "test_body": "define i1 @no_fold_fcmp_denormal_double_ieee_dynamic_denormal_poison() #0 {\n  %cmp = fcmp une double 0x8000000000000, poison\n  ret i1 %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
+        },
+        {
+          "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic_vector_splat",
+          "test_body": "define <2 x i1> @no_fold_fcmp_denormal_double_ieee_dynamic_vector_splat() #0 {\n  %cmp = fcmp une <2 x double> splat (double 0x8000000000000), zeroinitializer\n  ret <2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
+        },
+        {
           "test_name": "no_fold_fcmp_denormal_double_ieee_dynamic",
           "test_body": "define i1 @no_fold_fcmp_denormal_double_ieee_dynamic() #0 {\n  %cmp = fcmp une double 0x8000000000000, 0.000000e+00\n  ret i1 %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
+        },
+        {
+          "test_name": "fold_fcmp_nondenormal_double_ieee_dynamic_scalable_vector_splat",
+          "test_body": "define <vscale x 2 x i1> @fold_fcmp_nondenormal_double_ieee_dynamic_scalable_vector_splat() #0 {\n  %cmp = fcmp une <vscale x 2 x double> splat (double 2.000000e+00), zeroinitializer\n  ret <vscale x 2 x i1> %cmp\n}\n\nattributes #0 = { \"denormal-fp-math\"=\"ieee,dynamic\" }\n"
         }
       ]
     }

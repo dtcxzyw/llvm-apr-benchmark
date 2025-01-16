@@ -3,6 +3,7 @@
   "issue_url": "https://github.com/llvm/llvm-project/issues/109510",
   "bug_type": "crash",
   "base_commit": "eb6e7e8f89a3d5c1cbc9856774ca00208753fb12",
+  "test_commit": "58e05779b483bb3d9f734bd09f5cb2241431a0b7",
   "knowledge_cutoff": "2024-09-21T04:01:16Z",
   "lit_test_dir": [
     "llvm/test/Transforms/LoopVectorize"
@@ -54,5 +55,6 @@
       "crash"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

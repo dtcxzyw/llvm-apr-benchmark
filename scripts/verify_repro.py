@@ -58,7 +58,7 @@ def verify_issue(issue):
         raise RuntimeError("Failed to fix")
     print("Stage 2 lit check")
     res, log = llvm_helper.verify_lit(
-        test_commit=data["hints"]["fix_commit"],
+        test_commit=data.get("test_commit", data["hints"]["fix_commit"]),
         dirs=data["lit_test_dir"],
         max_test_jobs=max_build_jobs,
     )
@@ -85,6 +85,6 @@ for idx, task in enumerate(task_list):
     try:
         verify_issue(task)
     except Exception as e:
-        # print(e)
-        # exit(1)
+        print(e)
+        exit(1)
         pass

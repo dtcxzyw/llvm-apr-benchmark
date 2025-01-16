@@ -656,7 +656,7 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/SystemZ/mem-interleaving-costs-03.ll",
       "commands": [
-        "-disable-output < %s 2>&1"
+        "opt -mtriple=s390x-unknown-linux -mcpu=z16 -passes=loop-vectorize -debug-only=loop-vectorize -force-vector-width=4 -disable-output < %s 2>&1"
       ],
       "tests": [
         {
@@ -675,5 +675,6 @@
       "crash"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

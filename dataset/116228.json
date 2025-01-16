@@ -52,12 +52,12 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/MemorySSAUpdater.cpp": [
-        "MemorySSAUpdater::cloneUsesAndDefs",
         "MemorySSAUpdater::privateUpdateExitBlocksForClonedLoop",
-        "MemorySSAUpdater::updateForClonedBlockIntoPred",
-        "MemorySSAUpdater::updateForClonedLoop",
+        "onlySingleValue",
         "getNewDefiningAccessForClone",
-        "onlySingleValue"
+        "MemorySSAUpdater::cloneUsesAndDefs",
+        "MemorySSAUpdater::updateForClonedBlockIntoPred",
+        "MemorySSAUpdater::updateForClonedLoop"
       ]
     }
   },
@@ -70,8 +70,8 @@
       ],
       "tests": [
         {
-          "test_name": "test",
-          "test_body": "define void @test(ptr %p) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop.latch, %entry\n  store ptr null, ptr %p, align 8\n  %val1 = load ptr, ptr %p, align 8\n  %cmp = icmp eq ptr %val1, null\n  br i1 %cmp, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop\n  %val2 = load ptr, ptr %p, align 8\n  br label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\n\n\n\ndefine void @test(ptr %p) {\nentry:\n  br label %loop\n\nloop:\n  store ptr null, ptr %p\n  %val1 = load ptr, ptr %p\n  %cmp = icmp eq ptr %val1, null\n  br i1 %cmp, label %exit, label %loop.latch\n\nloop.latch:\n  %val2 = load ptr, ptr %p\n  br label %loop\n\nexit:\n  ret void\n}"
         }
       ]
     },
@@ -82,12 +82,8 @@
       ],
       "tests": [
         {
-          "test_name": "test",
-          "test_body": "; Function Attrs: allockind(\"alloc,uninitialized\")\ndeclare ptr @malloc() #0\n\ndefine void @test(i1 %arg) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %call.i = call ptr @malloc()\n  %cmp.i = icmp ne ptr %call.i, null\n  %or.cond.i = select i1 %cmp.i, i1 %arg, i1 false\n  br i1 %or.cond.i, label %exit, label %for.body\n\nexit:                                             ; preds = %for.body\n  ret void\n}\n\nattributes #0 = { allockind(\"alloc,uninitialized\") }\n"
-        },
-        {
-          "test_name": "test_extra_defs",
-          "test_body": "; Function Attrs: allockind(\"alloc,uninitialized\")\ndeclare ptr @malloc() #0\n\ndefine void @test_extra_defs(ptr %p, i1 %arg) {\nentry:\n  store i8 1, ptr %p, align 1\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  store i8 2, ptr %p, align 1\n  %call.i = call ptr @malloc()\n  %cmp.i = icmp ne ptr %call.i, null\n  %or.cond.i = select i1 %cmp.i, i1 %arg, i1 false\n  br i1 %or.cond.i, label %exit, label %for.body\n\nexit:                                             ; preds = %for.body\n  ret void\n}\n\nattributes #0 = { allockind(\"alloc,uninitialized\") }\n"
+          "test_name": "<module>",
+          "test_body": "\ndeclare ptr @malloc() allockind(\"alloc,uninitialized\")\n\n\n\n\ndefine void @test(i1 %arg) {\nentry:\n  br label %for.body\n\nfor.body:\n  %call.i = call ptr @malloc()\n  %cmp.i = icmp ne ptr %call.i, null\n  %or.cond.i = select i1 %cmp.i, i1 %arg, i1 false\n  br i1 %or.cond.i, label %exit, label %for.body\n\nexit:\n  ret void\n}\n\n\n\n\n\ndefine void @test_extra_defs(ptr %p, i1 %arg) {\nentry:\n  store i8 1, ptr %p\n  br label %for.body\n\nfor.body:\n  store i8 2, ptr %p\n  %call.i = call ptr @malloc()\n  %cmp.i = icmp ne ptr %call.i, null\n  %or.cond.i = select i1 %cmp.i, i1 %arg, i1 false\n  br i1 %or.cond.i, label %exit, label %for.body\n\nexit:\n  ret void\n}"
         }
       ]
     }

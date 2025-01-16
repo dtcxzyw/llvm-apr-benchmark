@@ -151,12 +151,18 @@ def apply(patch: str):
         return (False, str(e) + "\n" + decode_output(e.output))
 
 
-def alive2_check(src: bytes, tgt: bytes, additional_args: str):
+def filter_out_unsupported_feats(src: str):
+    return src.replace(" noalias ", " ")
+
+
+def alive2_check(src: str, tgt: str, additional_args: str):
     try:
         with tempfile.NamedTemporaryFile() as src_file:
             with tempfile.NamedTemporaryFile() as tgt_file:
-                src_file.write(src)
-                tgt_file.write(tgt)
+                src = filter_out_unsupported_feats(src)
+                tgt = filter_out_unsupported_feats(tgt)
+                src_file.write(src.encode())
+                tgt_file.write(tgt.encode())
                 src_file.flush()
                 tgt_file.flush()
 
@@ -175,7 +181,7 @@ def alive2_check(src: bytes, tgt: bytes, additional_args: str):
                     and "0 failed-to-prove transformations" in out
                     and "0 Alive2 errors" in out
                 )
-                return (success, out)
+                return (success, {"src": src, "tgt": tgt, "log": out})
     except subprocess.CalledProcessError as e:
         return (False, str(e) + "\n" + decode_output(e.output))
 
@@ -204,9 +210,24 @@ def copy_triple(input: str, out: bytes):
     ref_out = out.decode()
     if triple_pattern in ref_out:
         triple_pos = ref_out.find(triple_pattern)
-        triple_line = ref_out[triple_pos:ref_out.find('\n', triple_pos) + 1]
+        triple_line = ref_out[triple_pos : ref_out.find("\n", triple_pos) + 1]
         return triple_line + input
     return input
+
+
+def copy_datalayout(input: str, out: bytes):
+    datalayout_pattern = "target datalayout ="
+    if datalayout_pattern in input:
+        return input
+    ref_out = out.decode()
+    if datalayout_pattern in ref_out:
+        datalayout_pos = ref_out.find(datalayout_pattern)
+        datalayout_line = ref_out[
+            datalayout_pos : ref_out.find("\n", datalayout_pos) + 1
+        ]
+        return datalayout_line + input
+    return input
+
 
 def verify_dispatch(
     repro: bool,
@@ -223,30 +244,36 @@ def verify_dispatch(
             .replace("%s", "-")
             .replace("2>&1", "")
             .replace("'", "")
-            .replace("\"", "")
+            .replace('"', "")
             .replace("opt", os.path.join(llvm_build_dir, "bin/opt"), 1)
             .strip()
             .split(" "),
         )
     )
     try:
-        out = subprocess.check_output(
-            args_list, input=input.encode(), stderr=subprocess.STDOUT, timeout=60.0
+        out = subprocess.run(
+            args_list, input=input.encode(), timeout=60.0, check=True, capture_output=True
         )
         if type == "miscompilation":
+            output = out.stdout
             if lli_expected_out is not None:
-                res, log = lli_check(out, lli_expected_out)
+                res, log = lli_check(output, lli_expected_out)
             else:
-                new_input = copy_triple(input, out)
-                res, log = alive2_check(new_input.encode(), out, additional_args)
+                new_input = copy_triple(input, output)
+                new_input = copy_datalayout(new_input, output)
+                res, log = alive2_check(new_input, output.decode(), additional_args)
             if repro == True:
                 res = not res
+            if log is str:
+                log = decode_output(e.stderr) + "\n" + log
+            else:
+                log['opt_stderr'] = decode_output(out.stderr)
             return (res, log)
-        return (not repro, "success")
+        return (not repro, "success\n" + decode_output(out.stderr))
     except subprocess.CalledProcessError as e:
-        return (repro and type == "crash", str(e) + "\n" + decode_output(e.output))
+        return (repro and type == "crash", str(e) + "\n" + decode_output(e.output) + "\n" + decode_output(e.stderr))
     except subprocess.TimeoutExpired as e:
-        return (repro and type == "hang", str(e) + "\n" + decode_output(e.output))
+        return (repro and type == "hang", str(e) + "\n" + decode_output(e.output) + "\n" + decode_output(e.stderr))
 
 
 def verify_test_group(repro: bool, input, type: str):

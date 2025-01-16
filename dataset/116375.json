@@ -35,12 +35,12 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/AArch64/invalid-costs.ll",
       "commands": [
-        "opt -passes=\"loop-vectorize\" -pass-remarks-output=/dev/stdout -S %s"
+        "opt -passes=\"loop-vectorize\" -pass-remarks-output=%t.yaml -S %s"
       ],
       "tests": [
         {
-          "test_name": "test_i24_load_for",
-          "test_body": "define void @test_i24_load_for(ptr noalias %src, ptr %dst) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i16 [ 0, %entry ], [ %iv.next, %loop ]\n  %for = phi i24 [ 0, %entry ], [ %for.next, %loop ]\n  %iv.next = add i16 %iv, 1\n  %gep.src = getelementptr inbounds i24, ptr %src, i16 %iv\n  %for.next = load i24, ptr %gep.src, align 1\n  %gep.dst = getelementptr inbounds i24, ptr %dst, i16 %iv\n  store i24 %for, ptr %gep.dst, align 4\n  %ec = icmp eq i16 %iv.next, 1000\n  br i1 %ec, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\n; REMARKS: the cost-model indicates that vectorization is not beneficial\n\n; Test for https://github.com/llvm/llvm-project/issues/116375.\ndefine void @test_i24_load_for(ptr noalias %src, ptr %dst) {\n;\nentry:\n  br label %loop\n\nloop:\n  %iv = phi i16 [ 0, %entry ], [ %iv.next, %loop ]\n  %for = phi i24 [ 0, %entry ], [ %for.next, %loop ]\n  %iv.next = add i16 %iv, 1\n  %gep.src = getelementptr inbounds i24, ptr %src, i16 %iv\n  %for.next = load i24, ptr %gep.src, align 1\n  %gep.dst = getelementptr inbounds i24, ptr %dst, i16 %iv\n  store i24 %for, ptr %gep.dst\n  %ec = icmp eq i16 %iv.next, 1000\n  br i1 %ec, label %exit, label %loop\n\nexit:\n  ret void\n}"
         }
       ]
     }

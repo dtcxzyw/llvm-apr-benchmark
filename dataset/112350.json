@@ -41,6 +41,38 @@
         {
           "test_name": "test_select_inverse_nonconst4",
           "test_body": "define i1 @test_select_inverse_nonconst4(i64 %x, i64 %y, i64 %z, i1 %cond) {\n  %cmp1 = icmp ult i64 %x, %y\n  %cmp2 = icmp uge i64 %z, %y\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_both",
+          "test_body": "define i1 @test_select_inverse_samesign_both(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp samesign ult i64 %x, %y\n  %cmp2 = icmp samesign uge i64 %x, %y\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_false_arm_rhsc_same_sign",
+          "test_body": "define i1 @test_select_inverse_samesign_false_arm_rhsc_same_sign(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp ult i64 %x, 11\n  %cmp2 = icmp samesign ugt i64 %x, 10\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_true_arm",
+          "test_body": "define i1 @test_select_inverse_samesign_true_arm(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp samesign ult i64 %x, %y\n  %cmp2 = icmp uge i64 %x, %y\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_true_arm_rhsc_same_sign",
+          "test_body": "define i1 @test_select_inverse_samesign_true_arm_rhsc_same_sign(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp samesign ult i64 %x, 11\n  %cmp2 = icmp ugt i64 %x, 10\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_both_rhsc_diff_sign",
+          "test_body": "define i1 @test_select_inverse_samesign_both_rhsc_diff_sign(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp samesign slt i64 %x, 0\n  %cmp2 = icmp samesign sgt i64 %x, -1\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_both_rhsc_same_sign",
+          "test_body": "define i1 @test_select_inverse_samesign_both_rhsc_same_sign(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp samesign ult i64 %x, 11\n  %cmp2 = icmp samesign ugt i64 %x, 10\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "test_select_inverse_samesign_false_arm",
+          "test_body": "define i1 @test_select_inverse_samesign_false_arm(i64 %x, i64 %y, i1 %cond) {\n  %cmp1 = icmp ult i64 %x, %y\n  %cmp2 = icmp samesign uge i64 %x, %y\n  %sel = select i1 %cond, i1 %cmp1, i1 %cmp2\n  ret i1 %sel\n}\n"
+        },
+        {
+          "test_name": "sel_icmp_two_cmp",
+          "test_body": "define i1 @sel_icmp_two_cmp(i1 %c, i32 %a1, i32 %a2, i32 %a3, i32 %a4) {\n  %v1 = call i8 @llvm.ucmp.i8.i32(i32 %a1, i32 %a2)\n  %v2 = call i8 @llvm.scmp.i8.i32(i32 %a3, i32 %a4)\n  %sel = select i1 %c, i8 %v1, i8 %v2\n  %cmp = icmp sle i8 %sel, 0\n  ret i1 %cmp\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i8 @llvm.scmp.i8.i32(i32, i32) #0\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i8 @llvm.ucmp.i8.i32(i32, i32) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }
       ]
     }
@@ -71,5 +103,6 @@
         "body": "> But adding support in `hasPoisonGeneratingFlags` doesn't address this issue :(\r\n\r\nI assume we may need to `dropPoisonGeneratingFlags` in InstCombineCompares, where needed?"
       }
     ]
-  }
+  },
+  "verified": true
 }

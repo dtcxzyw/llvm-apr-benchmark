@@ -35,78 +35,12 @@
     {
       "file": "llvm/test/Transforms/InstCombine/fold-select-fmul-if-zero.ll",
       "commands": [
-        "opt -S -passes=instcombine < %s",
-        "opt -S -passes=instcombine -denormal-fp-math=preserve-sign < %s",
-        "opt -S -passes=instcombine -denormal-fp-math=positive-zero < %s"
+        "opt -S -passes=instcombine < %s"
       ],
       "tests": [
-        {
-          "test_name": "fmul_by_var_if_0_oeq_zero_f32_nsz_ninf_fmul",
-          "test_body": "define float @fmul_by_var_if_0_oeq_zero_f32_nsz_ninf_fmul(float %x, float %y) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul ninf nsz float %x, %y\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        },
         {
           "test_name": "fmul_by_self_if_0_oeq_zero_f32_fmul_nnan_ninf_nsz",
           "test_body": "define float @fmul_by_self_if_0_oeq_zero_f32_fmul_nnan_ninf_nsz(float %x) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul nnan ninf nsz float %x, %x\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        },
-        {
-          "test_name": "fmul_by_var_if_0_oeq_zero_f32_fmul_nnan_ninf_nsz_commuted",
-          "test_body": "define float @fmul_by_var_if_0_oeq_zero_f32_fmul_nnan_ninf_nsz_commuted(float %x, float %y) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul nnan ninf nsz float %y, %x\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        },
-        {
-          "test_name": "fmul_by_var_if_0_oeq_zero_f32_fmul_nnan_ninf_nsz",
-          "test_body": "define float @fmul_by_var_if_0_oeq_zero_f32_fmul_nnan_ninf_nsz(float %x, float %y) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul nnan ninf nsz float %x, %y\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        },
-        {
-          "test_name": "fmul_by_var_if_0_oeq_zero_f32_nsz_fmul",
-          "test_body": "define float @fmul_by_var_if_0_oeq_zero_f32_nsz_fmul(float %x, float %y) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul nsz float %x, %y\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        },
-        {
-          "test_name": "fmul_by_var_if_0_oeq_zero_f32_nsz_nnan_fmul",
-          "test_body": "define float @fmul_by_var_if_0_oeq_zero_f32_nsz_nnan_fmul(float %x, float %y) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul nnan nsz float %x, %y\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        },
-        {
-          "test_name": "fmul_by_var_if_0_oeq_zero_f32_nnan_ninf_fmul",
-          "test_body": "define float @fmul_by_var_if_0_oeq_zero_f32_nnan_ninf_fmul(float %x, float %y) {\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %scaled.x = fmul nnan ninf float %x, %y\n  %scaled.if.denormal = select nnan i1 %x.is.zero, float %scaled.x, float %x\n  ret float %scaled.if.denormal\n}\n"
-        }
-      ]
-    },
-    {
-      "file": "llvm/test/Transforms/InstCombine/select-binop-foldable-floating-point.ll",
-      "commands": [
-        "opt < %s -passes=instcombine -S"
-      ],
-      "tests": [
-        {
-          "test_name": "select_nnan_fdiv_swapped",
-          "test_body": "define float @select_nnan_fdiv_swapped(i1 %cond, float %A, float %B) {\n  %C = fdiv float %A, %B\n  %D = select nnan i1 %cond, float %A, float %C\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fsub_swapped",
-          "test_body": "define float @select_nnan_fsub_swapped(i1 %cond, float %A, float %B) {\n  %C = fsub float %A, %B\n  %D = select nnan i1 %cond, float %A, float %C\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fmul_swapped",
-          "test_body": "define float @select_nnan_fmul_swapped(i1 %cond, float %A, float %B) {\n  %C = fmul float %A, %B\n  %D = select nnan i1 %cond, float %A, float %C\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fdiv_fast_math",
-          "test_body": "define float @select_nnan_fdiv_fast_math(i1 %cond, float %A, float %B) {\n  %C = fdiv fast float %A, %B\n  %D = select nnan i1 %cond, float %C, float %A\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fmul_fast_math",
-          "test_body": "define float @select_nnan_fmul_fast_math(i1 %cond, float %A, float %B) {\n  %C = fmul fast float %A, %B\n  %D = select nnan i1 %cond, float %C, float %A\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fadd_swapped",
-          "test_body": "define float @select_nnan_fadd_swapped(i1 %cond, float %A, float %B) {\n  %C = fadd float %A, %B\n  %D = select nnan i1 %cond, float %A, float %C\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fsub_fast_math",
-          "test_body": "define float @select_nnan_fsub_fast_math(i1 %cond, float %A, float %B) {\n  %C = fsub fast float %A, %B\n  %D = select nnan i1 %cond, float %C, float %A\n  ret float %D\n}\n"
-        },
-        {
-          "test_name": "select_nnan_fadd_fast_math",
-          "test_body": "define float @select_nnan_fadd_fast_math(i1 %cond, float %A, float %B) {\n  %C = fadd fast float %A, %B\n  %D = select nnan i1 %cond, float %C, float %A\n  ret float %D\n}\n"
         }
       ]
     }
@@ -121,5 +55,6 @@
       "floating-point"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

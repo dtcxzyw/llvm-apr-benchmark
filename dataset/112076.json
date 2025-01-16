@@ -44,6 +44,10 @@
       ],
       "tests": [
         {
+          "test_name": "test_drop_range_attr",
+          "test_body": "define i32 @test_drop_range_attr(i32 %x) {\n  %ctlz = call range(i32 1, 33) i32 @llvm.ctlz.i32(i32 %x, i1 false)\n  %sub = sub i32 32, %ctlz\n  %shl = shl i32 1, %sub\n  %dec = add i32 %x, -1\n  %ult = icmp ult i32 %dec, -2\n  %sel = select i1 %ult, i32 %shl, i32 1\n  ret i32 %sel\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.ctlz.i32(i32, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
           "test_name": "pr91691_keep_nsw",
           "test_body": "define i32 @pr91691_keep_nsw(i32 %0) {\n  %2 = sub nsw i32 -2, %0\n  %3 = tail call i32 @llvm.ctlz.i32(i32 %2, i1 false)\n  %4 = sub i32 32, %3\n  %5 = shl i32 1, %4\n  %6 = icmp ult i32 %0, -2\n  %7 = select i1 %6, i32 %5, i32 1\n  ret i32 %7\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.ctlz.i32(i32, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }
@@ -59,5 +63,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

@@ -35,6 +35,10 @@
       ],
       "tests": [
         {
+          "test_name": "ptrmask_demandedbits_constantexpr",
+          "test_body": "target datalayout = \"p1:64:64:64:32\"\n\n@GC_arrays = external global { i8, i8, i64 }\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare ptr @llvm.ptrmask.p0.i64(ptr, i64) #0\n\ndefine ptr @ptrmask_demandedbits_constantexpr() {\nentry:\n  %aligned_result = call ptr @llvm.ptrmask.p0.i64(ptr getelementptr inbounds (i8, ptr @GC_arrays, i64 1), i64 -8)\n  ret ptr %aligned_result\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
           "test_name": "ptrmask_is_useless_fail1",
           "test_body": "target datalayout = \"p1:64:64:64:32\"\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare ptr @llvm.ptrmask.p0.i64(ptr, i64) #0\n\ndefine ptr @ptrmask_is_useless_fail1(i64 %i, i64 %m) {\n  %m0 = and i64 %m, 127\n  %i0 = and i64 %i, 511\n  %p0 = inttoptr i64 %i0 to ptr\n  %r = call ptr @llvm.ptrmask.p0.i64(ptr %p0, i64 %m0)\n  ret ptr %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }

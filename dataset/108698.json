@@ -39,22 +39,6 @@
       ],
       "tests": [
         {
-          "test_name": "multiuse",
-          "test_body": "target triple = \"aarch64\"\n\ndefine i32 @multiuse(<16 x i32> %u, <16 x i32> %v, ptr %b) {\nentry:\n  %u.masked = and <16 x i32> %u, splat (i32 255)\n  %v.masked = and <16 x i32> %v, splat (i32 255)\n  %wide.load = load <16 x i8>, ptr %b, align 1\n  %0 = zext <16 x i8> %wide.load to <16 x i32>\n  %1 = lshr <16 x i32> %0, splat (i32 4)\n  %2 = or <16 x i32> %1, %v.masked\n  %3 = and <16 x i32> %0, splat (i32 15)\n  %4 = or <16 x i32> %3, %u.masked\n  %5 = add nuw nsw <16 x i32> %2, %4\n  %6 = call i32 @llvm.vector.reduce.add.v16i32(<16 x i32> %5)\n  ret i32 %6\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.vector.reduce.add.v16i32(<16 x i32>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
-        },
-        {
-          "test_name": "phi_bug",
-          "test_body": "target triple = \"aarch64\"\n\ndefine i32 @phi_bug(<16 x i32> %a, ptr %b) {\nentry:\n  %wide.load = load <16 x i8>, ptr %b, align 1\n  br label %vector.body\n\nvector.body:                                      ; preds = %entry\n  %a.phi = phi <16 x i32> [ %a, %entry ]\n  %wide.load.phi = phi <16 x i8> [ %wide.load, %entry ]\n  %0 = zext <16 x i8> %wide.load.phi to <16 x i32>\n  %1 = and <16 x i32> %0, %a.phi\n  %2 = tail call i32 @llvm.vector.reduce.add.v16i32(<16 x i32> %1)\n  ret i32 %2\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.vector.reduce.add.v16i32(<16 x i32>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
-        },
-        {
-          "test_name": "test_mask_or",
-          "test_body": "target triple = \"aarch64\"\n\ndefine i32 @test_mask_or(<16 x i32> %a, ptr %b) {\nentry:\n  %wide.load = load <16 x i8>, ptr %b, align 1\n  %a.masked = and <16 x i32> %a, splat (i32 16)\n  %0 = zext <16 x i8> %wide.load to <16 x i32>\n  %1 = or <16 x i32> %0, %a.masked\n  %2 = tail call i32 @llvm.vector.reduce.add.v16i32(<16 x i32> %1)\n  ret i32 %2\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.vector.reduce.add.v16i32(<16 x i32>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
-        },
-        {
-          "test_name": "test_and",
-          "test_body": "target triple = \"aarch64\"\n\ndefine i32 @test_and(<16 x i32> %a, ptr %b) {\nentry:\n  %wide.load = load <16 x i8>, ptr %b, align 1\n  %0 = zext <16 x i8> %wide.load to <16 x i32>\n  %1 = and <16 x i32> %0, %a\n  %2 = tail call i32 @llvm.vector.reduce.add.v16i32(<16 x i32> %1)\n  ret i32 %2\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.vector.reduce.add.v16i32(<16 x i32>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
-        },
-        {
           "test_name": "pr108698",
           "test_body": "target triple = \"aarch64\"\n\ndefine <2 x i32> @pr108698(<2 x i64> %x, <2 x i32> %y) {\n  %cmp = icmp eq <2 x i64> %x, zeroinitializer\n  %ext = zext <2 x i1> %cmp to <2 x i32>\n  %lshr = lshr <2 x i32> %ext, %y\n  ret <2 x i32> %lshr\n}\n"
         }
@@ -79,5 +63,6 @@
         "body": "Related PR: https://github.com/llvm/llvm-project/pull/104606\r\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

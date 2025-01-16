@@ -34,8 +34,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineAndOrXor.cpp": [
-        "InstCombinerImpl::foldAndOrOfICmps",
-        "foldIsPowerOf2"
+        "foldIsPowerOf2",
+        "InstCombinerImpl::foldAndOrOfICmps"
       ]
     }
   },
@@ -47,6 +47,14 @@
         "opt < %s -passes=instcombine -S"
       ],
       "tests": [
+        {
+          "test_name": "has_single_bit",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.ctpop.i32(i32) #0\n\ndefine i1 @has_single_bit(i32 %x) {\nentry:\n  %cmp1 = icmp ne i32 %x, 0\n  %popcnt = call range(i32 1, 33) i32 @llvm.ctpop.i32(i32 %x)\n  %cmp2 = icmp ult i32 %popcnt, 2\n  %sel = select i1 %cmp1, i1 %cmp2, i1 false\n  ret i1 %sel\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "has_single_bit_inv",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.ctpop.i32(i32) #0\n\ndefine i1 @has_single_bit_inv(i32 %x) {\nentry:\n  %cmp1 = icmp eq i32 %x, 0\n  %popcnt = call range(i32 1, 33) i32 @llvm.ctpop.i32(i32 %x)\n  %cmp2 = icmp ugt i32 %popcnt, 1\n  %sel = select i1 %cmp1, i1 true, i1 %cmp2\n  ret i1 %sel\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
         {
           "test_name": "not_pow2_or_z_known_bits_fail_wrong_cmp",
           "test_body": "define <2 x i1> @not_pow2_or_z_known_bits_fail_wrong_cmp(<2 x i32> %xin) {\n  %x = or <2 x i32> %xin, splat (i32 64)\n  %cnt = call <2 x i32> @llvm.ctpop.v2i32(<2 x i32> %x)\n  %r = icmp ugt <2 x i32> %cnt, splat (i32 2)\n  ret <2 x i1> %r\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <2 x i32> @llvm.ctpop.v2i32(<2 x i32>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
@@ -63,5 +71,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

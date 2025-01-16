@@ -35,6 +35,14 @@
       ],
       "tests": [
         {
+          "test_name": "test_alloca",
+          "test_body": "; Function Attrs: returns_twice\ndeclare i32 @setjmp() #0\n\ndeclare void @longjmp()\n\ndefine i32 @test_alloca() {\n  %alloc = alloca i43, align 8\n  store i32 10, ptr %alloc, align 4\n  %sj = call i32 @setjmp()\n  %cmp = icmp eq i32 %sj, 0\n  br i1 %cmp, label %if.then, label %if.end\n\nif.then:                                          ; preds = %0\n  store i32 20, ptr %alloc, align 4\n  call void @longjmp()\n  unreachable\n\nif.end:                                           ; preds = %0\n  %res = load i32, ptr %alloc, align 4\n  ret i32 %res\n}\n\nattributes #0 = { returns_twice }\n"
+        },
+        {
+          "test_name": "test_alloca_volatile",
+          "test_body": "; Function Attrs: returns_twice\ndeclare i32 @setjmp() #0\n\ndeclare void @longjmp()\n\ndefine i32 @test_alloca_volatile() {\n  %alloc = alloca i43, align 8\n  store volatile i32 10, ptr %alloc, align 4\n  %sj = call i32 @setjmp()\n  %cmp = icmp eq i32 %sj, 0\n  br i1 %cmp, label %if.then, label %if.end\n\nif.then:                                          ; preds = %0\n  store volatile i32 20, ptr %alloc, align 4\n  call void @longjmp()\n  unreachable\n\nif.end:                                           ; preds = %0\n  %res = load volatile i32, ptr %alloc, align 4\n  ret i32 %res\n}\n\nattributes #0 = { returns_twice }\n"
+        },
+        {
           "test_name": "test",
           "test_body": "; Function Attrs: returns_twice\ndeclare i32 @setjmp() #0\n\ndeclare void @longjmp()\n\ndeclare ptr @malloc(i64)\n\ndefine i32 @test() {\n  %malloc = call noalias ptr @malloc(i64 4)\n  store i32 10, ptr %malloc, align 4\n  %sj = call i32 @setjmp()\n  %cmp = icmp eq i32 %sj, 0\n  br i1 %cmp, label %if.then, label %if.end\n\nif.then:                                          ; preds = %0\n  store i32 20, ptr %malloc, align 4\n  call void @longjmp()\n  unreachable\n\nif.end:                                           ; preds = %0\n  %res = load i32, ptr %malloc, align 4\n  ret i32 %res\n}\n\nattributes #0 = { returns_twice }\n"
         }

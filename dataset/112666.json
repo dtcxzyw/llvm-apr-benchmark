@@ -35,6 +35,22 @@
       ],
       "tests": [
         {
+          "test_name": "negate_select_of_op_vs_negated_op_nsw_commuted",
+          "test_body": "define i8 @negate_select_of_op_vs_negated_op_nsw_commuted(i8 %x, i8 %y, i1 %c) {\n  %t0 = sub nsw i8 0, %x\n  %t1 = select i1 %c, i8 %x, i8 %t0\n  %t2 = sub i8 %y, %t1\n  ret i8 %t2\n}\n"
+        },
+        {
+          "test_name": "negate_select_of_op_vs_negated_op_nsw",
+          "test_body": "define i8 @negate_select_of_op_vs_negated_op_nsw(i8 %x, i8 %y, i1 %c) {\n  %t0 = sub nsw i8 0, %x\n  %t1 = select i1 %c, i8 %t0, i8 %x\n  %t2 = sub i8 %y, %t1\n  ret i8 %t2\n}\n"
+        },
+        {
+          "test_name": "dont_negate_ordinary_select",
+          "test_body": "define i8 @dont_negate_ordinary_select(i8 %x, i8 %y, i8 %z, i1 %c) {\n  %t0 = select i1 %c, i8 %x, i8 %y\n  %t1 = sub i8 %z, %t0\n  ret i8 %t1\n}\n"
+        },
+        {
+          "test_name": "negate_select_of_op_vs_negated_op_nsw_xyyx",
+          "test_body": "define i8 @negate_select_of_op_vs_negated_op_nsw_xyyx(i8 %x, i8 %y, i8 %z, i1 %c) {\n  %sub1 = sub nsw i8 %x, %y\n  %sub2 = sub nsw i8 %y, %x\n  %t1 = select i1 %c, i8 %sub1, i8 %sub2\n  %t2 = sub i8 %z, %t1\n  ret i8 %t2\n}\n"
+        },
+        {
           "test_name": "negate_select_of_op_vs_negated_op",
           "test_body": "declare void @use8(i8)\n\ndefine i8 @negate_select_of_op_vs_negated_op(i8 %x, i8 %y, i1 %c) {\n  %t0 = sub i8 0, %x\n  call void @use8(i8 %t0)\n  %t1 = select i1 %c, i8 %t0, i8 %x, !prof !0\n  %t2 = sub i8 %y, %t1\n  ret i8 %t2\n}\n\n!0 = !{!\"branch_weights\", i32 40, i32 1}\n"
         }
@@ -59,5 +75,6 @@
         "body": "Confirmed this issue exists in 19.x"
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -30,8 +30,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "add",
-        "estimateNodesPermuteCost"
+        "estimateNodesPermuteCost",
+        "add"
       ]
     }
   },

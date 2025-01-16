@@ -54,8 +54,8 @@
       ],
       "tests": [
         {
-          "test_name": "test",
-          "test_body": "define void @test(i16 %arg) {\nbb:\n  %sitofp = sitofp i16 %arg to float\n  %fadd = fadd float 0.000000e+00, 0.000000e+00\n  %fsub = fsub float 0.000000e+00, %sitofp\n  %fsub1 = fsub float 0.000000e+00, %sitofp\n  %fsub2 = fsub float 0.000000e+00, %sitofp\n  %sitofp3 = sitofp i16 0 to float\n  %fsub4 = fsub float %fadd, %sitofp3\n  store float %fsub4, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 20), align 4\n  %fsub5 = fsub float %fsub, %sitofp\n  store float %fsub5, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 24), align 4\n  %fsub6 = fsub float %fsub1, %sitofp\n  store float %fsub6, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 28), align 4\n  %fsub7 = fsub float %fsub2, %sitofp\n  store float %fsub7, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 32), align 4\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ndefine void @test(i16 %arg) {\n;\nbb:\n  %sitofp = sitofp i16 %arg to float\n  %fadd = fadd float 0.000000e+00, 0.000000e+00\n  %fsub = fsub float 0.000000e+00, %sitofp\n  %fsub1 = fsub float 0.000000e+00, %sitofp\n  %fsub2 = fsub float 0.000000e+00, %sitofp\n  %sitofp3 = sitofp i16 0 to float\n  %fsub4 = fsub float %fadd, %sitofp3\n  store float %fsub4, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 20), align 4\n  %fsub5 = fsub float %fsub, %sitofp\n  store float %fsub5, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 24), align 4\n  %fsub6 = fsub float %fsub1, %sitofp\n  store float %fsub6, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 28), align 4\n  %fsub7 = fsub float %fsub2, %sitofp\n  store float %fsub7, ptr addrspace(1) getelementptr inbounds (i8, ptr addrspace(1) null, i64 32), align 4\n  ret void\n}"
         }
       ]
     }

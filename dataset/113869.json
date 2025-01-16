@@ -35,8 +35,16 @@
       ],
       "tests": [
         {
+          "test_name": "uadd_sat_not_commute_select",
+          "test_body": "define i32 @uadd_sat_not_commute_select(i32 %x, i32 %y) {\n  %notx = xor i32 %x, -1\n  %a = add i32 %notx, %y\n  %c = icmp ult i32 %y, %x\n  %r = select i1 %c, i32 %a, i32 -1\n  ret i32 %r\n}\n"
+        },
+        {
           "test_name": "uadd_sat_not_ugt_commute_add",
           "test_body": "define <2 x i32> @uadd_sat_not_ugt_commute_add(<2 x i32> %x, <2 x i32> %yp) {\n  %y = sdiv <2 x i32> %yp, <i32 2442, i32 4242>\n  %notx = xor <2 x i32> %x, splat (i32 -1)\n  %a = add <2 x i32> %y, %notx\n  %c = icmp ugt <2 x i32> %y, %x\n  %r = select <2 x i1> %c, <2 x i32> splat (i32 -1), <2 x i32> %a\n  ret <2 x i32> %r\n}\n"
+        },
+        {
+          "test_name": "uadd_sat_not_ugt_commute_add_partial_poison",
+          "test_body": "define <2 x i32> @uadd_sat_not_ugt_commute_add_partial_poison(<2 x i32> %x, <2 x i32> %yp) {\n  %notx = xor <2 x i32> %x, <i32 -1, i32 poison>\n  %a = add nuw <2 x i32> %yp, %notx\n  %c = icmp ugt <2 x i32> %yp, %x\n  %r = select <2 x i1> %c, <2 x i32> splat (i32 -1), <2 x i32> %a\n  ret <2 x i32> %r\n}\n"
         }
       ]
     }
@@ -50,5 +58,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

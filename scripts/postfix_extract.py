@@ -70,10 +70,13 @@ fix_commit_map = {
     "107037": None,  # Multi-commit fix
     "107501": None,  # Complicated fix
     "108618": None,  # Multi-commit fix
+    "108854": None,  # Multi-commit fix
     "109581": None,  # Too many unrelated changes
     "110819": None,  # Outdated issue
+    "111585": None,  # Cannot reproduce with alive2
+    "111709": None,  # Cannot reproduce with alive2
     "112633": None,  # Multi-commit fix
-    '113301': None,  # miscompilation:undef
+    "113301": None,  # miscompilation:undef
     "122166": None,  # Duplicate of #117308
 }
 
@@ -140,7 +143,13 @@ for label in issue["labels"]:
         issue_type = "crash"
     if "hang" in label_name:
         issue_type = "hang"
-    if label_name in ["invalid", "wontfix", "duplicate", "undefined behavior", "miscompilation:undef"]:
+    if label_name in [
+        "invalid",
+        "wontfix",
+        "duplicate",
+        "undefined behavior",
+        "miscompilation:undef",
+    ]:
         print("This issue is marked as invalid")
         exit(1)
 
@@ -204,7 +213,7 @@ def remove_target_suffix(path):
 lit_test_dir = set(
     map(
         lambda x: remove_target_suffix(os.path.dirname(x)),
-        filter(lambda x: x.count("/test/"), changed_files.split("\n")),
+        filter(lambda x: x.count("llvm/test/"), changed_files.split("\n")),
     )
 )
 tests = []

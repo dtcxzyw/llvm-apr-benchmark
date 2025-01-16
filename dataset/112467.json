@@ -35,8 +35,16 @@
       ],
       "tests": [
         {
+          "test_name": "sge_and_max_commute",
+          "test_body": "define i1 @sge_and_max_commute(i8 %x, i8 %y) {\n  %cmp = icmp sge i8 %x, %y\n  %cmpeq = icmp eq i8 %x, 127\n  %r = and i1 %cmpeq, %cmp\n  ret i1 %r\n}\n"
+        },
+        {
           "test_name": "sge_and_max_logical",
           "test_body": "define i1 @sge_and_max_logical(i8 %x, i8 %y) {\n  %cmp = icmp sge i8 %x, %y\n  %cmpeq = icmp eq i8 %x, 127\n  %r = select i1 %cmp, i1 %cmpeq, i1 false\n  ret i1 %r\n}\n"
+        },
+        {
+          "test_name": "sge_and_max_logical_samesign",
+          "test_body": "define i1 @sge_and_max_logical_samesign(i8 %x, i8 %y) {\n  %cmp = icmp sge i8 %x, %y\n  %cmpeq = icmp samesign eq i8 %x, 127\n  %r = select i1 %cmp, i1 %cmpeq, i1 false\n  ret i1 %r\n}\n"
         }
       ]
     },
@@ -47,8 +55,16 @@
       ],
       "tests": [
         {
+          "test_name": "sgt_and_min_logical_samesign",
+          "test_body": "define i1 @sgt_and_min_logical_samesign(ptr %x, ptr %y) {\n  %cmp = icmp sgt ptr %x, %y\n  %cmpeq = icmp samesign eq ptr %x, null\n  %r = select i1 %cmp, i1 %cmpeq, i1 false\n  ret i1 %r\n}\n"
+        },
+        {
           "test_name": "sgt_and_min_logical",
           "test_body": "define i1 @sgt_and_min_logical(ptr %x, ptr %y) {\n  %cmp = icmp sgt ptr %x, %y\n  %cmpeq = icmp eq ptr %x, null\n  %r = select i1 %cmp, i1 %cmpeq, i1 false\n  ret i1 %r\n}\n"
+        },
+        {
+          "test_name": "sle_or_not_min",
+          "test_body": "define i1 @sle_or_not_min(ptr %x, ptr %y) {\n  %cmp = icmp sle ptr %x, %y\n  %cmpeq = icmp ne ptr %x, null\n  %r = or i1 %cmp, %cmpeq\n  ret i1 %r\n}\n"
         }
       ]
     }
@@ -62,5 +78,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

@@ -35,8 +35,20 @@
       ],
       "tests": [
         {
+          "test_name": "test_and_olt_fmf_propagation_union_logical_rhs_poison",
+          "test_body": "define i1 @test_and_olt_fmf_propagation_union_logical_rhs_poison(float %x) {\n  %cmp1 = fcmp ninf olt float %x, 0x3C00000000000000\n  %cmp2 = fcmp ogt float %x, 0xBC00000000000000\n  %cond = select i1 %cmp2, i1 %cmp1, i1 false\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_and_olt_fmf_propagation_union_logical_both_poison",
+          "test_body": "define i1 @test_and_olt_fmf_propagation_union_logical_both_poison(float %x) {\n  %cmp1 = fcmp ninf olt float %x, 0x3C00000000000000\n  %cmp2 = fcmp ninf ogt float %x, 0xBC00000000000000\n  %cond = select i1 %cmp2, i1 %cmp1, i1 false\n  ret i1 %cond\n}\n"
+        },
+        {
           "test_name": "test_and_olt_fmf_propagation_union",
           "test_body": "define i1 @test_and_olt_fmf_propagation_union(float %x) {\n  %cmp1 = fcmp nnan ninf olt float %x, 0x3C00000000000000\n  %cmp2 = fcmp nnan nsz ogt float %x, 0xBC00000000000000\n  %cond = and i1 %cmp1, %cmp2\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_and_olt_fmf_propagation_union_logical_lhs_poison",
+          "test_body": "define i1 @test_and_olt_fmf_propagation_union_logical_lhs_poison(float %x) {\n  %cmp1 = fcmp olt float %x, 0x3C00000000000000\n  %cmp2 = fcmp ninf ogt float %x, 0xBC00000000000000\n  %cond = select i1 %cmp2, i1 %cmp1, i1 false\n  ret i1 %cond\n}\n"
         }
       ]
     }
@@ -64,5 +76,6 @@
         "body": "> And it looks like you are mutating the unit tests to fuzz LLVM. Looks interesting to me. If OK, could you provide some information about it?\r\n\r\n@XChy Yes we are designing a fuzzer on top of LLVM to test the compiler. We can't disclose the full detail at this time. Thank you."
       }
     ]
-  }
+  },
+  "verified": true
 }

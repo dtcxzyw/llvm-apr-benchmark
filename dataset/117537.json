@@ -31,7 +31,7 @@
     {
       "file": "llvm/test/Transforms/SimpleLoopUnswitch/pr117537.ll",
       "commands": [
-        "opt -S -passes='print<scalar-evolution>,simple-loop-unswitch<nontrivial>,print<scalar-evolution>' -verify-scev < %s 2>/dev/null"
+        "opt -S -passes='print<scalar-evolution>,simple-loop-unswitch<nontrivial>,print<scalar-evolution>' -verify-scev < %s 2>&1"
       ],
       "tests": [
         {

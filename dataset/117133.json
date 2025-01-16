@@ -5,8 +5,8 @@
   "base_commit": "94df95de6bab20930c1a77bc785221ff2f670dba",
   "knowledge_cutoff": "2024-11-21T09:18:16Z",
   "lit_test_dir": [
-    "llvm/test/Transforms/IndVarSimplify",
-    "llvm/test/Analysis/ScalarEvolution"
+    "llvm/test/Analysis/ScalarEvolution",
+    "llvm/test/Transforms/IndVarSimplify"
   ],
   "hints": {
     "fix_commit": "f7ef0721d60f85e1f699f8d1b83d4402ae19b122",
@@ -37,10 +37,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/ScalarEvolution.cpp": [
-        "ScalarEvolution::createAddRecFromPHI",
-        "ScalarEvolution::getSequentialMinMaxExpr",
+        "ScalarEvolution::isSCEVExprNeverPoison",
         "ScalarEvolution::isGuaranteedNotToBePoison",
-        "ScalarEvolution::isSCEVExprNeverPoison"
+        "ScalarEvolution::createAddRecFromPHI",
+        "ScalarEvolution::getSequentialMinMaxExpr"
       ]
     }
   },
@@ -53,12 +53,12 @@
       ],
       "tests": [
         {
-          "test_name": "widget",
-          "test_body": "define i32 @widget() {\nb:\n  br label %b1\n\nb1:                                               ; preds = %b5, %b\n  %phi = phi i32 [ 0, %b ], [ %udiv6, %b5 ]\n  %phi2 = phi i32 [ 1, %b ], [ %add, %b5 ]\n  %icmp = icmp eq i32 %phi, 0\n  br i1 %icmp, label %b3, label %b8\n\nb3:                                               ; preds = %b1\n  %udiv = udiv i32 10, %phi2\n  %urem = urem i32 %udiv, 10\n  %icmp4 = icmp eq i32 %urem, 0\n  br i1 %icmp4, label %b7, label %b5\n\nb5:                                               ; preds = %b3\n  %udiv6 = udiv i32 %phi2, 0\n  %add = add i32 %phi2, 1\n  br label %b1\n\nb7:                                               ; preds = %b3\n  ret i32 5\n\nb8:                                               ; preds = %b1\n  ret i32 7\n}\n"
-        },
-        {
           "test_name": "test_poisonous",
           "test_body": "define i64 @test_poisonous(i64 %a, i32 %n) {\nentry:\n  br label %loop.body\n\nloop.body:                                        ; preds = %loop.body, %entry\n  %indvar1 = phi i32 [ 0, %entry ], [ %indvar1.next, %loop.body ]\n  %indvar2 = phi i64 [ 0, %entry ], [ %mul, %loop.body ]\n  %indvar1.next = add i32 %indvar1, 1\n  %ext = zext i32 %indvar1.next to i64\n  %mul = mul i64 %ext, %a\n  %exitcond = icmp sgt i32 %indvar1.next, %n\n  br i1 %exitcond, label %loop.exit, label %loop.body\n\nloop.exit:                                        ; preds = %loop.body\n  ret i64 %mul\n}\n"
+        },
+        {
+          "test_name": "widget",
+          "test_body": "define i32 @widget() {\nb:\n  br label %b1\n\nb1:                                               ; preds = %b5, %b\n  %phi = phi i32 [ 0, %b ], [ %udiv6, %b5 ]\n  %phi2 = phi i32 [ 1, %b ], [ %add, %b5 ]\n  %icmp = icmp eq i32 %phi, 0\n  br i1 %icmp, label %b3, label %b8\n\nb3:                                               ; preds = %b1\n  %udiv = udiv i32 10, %phi2\n  %urem = urem i32 %udiv, 10\n  %icmp4 = icmp eq i32 %urem, 0\n  br i1 %icmp4, label %b7, label %b5\n\nb5:                                               ; preds = %b3\n  %udiv6 = udiv i32 %phi2, 0\n  %add = add i32 %phi2, 1\n  br label %b1\n\nb7:                                               ; preds = %b3\n  ret i32 5\n\nb8:                                               ; preds = %b1\n  ret i32 7\n}\n"
         }
       ]
     },

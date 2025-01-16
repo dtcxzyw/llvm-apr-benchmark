@@ -65,5 +65,6 @@
         "body": "This looks like a clang trunk regression: https://godbolt.org/z/MoKeds3ev"
       }
     ]
-  }
+  },
+  "verified": true
 }
