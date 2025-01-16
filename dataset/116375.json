@@ -35,7 +35,7 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/AArch64/invalid-costs.ll",
       "commands": [
-        "opt -passes=\"loop-vectorize\" -pass-remarks-output=%t.yaml -S %s"
+        "opt -passes=\"loop-vectorize\" -pass-remarks-output=/dev/stdout -S %s"
       ],
       "tests": [
         {

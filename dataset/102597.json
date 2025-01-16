@@ -36,7 +36,8 @@
       "tests": [
         {
           "test_name": "test",
-          "test_body": "define void @test() {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop.latch, %entry\n  %iv = phi i128 [ 3, %entry ], [ %iv.dec, %loop.latch ]\n  %tobool = icmp ne i128 %iv, 0\n  br i1 %tobool, label %loop.latch, label %if\n\nif:                                               ; preds = %loop\n  call void @foo()\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %if, %loop\n  %iv.dec = add nsw i128 %iv, -1\n  %cmp = icmp sgt i128 %iv, 0\n  br i1 %cmp, label %loop, label %exit\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n\ndeclare void @foo()\n"
+          "test_body": "define void @test() {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop.latch, %entry\n  %iv = phi i128 [ 3, %entry ], [ %iv.dec, %loop.latch ]\n  %tobool = icmp ne i128 %iv, 0\n  br i1 %tobool, label %loop.latch, label %if\n\nif:                                               ; preds = %loop\n  call void @foo()\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %if, %loop\n  %iv.dec = add nsw i128 %iv, -1\n  %cmp = icmp sgt i128 %iv, 0\n  br i1 %cmp, label %loop, label %exit\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n\ndeclare void @foo()\n",
+          "additional_args": "-src-unroll=4 -tgt-unroll=4"
         }
       ]
     }
@@ -59,5 +60,6 @@
         "body": "Is this commit self-contained in the sense that I could revert it on my testing machines? Or will you revert / fix soon?"
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -67,5 +67,6 @@
         "body": "Ping. The C fuzzer is hitting this assertion ~15 times a day since the runs starting sep 6th."
       }
     ]
-  }
+  },
+  "verified": true
 }

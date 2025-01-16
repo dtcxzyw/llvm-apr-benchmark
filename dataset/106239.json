@@ -66,5 +66,6 @@
         "body": "This regressed with `llvmorg-19-init-02822-g`4db93e5d564 (\"[IndVars] Recompute flags if needed in widenIVUse of IV increment. (#82352)\") by @fhahn."
       }
     ]
-  }
+  },
+  "verified": true
 }

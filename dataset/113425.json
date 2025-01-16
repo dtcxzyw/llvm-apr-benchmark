@@ -57,7 +57,7 @@
     {
       "file": "llvm/test/Transforms/SLPVectorizer/RISCV/revec-getGatherCost.ll",
       "commands": [
-        "opt -mtriple=riscv64 -mcpu=sifive-x280 -passes=slp-vectorizer -S -slp-revec -slp-max-reg-size=1024 -slp-threshold=-20 -pass-remarks-output=%t %s"
+        "opt -mtriple=riscv64 -mcpu=sifive-x280 -passes=slp-vectorizer -S -slp-revec -slp-max-reg-size=1024 -slp-threshold=-20 -pass-remarks-output=/dev/stdout %s"
       ],
       "tests": [
         {
@@ -97,7 +97,7 @@
     {
       "file": "llvm/test/Transforms/SLPVectorizer/X86/remark_extract_broadcast.ll",
       "commands": [
-        "opt -S -mtriple=x86_64-pc-linux-gnu -mcpu=generic -mattr=sse2 -passes=slp-vectorizer -pass-remarks-output=%t < %s -slp-threshold=-2"
+        "opt -S -mtriple=x86_64-pc-linux-gnu -mcpu=generic -mattr=sse2 -passes=slp-vectorizer -pass-remarks-output=/dev/stdout < %s -slp-threshold=-2"
       ],
       "tests": [
         {

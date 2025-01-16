@@ -300,5 +300,6 @@
         "body": "Looks like foldShuffleToIdentity is attempting to fold the operand bundle on the fshl call"
       }
     ]
-  }
+  },
+  "verified": true
 }

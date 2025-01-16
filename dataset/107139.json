@@ -38,10 +38,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Coroutines/CoroSplit.cpp": [
-        "CoroSplitPass::run",
         "replacePrepare",
-        "splitCoroutine",
-        "updateCallGraphAfterCoroutineSplit"
+        "CoroSplitPass::run",
+        "updateCallGraphAfterCoroutineSplit",
+        "splitCoroutine"
       ]
     }
   },
@@ -54,12 +54,8 @@
       ],
       "tests": [
         {
-          "test_name": "foo",
-          "test_body": "target triple = \"x86_64-redhat-linux-gnu\"\n\n; Function Attrs: presplitcoroutine\ndefine void @foo() #0 personality ptr null {\nentry:\n  %0 = call token @llvm.coro.id(i32 0, ptr null, ptr null, ptr null)\n  %1 = call ptr @llvm.coro.begin(token %0, ptr null)\n  %2 = call token @llvm.coro.save(ptr null)\n  %3 = call i8 @llvm.coro.suspend(token none, i1 false)\n  %4 = call token @llvm.coro.save(ptr null)\n  call void @llvm.coro.await.suspend.void(ptr null, ptr null, ptr @bar)\n  ret void\n}\n\ndeclare void @bar(ptr, ptr)\n\n; Function Attrs: nocallback nofree nosync nounwind willreturn memory(argmem: read)\ndeclare token @llvm.coro.id(i32, ptr readnone, ptr nocapture readonly, ptr) #1\n\n; Function Attrs: nounwind\ndeclare ptr @llvm.coro.begin(token, ptr writeonly) #2\n\n; Function Attrs: nomerge nounwind\ndeclare token @llvm.coro.save(ptr) #3\n\ndeclare void @llvm.coro.await.suspend.void(ptr, ptr, ptr)\n\n; Function Attrs: nounwind\ndeclare i8 @llvm.coro.suspend(token, i1) #2\n\nattributes #0 = { presplitcoroutine }\nattributes #1 = { nocallback nofree nosync nounwind willreturn memory(argmem: read) }\nattributes #2 = { nounwind }\nattributes #3 = { nomerge nounwind }\n"
-        },
-        {
-          "test_name": "bar",
-          "test_body": "target triple = \"x86_64-redhat-linux-gnu\"\n\n; Function Attrs: presplitcoroutine\ndeclare void @foo() #0\n\ndefine void @bar(ptr %0, ptr %1) {\nentry:\n  call void @foo()\n  ret void\n}\n\nattributes #0 = { presplitcoroutine }\n"
+          "test_name": "<module>",
+          "test_body": "; Verify that we don't crash on mutually recursive coroutines\n\ntarget triple = \"x86_64-redhat-linux-gnu\"\n\ndefine void @foo() presplitcoroutine personality ptr null {\nentry:\n\n  %0 = call token @llvm.coro.id(i32 0, ptr null, ptr null, ptr null)\n  %1 = call ptr @llvm.coro.begin(token %0, ptr null)\n  %2 = call token @llvm.coro.save(ptr null)\n  %3 = call i8 @llvm.coro.suspend(token none, i1 false)\n  %4 = call token @llvm.coro.save(ptr null)\n  call void @llvm.coro.await.suspend.void(ptr null, ptr null, ptr @bar)\n  ret void\n}\n\ndefine void @bar(ptr %0, ptr %1) {\nentry:\n  call void @foo()\n  ret void\n}\n\n\ndeclare token @llvm.coro.id(i32, ptr readnone, ptr nocapture readonly, ptr) #0\ndeclare ptr @llvm.coro.begin(token, ptr writeonly) nounwind\ndeclare token @llvm.coro.save(ptr) nomerge nounwind\ndeclare void @llvm.coro.await.suspend.void(ptr, ptr, ptr)\ndeclare i8 @llvm.coro.suspend(token, i1) nounwind\n\nattributes #0 = { nocallback nofree nosync nounwind willreturn memory(argmem: read) }"
         }
       ]
     }
@@ -87,5 +83,6 @@
         "body": "The 3rd argument to `@llvm.coro.await.suspend` is the `await_suspend` function in C++. This happens when `await_suspend()` calls the same coroutine from its body. "
       }
     ]
-  }
+  },
+  "verified": true
 }

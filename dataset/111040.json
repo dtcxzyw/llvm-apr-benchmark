@@ -56,5 +56,6 @@
         "body": "This is a regression in trunk: https://godbolt.org/z/a53x7oxhq"
       }
     ]
-  }
+  },
+  "verified": true
 }

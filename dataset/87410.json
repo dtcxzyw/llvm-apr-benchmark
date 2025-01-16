@@ -70,8 +70,8 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/RISCV/divrem.ll",
       "commands": [
-        "opt < %s -passes=loop-vectorize -scalable-vectorization=on -mtriple riscv64-linux-gnu -mattr=+v,+f -S 2>%t",
-        "opt < %s -passes=loop-vectorize -scalable-vectorization=off -riscv-v-vector-bits-min=-1 -mtriple riscv64-linux-gnu -mattr=+v,+f -S 2>%t"
+        "opt < %s -passes=loop-vectorize -scalable-vectorization=on -mtriple riscv64-linux-gnu -mattr=+v,+f -S",
+        "opt < %s -passes=loop-vectorize -scalable-vectorization=off -riscv-v-vector-bits-min=-1 -mtriple riscv64-linux-gnu -mattr=+v,+f -S"
       ],
       "tests": [
         {
@@ -112,10 +112,10 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/RISCV/uniform-load-store.ll",
       "commands": [
-        "opt < %s -passes=loop-vectorize -scalable-vectorization=on -riscv-v-vector-bits-min=0 -mtriple riscv64-linux-gnu -mattr=+v,+f -S 2>%t",
-        "opt < %s -passes=loop-vectorize -scalable-vectorization=off -riscv-v-vector-bits-min=-1 -mtriple riscv64-linux-gnu -mattr=+v,+f -S 2>%t",
-        "opt < %s -passes=loop-vectorize -scalable-vectorization=on -riscv-v-vector-bits-min=0 -prefer-predicate-over-epilogue=predicate-dont-vectorize -mtriple riscv64-linux-gnu -mattr=+v,+f -S 2>%t",
-        "opt < %s -passes=loop-vectorize -scalable-vectorization=off -riscv-v-vector-bits-min=-1 -prefer-predicate-over-epilogue=predicate-dont-vectorize -mtriple riscv64-linux-gnu -mattr=+v,+f -S 2>%t"
+        "opt < %s -passes=loop-vectorize -scalable-vectorization=on -riscv-v-vector-bits-min=0 -mtriple riscv64-linux-gnu -mattr=+v,+f -S",
+        "opt < %s -passes=loop-vectorize -scalable-vectorization=off -riscv-v-vector-bits-min=-1 -mtriple riscv64-linux-gnu -mattr=+v,+f -S",
+        "opt < %s -passes=loop-vectorize -scalable-vectorization=on -riscv-v-vector-bits-min=0 -prefer-predicate-over-epilogue=predicate-dont-vectorize -mtriple riscv64-linux-gnu -mattr=+v,+f -S",
+        "opt < %s -passes=loop-vectorize -scalable-vectorization=off -riscv-v-vector-bits-min=-1 -prefer-predicate-over-epilogue=predicate-dont-vectorize -mtriple riscv64-linux-gnu -mattr=+v,+f -S"
       ],
       "tests": [
         {

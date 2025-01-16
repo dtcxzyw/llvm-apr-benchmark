@@ -59,5 +59,6 @@
         "body": "Not sure, it is not an immediate regression from 18 to 19, and it is too late, I think, to include it into 19"
       }
     ]
-  }
+  },
+  "verified": true
 }

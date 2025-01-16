@@ -365,8 +365,7 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/runtime-checks-hoist.ll",
       "commands": [
-        "-force-vector-width=4 -debug-only=loop-accesses,loop-vectorize,loop-utils 2> %t",
-        "cat %t"
+        "opt < %s -passes='loop-vectorize' -force-vector-interleave=1 -S -force-vector-width=4 -debug-only=loop-accesses,loop-vectorize,loop-utils"
       ],
       "tests": [
         {

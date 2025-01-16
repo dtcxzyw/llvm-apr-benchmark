@@ -33,6 +33,7 @@ test_count = []
 single_file_fix_count = 0
 single_function_fix_count = 0
 single_hunk_fix_count = 0
+verified_count = 0
 
 for name in os.listdir(llvm_helper.dataset_dir):
     if name.endswith(".json"):
@@ -80,9 +81,12 @@ for name in os.listdir(llvm_helper.dataset_dir):
             bug_func_count += len(v)
         if bug_func_count == 1 or hunk_count == 1:
             single_function_fix_count += 1
+        if data.get("verified", False):
+            verified_count += 1
 
 
 print(f"Total issues: {count}")
+print(f"Verified issues: {verified_count} ({verified_count/count*100.0:.2f}%)")
 print("\nBug type summary:")
 for k, v in bug_type.items():
     print(f"  {k}: {v}")

@@ -160,15 +160,16 @@ def alive2_check(src: bytes, tgt: bytes, additional_args: str):
                 src_file.flush()
                 tgt_file.flush()
 
-                out = subprocess.check_output(
-                    [
-                        llvm_alive_tv,
-                        "--disable-undef-input",
-                        src_file.name,
-                        tgt_file.name,
-                    ]
-                    # + additional_args.strip().split(" "),
-                ).decode()
+                args = [
+                    llvm_alive_tv,
+                    "--disable-undef-input",
+                    src_file.name,
+                    tgt_file.name,
+                ]
+                if additional_args != None:
+                    args += additional_args.strip().split(" ")
+
+                out = subprocess.check_output(args, stderr=subprocess.STDOUT).decode()
                 success = (
                     "0 incorrect transformations" in out
                     and "0 failed-to-prove transformations" in out
@@ -184,7 +185,7 @@ def lli_check(tgt: bytes, expected_out: str):
         out = subprocess.check_output(
             [os.path.join(llvm_build_dir, "bin/lli")],
             input=tgt,
-            timeout=1.0,
+            timeout=60.0,
             stderr=subprocess.STDOUT,
         ).decode()
         if out == expected_out:
@@ -195,6 +196,17 @@ def lli_check(tgt: bytes, expected_out: str):
     except subprocess.TimeoutExpired as e:
         return (False, str(e) + "\n" + decode_output(e.output))
 
+
+def copy_triple(input: str, out: bytes):
+    triple_pattern = "target triple ="
+    if triple_pattern in input:
+        return input
+    ref_out = out.decode()
+    if triple_pattern in ref_out:
+        triple_pos = ref_out.find(triple_pattern)
+        triple_line = ref_out[triple_pos:ref_out.find('\n', triple_pos) + 1]
+        return triple_line + input
+    return input
 
 def verify_dispatch(
     repro: bool,
@@ -207,23 +219,26 @@ def verify_dispatch(
     args_list = list(
         filter(
             lambda x: x != "",
-            args.replace("<", "")
+            args.replace("< ", " ")
             .replace("%s", "-")
             .replace("2>&1", "")
-            .replace("opt", os.path.join(llvm_build_dir, "bin/opt"))
+            .replace("'", "")
+            .replace("\"", "")
+            .replace("opt", os.path.join(llvm_build_dir, "bin/opt"), 1)
             .strip()
             .split(" "),
         )
     )
     try:
         out = subprocess.check_output(
-            args_list, input=input.encode(), stderr=subprocess.STDOUT, timeout=1.0
+            args_list, input=input.encode(), stderr=subprocess.STDOUT, timeout=60.0
         )
         if type == "miscompilation":
             if lli_expected_out is not None:
                 res, log = lli_check(out, lli_expected_out)
             else:
-                res, log = alive2_check(input.encode(), out, additional_args)
+                new_input = copy_triple(input, out)
+                res, log = alive2_check(new_input.encode(), out, additional_args)
             if repro == True:
                 res = not res
             return (res, log)
@@ -246,7 +261,12 @@ def verify_test_group(repro: bool, input, type: str):
             body = subtest["test_body"]
             for args in commands:
                 res, log = verify_dispatch(
-                    repro, body, args, type, "", subtest.get("lli_expected_out")
+                    repro,
+                    body,
+                    args,
+                    type,
+                    subtest.get("additional_args"),
+                    subtest.get("lli_expected_out"),
                 )
                 test_res.append(
                     {

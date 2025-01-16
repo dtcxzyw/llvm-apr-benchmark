@@ -62,11 +62,18 @@ fix_commit_map = {
     "86280": None,  # Object bug
     "88804": None,  # Duplicate of #88297
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
+    "102784": None,  # Multi-commit fix
+    "104397": None,  # Invalid reproducer
     "104718": None,  # Test change
+    "105713": None,  # Duplicate of #104714
+    "106909": None,  # Cannot reproduce with alive2
+    "107037": None,  # Multi-commit fix
+    "107501": None,  # Complicated fix
     "108618": None,  # Multi-commit fix
     "109581": None,  # Too many unrelated changes
     "110819": None,  # Outdated issue
     "112633": None,  # Multi-commit fix
+    '113301': None,  # miscompilation:undef
     "122166": None,  # Duplicate of #117308
 }
 
@@ -133,7 +140,7 @@ for label in issue["labels"]:
         issue_type = "crash"
     if "hang" in label_name:
         issue_type = "hang"
-    if label_name in ["invalid", "wontfix", "duplicate", "undefined behavior"]:
+    if label_name in ["invalid", "wontfix", "duplicate", "undefined behavior", "miscompilation:undef"]:
         print("This issue is marked as invalid")
         exit(1)
 
@@ -215,8 +222,33 @@ retrieve_test_from_main = {
 }
 test_commit = "origin/main" if issue_id in retrieve_test_from_main else fix_commit
 for file in test_patchset:
-    test_names = set()
     test_file = llvm_helper.git_execute(["show", f"{test_commit}:{file.path}"])
+    commands = []
+    for match in re.findall(runline_pattern, test_file):
+        commands.append(match.strip())
+    if issue_type != "miscompilation" and file.is_added_file:
+        print(file.path, "full")
+
+        def is_valid_test_line(line: str):
+            line = line.strip()
+            if (
+                line.startswith("; NOTE")
+                or line.startswith("; RUN")
+                or line.startswith("; CHECK")
+            ):
+                return False
+            return True
+
+        normalized_body = "\n".join(filter(is_valid_test_line, test_file.splitlines()))
+        tests.append(
+            {
+                "file": file.path,
+                "commands": commands,
+                "tests": [{"test_name": "<module>", "test_body": normalized_body}],
+            }
+        )
+        continue
+    test_names = set()
     for hunk in file:
         matched = re.search(testname_pattern, hunk.section_header)
         if matched:
@@ -225,9 +257,6 @@ for file in test_patchset:
             for match in re.findall(testname_pattern, line):
                 test_names.add(match.strip())
     print(file.path, test_names)
-    commands = []
-    for match in re.findall(runline_pattern, test_file):
-        commands.append(match.strip())
     subtests = []
     for test_name in test_names:
         try:
@@ -274,10 +303,10 @@ metadata = {
     "bug_type": issue_type,
     "base_commit": base_commit,
     "knowledge_cutoff": knowledge_cutoff,
-    "lit_test_dir": list(lit_test_dir),
+    "lit_test_dir": sorted(lit_test_dir),
     "hints": {
         "fix_commit": fix_commit,
-        "components": list(components),
+        "components": sorted(components),
         "bug_location_lineno": bug_location_lineno,
         "bug_location_funcname": bug_location_funcname,
     },

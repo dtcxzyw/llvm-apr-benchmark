@@ -56,5 +56,6 @@
         "body": "Thanks for the small reproducer. That is fixed in #110979 - this PR just avoids us crash/asserting when a salvage attempt is made with an offset over 64 bits wide and poisons the dbg record instead. I didn't look into whether we could theoretically or practically salvage it.\r\n\r\nn.b., this case was broken with debug intrinsics too, not just the new debug record format."
       }
     ]
-  }
+  },
+  "verified": true
 }

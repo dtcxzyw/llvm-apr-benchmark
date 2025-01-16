@@ -61,5 +61,6 @@
         "body": "> I know godbolt does not have clang assertions build beyond trunk but you can use clang++ and just use `-x c` to check out if the assert exists in previous versions.\r\n\r\n@shafik: Thanks for the tip!\r\n\r\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

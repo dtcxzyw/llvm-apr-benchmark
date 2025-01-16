@@ -59,5 +59,6 @@
         "body": "This looks like a duplicate of https://github.com/llvm/llvm-project/issues/109528"
       }
     ]
-  }
+  },
+  "verified": true
 }

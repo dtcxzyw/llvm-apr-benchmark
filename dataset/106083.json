@@ -83,5 +83,6 @@
         "body": "> Perhaps the same assertion I reported here: [#96127 (comment)](https://github.com/llvm/llvm-project/pull/96127#issuecomment-2303862037) ?\r\n\r\nYes, same assertion, and in addition my second test case above triggered another assertion."
       }
     ]
-  }
+  },
+  "verified": true
 }

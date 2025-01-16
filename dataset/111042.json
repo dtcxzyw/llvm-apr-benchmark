@@ -80,5 +80,6 @@
         "body": "Looks like a clang-19 regression: https://godbolt.org/z/6d3edKn86"
       }
     ]
-  }
+  },
+  "verified": true
 }

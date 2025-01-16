@@ -34,36 +34,37 @@ def verify_issue(issue):
     res, log = llvm_helper.build(max_build_jobs)
     if not res:
         print(log)
-        return
+        raise RuntimeError("Failed to build")
     bug_type = data["bug_type"]
     print("Stage 1 verify")
     res, log = llvm_helper.verify_test_group(
         repro=True, input=data["tests"], type=bug_type
     )
     if not res:
-        print("Failed to repro")
         print(json.dumps(log, indent=2))
-        return
+        raise RuntimeError("Failed to reproduce")
     llvm_helper.apply(data["patch"])
     print("Stage 2 build")
     res, log = llvm_helper.build(max_build_jobs)
     if not res:
         print(log)
-        return
+        raise RuntimeError("Failed to build")
     print("Stage 2 verify")
     res, log = llvm_helper.verify_test_group(
         repro=False, input=data["tests"], type=bug_type
     )
     if not res:
-        print("Failed to fix")
         print(json.dumps(llvm_helper.get_first_failed_test(log), indent=2))
-        return
+        raise RuntimeError("Failed to fix")
     print("Stage 2 lit check")
-    res, log = llvm_helper.verify_lit(test_commit=data["hints"]["fix_commit"], dirs=data["lit_test_dir"], max_test_jobs=max_build_jobs)
+    res, log = llvm_helper.verify_lit(
+        test_commit=data["hints"]["fix_commit"],
+        dirs=data["lit_test_dir"],
+        max_test_jobs=max_build_jobs,
+    )
     if not res:
-        print("Lit check failure")
         print(log)
-        return
+        raise RuntimeError("Lit check failure")
     data["verified"] = True
 
     with open(path, "w") as f:
@@ -85,4 +86,5 @@ for idx, task in enumerate(task_list):
         verify_issue(task)
     except Exception as e:
         # print(e)
+        # exit(1)
         pass
