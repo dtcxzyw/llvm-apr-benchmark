@@ -59,8 +59,8 @@
       ],
       "tests": [
         {
-          "test_name": "pr87378_vpinstruction_or_drop_poison_generating_flags",
-          "test_body": "target datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"riscv64-unknown-linux-gnu\"\n\ndefine void @pr87378_vpinstruction_or_drop_poison_generating_flags(ptr %arg, i64 %a, i64 %b, i64 %c) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %c.1 = icmp ule i64 %iv, %a\n  br i1 %c.1, label %then.1, label %else.1\n\nthen.1:                                           ; preds = %loop.header\n  %c.2 = icmp ule i64 %iv, %b\n  br i1 %c.2, label %else.1, label %merge\n\nelse.1:                                           ; preds = %then.1, %loop.header\n  %c.3 = icmp ule i64 %iv, %c\n  br i1 %c.3, label %then.2, label %loop.latch\n\nthen.2:                                           ; preds = %else.1\n  br label %merge\n\nmerge:                                            ; preds = %then.2, %then.1\n  %idx = phi i64 [ poison, %then.1 ], [ %iv, %then.2 ]\n  %getelementptr = getelementptr i16, ptr %arg, i64 %idx\n  store i16 0, ptr %getelementptr, align 2\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %merge, %else.1\n  %iv.next = add i64 %iv, 1\n  %icmp = icmp eq i64 %iv, 1000\n  br i1 %icmp, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ntarget datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"riscv64-unknown-linux-gnu\"\n\n; Test case for https://github.com/llvm/llvm-project/issues/87378.\ndefine void @pr87378_vpinstruction_or_drop_poison_generating_flags(ptr %arg, i64 %a, i64 %b, i64 %c) {\n;\nentry:\n  br label %loop.header\n\nloop.header:\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %c.1 = icmp ule i64 %iv, %a\n  br i1 %c.1, label %then.1, label %else.1\n\nthen.1:\n  %c.2 = icmp ule i64 %iv, %b\n  br i1 %c.2, label %else.1, label %merge\n\nelse.1:\n  %c.3 = icmp ule i64 %iv, %c\n  br i1 %c.3, label %then.2, label %loop.latch\n\nthen.2:\n  br label %merge\n\nmerge:\n  %idx = phi i64 [ poison, %then.1 ], [ %iv, %then.2 ]\n  %getelementptr = getelementptr i16, ptr %arg, i64 %idx\n  store i16 0, ptr %getelementptr, align 2\n  br label %loop.latch\n\nloop.latch:\n  %iv.next = add i64 %iv, 1\n  %icmp = icmp eq i64 %iv, 1000\n  br i1 %icmp, label %exit, label %loop.header\n\nexit:\n  ret void\n}\n;.\n;."
         }
       ]
     }
@@ -74,5 +74,6 @@
       "crash"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

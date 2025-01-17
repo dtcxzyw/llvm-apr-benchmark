@@ -27,10 +27,10 @@
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
         "VPlanTransforms::adjustFixedOrderRecurrences",
-        "VPlanTransforms::clearReductionWrapFlags",
         "collectUsersRecursively",
+        "legalizeAndOptimizeInductions",
         "createScalarIVSteps",
-        "legalizeAndOptimizeInductions"
+        "VPlanTransforms::clearReductionWrapFlags"
       ]
     }
   },
@@ -45,7 +45,8 @@
       "tests": [
         {
           "test_name": "test_iv_uniform_with_outside_use_scev_simplification",
-          "test_body": "define i32 @test_iv_uniform_with_outside_use_scev_simplification(ptr %dst) {\nentry:\n  %step.1 = sext i8 0 to i32\n  %step.2 = add nsw i32 %step.1, 1\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop ]\n  %gep.dst = getelementptr inbounds i16, ptr %dst, i32 %iv\n  store i16 0, ptr %gep.dst, align 2\n  %iv.next = add i32 %step.2, %iv\n  %cmp.i = icmp slt i32 %iv.next, 8\n  br i1 %cmp.i, label %loop, label %e.exit\n\ne.exit:                                           ; preds = %loop\n  %res = phi i32 [ %iv.next, %loop ]\n  ret i32 %res\n}\n"
+          "test_body": "define i32 @test_iv_uniform_with_outside_use_scev_simplification(ptr %dst) {\nentry:\n  %step.1 = sext i8 0 to i32\n  %step.2 = add nsw i32 %step.1, 1\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop ]\n  %gep.dst = getelementptr inbounds i16, ptr %dst, i32 %iv\n  store i16 0, ptr %gep.dst, align 2\n  %iv.next = add i32 %step.2, %iv\n  %cmp.i = icmp slt i32 %iv.next, 8\n  br i1 %cmp.i, label %loop, label %e.exit\n\ne.exit:                                           ; preds = %loop\n  %res = phi i32 [ %iv.next, %loop ]\n  ret i32 %res\n}\n",
+          "additional_args": "-src-unroll=8 -tgt-unroll=8"
         }
       ]
     }
@@ -72,5 +73,6 @@
         "body": "Thank God! clang19 works as expected."
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -2,51 +2,31 @@
   "bug_id": "80836",
   "issue_url": "https://github.com/llvm/llvm-project/issues/80836",
   "bug_type": "crash",
-  "base_commit": "70fbcdb41d50ee23a36501aee733be33eecfb7da",
+  "base_commit": "ea2d9383a23ca17b9240ad64c2adc5f2b5a73dc0",
   "knowledge_cutoff": "2024-02-06T14:26:26Z",
   "lit_test_dir": [
     "llvm/test/Transforms/LoopVectorize"
   ],
   "hints": {
-    "fix_commit": "962fbafecf4730ba84a3b9fd7a662a5c30bb2c7c",
+    "fix_commit": "1c10821022f1799452065fb57474e894e2562b7f",
     "components": [
       "LoopVectorize"
     ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
         [
-          1950,
-          1955
-        ],
-        [
-          2046,
-          2051
-        ],
-        [
-          2069,
-          2084
-        ],
-        [
-          2137,
-          2144
-        ],
-        [
-          2172,
-          2179
+          2010,
+          2025
         ]
       ]
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "Create",
-        "GeneratedRTChecks",
-        "emitMemRuntimeChecks",
-        "emitSCEVChecks",
         "getCost"
       ]
     }
   },
-  "patch": "commit 962fbafecf4730ba84a3b9fd7a662a5c30bb2c7c\nAuthor: David Sherwood <57997763+david-arm@users.noreply.github.com>\nDate:   Fri Jan 26 14:43:48 2024 +0000\n\n    [LoopVectorize] Refine runtime memory check costs when there is an outer loop (#76034)\n    \n    When we generate runtime memory checks for an inner loop it's\n    possible that these checks are invariant in the outer loop and\n    so will get hoisted out. In such cases, the effective cost of\n    the checks should reduce to reflect the outer loop trip count.\n    \n    This fixes a 25% performance regression introduced by commit\n    \n    49b0e6dcc296792b577ae8f0f674e61a0929b99d\n    \n    when building the SPEC2017 x264 benchmark with PGO, where we\n    decided the inner loop trip count wasn't high enough to warrant\n    the (incorrect) high cost of the runtime checks. Also, when\n    runtime memory checks consist entirely of diff checks these are\n    likely to be outer loop invariant.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\nindex cff049cf0c58..c9c74edccf91 100644\n--- a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n+++ b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n@@ -1950,6 +1950,8 @@ class GeneratedRTChecks {\n   bool CostTooHigh = false;\n   const bool AddBranchWeights;\n \n+  Loop *OuterLoop = nullptr;\n+\n public:\n   GeneratedRTChecks(ScalarEvolution &SE, DominatorTree *DT, LoopInfo *LI,\n                     TargetTransformInfo *TTI, const DataLayout &DL,\n@@ -2046,6 +2048,9 @@ public:\n       DT->eraseNode(SCEVCheckBlock);\n       LI->removeBlock(SCEVCheckBlock);\n     }\n+\n+    // Outer loop is used as part of the later cost calculations.\n+    OuterLoop = L->getParentLoop();\n   }\n \n   InstructionCost getCost() {\n@@ -2069,16 +2074,61 @@ public:\n         LLVM_DEBUG(dbgs() << \"  \" << C << \"  for \" << I << \"\\n\");\n         RTCheckCost += C;\n       }\n-    if (MemCheckBlock)\n+    if (MemCheckBlock) {\n+      InstructionCost MemCheckCost = 0;\n       for (Instruction &I : *MemCheckBlock) {\n         if (MemCheckBlock->getTerminator() == &I)\n           continue;\n         InstructionCost C =\n             TTI->getInstructionCost(&I, TTI::TCK_RecipThroughput);\n         LLVM_DEBUG(dbgs() << \"  \" << C << \"  for \" << I << \"\\n\");\n-        RTCheckCost += C;\n+        MemCheckCost += C;\n       }\n \n+      // If the runtime memory checks are being created inside an outer loop\n+      // we should find out if these checks are outer loop invariant. If so,\n+      // the checks will likely be hoisted out and so the effective cost will\n+      // reduce according to the outer loop trip count.\n+      if (OuterLoop) {\n+        ScalarEvolution *SE = MemCheckExp.getSE();\n+        // TODO: If profitable, we could refine this further by analysing every\n+        // individual memory check, since there could be a mixture of loop\n+        // variant and invariant checks that mean the final condition is\n+        // variant.\n+        const SCEV *Cond = SE->getSCEV(MemRuntimeCheckCond);\n+        if (SE->isLoopInvariant(Cond, OuterLoop)) {\n+          // It seems reasonable to assume that we can reduce the effective\n+          // cost of the checks even when we know nothing about the trip\n+          // count. Assume that the outer loop executes at least twice.\n+          unsigned BestTripCount = 2;\n+\n+          // If exact trip count is known use that.\n+          if (unsigned SmallTC = SE->getSmallConstantTripCount(OuterLoop))\n+            BestTripCount = SmallTC;\n+          else if (LoopVectorizeWithBlockFrequency) {\n+            // Else use profile data if available.\n+            if (auto EstimatedTC = getLoopEstimatedTripCount(OuterLoop))\n+              BestTripCount = *EstimatedTC;\n+          }\n+\n+          InstructionCost NewMemCheckCost = MemCheckCost / BestTripCount;\n+\n+          // Let's ensure the cost is always at least 1.\n+          NewMemCheckCost = std::max(*NewMemCheckCost.getValue(),\n+                                     (InstructionCost::CostType)1);\n+\n+          LLVM_DEBUG(dbgs()\n+                     << \"We expect runtime memory checks to be hoisted \"\n+                     << \"out of the outer loop. Cost reduced from \"\n+                     << MemCheckCost << \" to \" << NewMemCheckCost << '\\n');\n+\n+          MemCheckCost = NewMemCheckCost;\n+        }\n+      }\n+\n+      RTCheckCost += MemCheckCost;\n+    }\n+\n     if (SCEVCheckBlock || MemCheckBlock)\n       LLVM_DEBUG(dbgs() << \"Total cost of runtime checks: \" << RTCheckCost\n                         << \"\\n\");\n@@ -2137,8 +2187,8 @@ public:\n \n     BranchInst::Create(LoopVectorPreHeader, SCEVCheckBlock);\n     // Create new preheader for vector loop.\n-    if (auto *PL = LI->getLoopFor(LoopVectorPreHeader))\n-      PL->addBasicBlockToLoop(SCEVCheckBlock, *LI);\n+    if (OuterLoop)\n+      OuterLoop->addBasicBlockToLoop(SCEVCheckBlock, *LI);\n \n     SCEVCheckBlock->getTerminator()->eraseFromParent();\n     SCEVCheckBlock->moveBefore(LoopVectorPreHeader);\n@@ -2172,8 +2222,8 @@ public:\n     DT->changeImmediateDominator(LoopVectorPreHeader, MemCheckBlock);\n     MemCheckBlock->moveBefore(LoopVectorPreHeader);\n \n-    if (auto *PL = LI->getLoopFor(LoopVectorPreHeader))\n-      PL->addBasicBlockToLoop(MemCheckBlock, *LI);\n+    if (OuterLoop)\n+      OuterLoop->addBasicBlockToLoop(MemCheckBlock, *LI);\n \n     BranchInst &BI =\n         *BranchInst::Create(Bypass, LoopVectorPreHeader, MemRuntimeCheckCond);\n",
+  "patch": "commit 1c10821022f1799452065fb57474e894e2562b7f\nAuthor: David Sherwood <57997763+david-arm@users.noreply.github.com>\nDate:   Wed Feb 14 16:07:51 2024 +0000\n\n    [LoopVectorize] Fix divide-by-zero bug (#80836) (#81721)\n    \n    When attempting to use the estimated trip count to refine the costs of\n    the runtime memory checks we should also check for sane trip counts to\n    prevent divide-by-zero faults on some platforms.\n    \n    Fixes #80836\n\ndiff --git a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\nindex b39bf21cacdb..98b177cf5d2d 100644\n--- a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n+++ b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n@@ -2010,16 +2010,18 @@ public:\n               BestTripCount = *EstimatedTC;\n           }\n \n+          BestTripCount = std::max(BestTripCount, 1U);\n           InstructionCost NewMemCheckCost = MemCheckCost / BestTripCount;\n \n           // Let's ensure the cost is always at least 1.\n           NewMemCheckCost = std::max(*NewMemCheckCost.getValue(),\n                                      (InstructionCost::CostType)1);\n \n-          LLVM_DEBUG(dbgs()\n-                     << \"We expect runtime memory checks to be hoisted \"\n-                     << \"out of the outer loop. Cost reduced from \"\n-                     << MemCheckCost << \" to \" << NewMemCheckCost << '\\n');\n+          if (BestTripCount > 1)\n+            LLVM_DEBUG(dbgs()\n+                       << \"We expect runtime memory checks to be hoisted \"\n+                       << \"out of the outer loop. Cost reduced from \"\n+                       << MemCheckCost << \" to \" << NewMemCheckCost << '\\n');\n \n           MemCheckCost = NewMemCheckCost;\n         }\n",
   "tests": [
     {
       "file": "llvm/test/Transforms/LoopVectorize/AArch64/low_trip_memcheck_cost.ll",
@@ -55,28 +35,12 @@
       ],
       "tests": [
         {
-          "test_name": "outer_known_tc64",
-          "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @outer_known_tc64(ptr nocapture noundef %a, ptr nocapture noundef readonly %b, i64 noundef %n) {\nentry:\n  br label %outer.loop\n\nouter.loop:                                       ; preds = %inner.exit, %entry\n  %outer.iv = phi i64 [ %outer.iv.next, %inner.exit ], [ 0, %entry ]\n  %mul.us = mul nsw i64 %outer.iv, %n\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %outer.loop\n  %inner.iv = phi i64 [ 0, %outer.loop ], [ %inner.iv.next, %inner.loop ]\n  %add.us = add nuw nsw i64 %inner.iv, %mul.us\n  %arrayidx.us = getelementptr inbounds i8, ptr %b, i64 %add.us\n  %0 = load i8, ptr %arrayidx.us, align 1\n  %arrayidx7.us = getelementptr inbounds i8, ptr %a, i64 %add.us\n  %1 = load i8, ptr %arrayidx7.us, align 1\n  %add9.us = add i8 %1, %0\n  store i8 %add9.us, ptr %arrayidx7.us, align 1\n  %inner.iv.next = add nuw nsw i64 %inner.iv, 1\n  %exitcond.not = icmp eq i64 %inner.iv.next, %n\n  br i1 %exitcond.not, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  %outer.iv.next = add nuw nsw i64 %outer.iv, 1\n  %exitcond26.not = icmp eq i64 %outer.iv.next, 64\n  br i1 %exitcond26.not, label %outer.exit, label %outer.loop\n\nouter.exit:                                       ; preds = %inner.exit\n  ret void\n}\n"
-        },
-        {
           "test_name": "outer_known_tc3_full_range_checks",
           "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @outer_known_tc3_full_range_checks(ptr nocapture noundef %dst, ptr nocapture noundef readonly %src, i64 noundef %n) {\nentry:\n  br label %outer.loop\n\nouter.loop:                                       ; preds = %inner.exit, %entry\n  %outer.iv = phi i64 [ 0, %entry ], [ %outer.iv.next, %inner.exit ]\n  %0 = mul nsw i64 %outer.iv, %n\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %outer.loop\n  %iv.inner = phi i64 [ 0, %outer.loop ], [ %iv.inner.next, %inner.loop ]\n  %1 = add nuw nsw i64 %iv.inner, %0\n  %arrayidx.us = getelementptr inbounds i32, ptr %src, i64 %1\n  %2 = load i32, ptr %arrayidx.us, align 4\n  %arrayidx8.us = getelementptr inbounds i32, ptr %dst, i64 %1\n  %3 = load i32, ptr %arrayidx8.us, align 4\n  %add9.us = add nsw i32 %3, %2\n  store i32 %add9.us, ptr %arrayidx8.us, align 4\n  %iv.inner.next = add nuw nsw i64 %iv.inner, 1\n  %inner.exit.cond = icmp eq i64 %iv.inner.next, %n\n  br i1 %inner.exit.cond, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  %outer.iv.next = add nuw nsw i64 %outer.iv, 1\n  %outer.exit.cond = icmp eq i64 %outer.iv.next, 3\n  br i1 %outer.exit.cond, label %outer.exit, label %outer.loop\n\nouter.exit:                                       ; preds = %inner.exit\n  ret void\n}\n"
         },
         {
-          "test_name": "no_outer_loop",
-          "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @no_outer_loop(ptr nocapture noundef %a, ptr nocapture noundef readonly %b, i64 noundef %off, i64 noundef %n) {\nentry:\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %entry\n  %inner.iv = phi i64 [ 0, %entry ], [ %inner.iv.next, %inner.loop ]\n  %add.us = add nuw nsw i64 %inner.iv, %off\n  %arrayidx.us = getelementptr inbounds i8, ptr %b, i64 %add.us\n  %0 = load i8, ptr %arrayidx.us, align 1\n  %arrayidx7.us = getelementptr inbounds i8, ptr %a, i64 %add.us\n  %1 = load i8, ptr %arrayidx7.us, align 1\n  %add9.us = add i8 %1, %0\n  store i8 %add9.us, ptr %arrayidx7.us, align 1\n  %inner.iv.next = add nuw nsw i64 %inner.iv, 1\n  %exitcond.not = icmp eq i64 %inner.iv.next, %n\n  br i1 %exitcond.not, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  ret void\n}\n"
-        },
-        {
-          "test_name": "outer_no_tc",
-          "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @outer_no_tc(ptr nocapture noundef %a, ptr nocapture noundef readonly %b, i64 noundef %m, i64 noundef %n) {\nentry:\n  br label %outer.loop\n\nouter.loop:                                       ; preds = %inner.exit, %entry\n  %outer.iv = phi i64 [ %outer.iv.next, %inner.exit ], [ 0, %entry ]\n  %mul.us = mul nsw i64 %outer.iv, %n\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %outer.loop\n  %inner.iv = phi i64 [ 0, %outer.loop ], [ %inner.iv.next, %inner.loop ]\n  %add.us = add nuw nsw i64 %inner.iv, %mul.us\n  %arrayidx.us = getelementptr inbounds i8, ptr %b, i64 %add.us\n  %0 = load i8, ptr %arrayidx.us, align 1\n  %arrayidx7.us = getelementptr inbounds i8, ptr %a, i64 %add.us\n  %1 = load i8, ptr %arrayidx7.us, align 1\n  %add9.us = add i8 %1, %0\n  store i8 %add9.us, ptr %arrayidx7.us, align 1\n  %inner.iv.next = add nuw nsw i64 %inner.iv, 1\n  %exitcond.not = icmp eq i64 %inner.iv.next, %n\n  br i1 %exitcond.not, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  %outer.iv.next = add nuw nsw i64 %outer.iv, 1\n  %exitcond27.not = icmp eq i64 %outer.iv.next, %m\n  br i1 %exitcond27.not, label %outer.exit, label %outer.loop\n\nouter.exit:                                       ; preds = %inner.exit\n  ret void\n}\n"
-        },
-        {
-          "test_name": "outer_pgo_3",
-          "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @outer_pgo_3(ptr nocapture noundef %a, ptr nocapture noundef readonly %b, i64 noundef %m, i64 noundef %n) {\nentry:\n  br label %outer.loop\n\nouter.loop:                                       ; preds = %inner.exit, %entry\n  %outer.iv = phi i64 [ %outer.iv.next, %inner.exit ], [ 0, %entry ]\n  %mul.us = mul nsw i64 %outer.iv, %n\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %outer.loop\n  %inner.iv = phi i64 [ 0, %outer.loop ], [ %inner.iv.next, %inner.loop ]\n  %add.us = add nuw nsw i64 %inner.iv, %mul.us\n  %arrayidx.us = getelementptr inbounds i8, ptr %b, i64 %add.us\n  %0 = load i8, ptr %arrayidx.us, align 1\n  %arrayidx7.us = getelementptr inbounds i8, ptr %a, i64 %add.us\n  %1 = load i8, ptr %arrayidx7.us, align 1\n  %add9.us = add i8 %1, %0\n  store i8 %add9.us, ptr %arrayidx7.us, align 1\n  %inner.iv.next = add nuw nsw i64 %inner.iv, 1\n  %exitcond.not = icmp eq i64 %inner.iv.next, %n\n  br i1 %exitcond.not, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  %outer.iv.next = add nuw nsw i64 %outer.iv, 1\n  %exitcond26.not = icmp eq i64 %outer.iv.next, %m\n  br i1 %exitcond26.not, label %outer.exit, label %outer.loop, !prof !0\n\nouter.exit:                                       ; preds = %inner.exit\n  ret void\n}\n\n!0 = !{!\"branch_weights\", i32 10, i32 20}\n"
-        },
-        {
-          "test_name": "outer_known_tc3",
-          "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @outer_known_tc3(ptr nocapture noundef %a, ptr nocapture noundef readonly %b, i64 noundef %n) {\nentry:\n  br label %outer.loop\n\nouter.loop:                                       ; preds = %inner.exit, %entry\n  %outer.iv = phi i64 [ %outer.iv.next, %inner.exit ], [ 0, %entry ]\n  %mul.us = mul nsw i64 %outer.iv, %n\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %outer.loop\n  %inner.iv = phi i64 [ 0, %outer.loop ], [ %inner.iv.next, %inner.loop ]\n  %add.us = add nuw nsw i64 %inner.iv, %mul.us\n  %arrayidx.us = getelementptr inbounds i8, ptr %b, i64 %add.us\n  %0 = load i8, ptr %arrayidx.us, align 1\n  %arrayidx7.us = getelementptr inbounds i8, ptr %a, i64 %add.us\n  %1 = load i8, ptr %arrayidx7.us, align 1\n  %add9.us = add i8 %1, %0\n  store i8 %add9.us, ptr %arrayidx7.us, align 1\n  %inner.iv.next = add nuw nsw i64 %inner.iv, 1\n  %exitcond.not = icmp eq i64 %inner.iv.next, %n\n  br i1 %exitcond.not, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  %outer.iv.next = add nuw nsw i64 %outer.iv, 1\n  %exitcond26.not = icmp eq i64 %outer.iv.next, 3\n  br i1 %exitcond26.not, label %outer.exit, label %outer.loop\n\nouter.exit:                                       ; preds = %inner.exit\n  ret void\n}\n"
+          "test_name": "outer_pgo_minus1",
+          "test_body": "target triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @outer_pgo_minus1(ptr nocapture noundef %a, ptr nocapture noundef readonly %b, i64 noundef %m, i64 noundef %n) {\nentry:\n  br label %outer.loop\n\nouter.loop:                                       ; preds = %inner.exit, %entry\n  %outer.iv = phi i64 [ %outer.iv.next, %inner.exit ], [ 0, %entry ]\n  %mul.us = mul nsw i64 %outer.iv, %n\n  br label %inner.loop\n\ninner.loop:                                       ; preds = %inner.loop, %outer.loop\n  %inner.iv = phi i64 [ 0, %outer.loop ], [ %inner.iv.next, %inner.loop ]\n  %add.us = add nuw nsw i64 %inner.iv, %mul.us\n  %arrayidx.us = getelementptr inbounds i8, ptr %b, i64 %add.us\n  %0 = load i8, ptr %arrayidx.us, align 1\n  %arrayidx7.us = getelementptr inbounds i8, ptr %a, i64 %add.us\n  %1 = load i8, ptr %arrayidx7.us, align 1\n  %add9.us = add i8 %1, %0\n  store i8 %add9.us, ptr %arrayidx7.us, align 1\n  %inner.iv.next = add nuw nsw i64 %inner.iv, 1\n  %exitcond.not = icmp eq i64 %inner.iv.next, %n\n  br i1 %exitcond.not, label %inner.exit, label %inner.loop\n\ninner.exit:                                       ; preds = %inner.loop\n  %outer.iv.next = add nuw nsw i64 %outer.iv, 1\n  %exitcond26.not = icmp eq i64 %outer.iv.next, %m\n  br i1 %exitcond26.not, label %outer.exit, label %outer.loop, !prof !0\n\nouter.exit:                                       ; preds = %inner.exit\n  ret void\n}\n\n!0 = !{!\"branch_weights\", i32 1, i32 -1}\n"
         }
       ]
     }
@@ -103,5 +67,6 @@
         "body": "I have a fix in review - https://github.com/llvm/llvm-project/pull/81721"
       }
     ]
-  }
+  },
+  "verified": true
 }

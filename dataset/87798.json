@@ -75,5 +75,6 @@
         "body": "The function is supposed to compute `BC(It, K) mod 2^W`, i.e. the binomial coefficient truncated to fit into a W-bit integer.  This is  useful for computing the value of a W-bit induction variable at iteration \"It\" of a loop.  There isn't any expectation that \"It\" or \"K\" fit losslessly into \"W\": the arithmetic is supposed to wrap.\r\n\r\nGiven the way the function works, truncating \"i\" after the shift looks like the right solution."
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -36,7 +36,7 @@
       "tests": [
         {
           "test_name": "test",
-          "test_body": "define void @test() {\nbb:\n  %icmp = icmp samesign ult i32 0, 0\n  %select = select i1 %icmp, i32 0, i32 0\n  %zext = zext i32 %select to i64\n  %getelementptr = getelementptr ptr addrspace(1), ptr addrspace(1) null, i64 %zext\n  store ptr addrspace(1) null, ptr addrspace(1) %getelementptr, align 8\n  %icmp1 = icmp eq i32 0, 0\n  %icmp2 = icmp eq i32 0, 0\n  %icmp3 = icmp samesign ult i32 0, 0\n  %icmp4 = icmp eq i32 0, 0\n  %add = add i32 1, 0\n  %icmp5 = icmp samesign ult i32 %add, 0\n  store volatile i32 0, ptr addrspace(1) null, align 4\n  %call = call i32 null(<2 x double> zeroinitializer)\n  %icmp6 = icmp eq i32 %call, 0\n  %icmp7 = icmp samesign ult i32 0, 0\n  ret void\n}\n"
+          "test_body": "define i1 @test() {\nentry:\n  %and.i1698.1.i = zext i16 0 to i32\n  %and19.i1699.2.i = and i32 %and.i1698.1.i, 0\n  %and.i1698.2.i = zext i16 0 to i32\n  %cmp25.i1700.2.i2 = icmp samesign uge i32 %and19.i1699.2.i, %and.i1698.1.i\n  %and19.i1699.11841.i = and i32 %and.i1698.2.i, 0\n  %cmp25.i1700.11842.i3 = icmp samesign uge i32 %and19.i1699.11841.i, %and.i1698.2.i\n  %and.i1698.1.1.i = zext i16 0 to i32\n  %and19.i1699.2.1.i = and i32 %and.i1698.1.1.i, 0\n  %0 = add i16 1, 0\n  %and.i1698.2.1.i = zext i16 %0 to i32\n  %cmp25.i1700.2.1.i4 = icmp samesign uge i32 %and19.i1699.2.1.i, %and.i1698.1.1.i\n  %and19.i1699.21846.i = and i32 %and.i1698.2.1.i, 0\n  %cmp25.i1700.21847.i = icmp samesign uge i32 %and19.i1699.21846.i, %and.i1698.2.1.i\n  ret i1 %cmp25.i1700.21847.i\n}\n"
         }
       ]
     }
@@ -50,5 +50,6 @@
       "llvm:SLPVectorizer"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

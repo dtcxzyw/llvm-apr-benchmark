@@ -55,5 +55,6 @@
         "body": "Reproducer: https://godbolt.org/z/xs1rhnMvb\r\nAlive2: https://alive2.llvm.org/ce/z/gyL7mn\r\n\r\nI will post a fix later.\r\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

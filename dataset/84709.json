@@ -67,5 +67,6 @@
         "body": "Reduced:\r\n```llvm\r\ndefine i64 @test() {\r\nbb:\r\n  br label %bb1\r\n\r\nbb1:\r\n  %phi = phi i8 [ %zext6, %bb5 ], [ 0, %bb ]\r\n  br label %bb2\r\n\r\nbb2:\r\n  %phi3 = phi i8 [ %add, %bb2 ], [ %phi, %bb1 ]\r\n  %phi4 = phi i32 [ 0, %bb2 ], [ 1, %bb1 ]\r\n  %add = add i8 %phi3, 1\r\n  br i1 true, label %bb5, label %bb2\r\n\r\nbb5:\r\n  %zext = zext i8 %add to i32\r\n  %icmp = icmp sge i32 %phi4, 0\r\n  %zext6 = zext i1 %icmp to i8\r\n  br label %bb1\r\n}\r\n```"
       }
     ]
-  }
+  },
+  "verified": true
 }

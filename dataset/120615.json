@@ -31,48 +31,12 @@
     {
       "file": "llvm/test/Analysis/ScalarEvolution/backedge-taken-count-guard-info-with-multiple-predecessors.ll",
       "commands": [
-        "opt < %s -disable-output \"-passes=print<scalar-evolution>\" -scalar-evolution-max-iterations=0  -scalar-evolution-classify-expressions=0  2>&1"
+        "opt < %s -disable-output -passes=nary-reassociate --scalar-evolution-use-expensive-range-sharpening 2>&1"
       ],
       "tests": [
         {
-          "test_name": "epilogue",
-          "test_body": "define void @epilogue(i64 %count) {\nentry:\n  %cmp = icmp ugt i64 %count, 7\n  br i1 %cmp, label %while.body, label %epilogue.preheader\n\nwhile.body:                                       ; preds = %while.body, %entry\n  %iv = phi i64 [ %sub, %while.body ], [ %count, %entry ]\n  %sub = add i64 %iv, -8\n  %exitcond.not = icmp ugt i64 %sub, 7\n  br i1 %exitcond.not, label %while.body, label %while.loopexit\n\nwhile.loopexit:                                   ; preds = %while.body\n  %sub.exit = phi i64 [ %sub, %while.body ]\n  br label %epilogue.preheader\n\nepilogue.preheader:                               ; preds = %while.loopexit, %entry\n  %count.epilogue = phi i64 [ %count, %entry ], [ %sub.exit, %while.loopexit ]\n  %epilogue.cmp = icmp eq i64 %count.epilogue, 0\n  br i1 %epilogue.cmp, label %exit, label %epilogue\n\nepilogue:                                         ; preds = %epilogue, %epilogue.preheader\n  %iv.epilogue = phi i64 [ %dec, %epilogue ], [ %count.epilogue, %epilogue.preheader ]\n  %dec = add i64 %iv.epilogue, -1\n  %exitcond.epilogue = icmp eq i64 %dec, 0\n  br i1 %exitcond.epilogue, label %exit, label %epilogue\n\nexit:                                             ; preds = %epilogue, %epilogue.preheader\n  ret void\n}\n"
-        },
-        {
-          "test_name": "three_incoming",
-          "test_body": "define void @three_incoming(i16 %a, i16 %b, i1 %c, i1 %d) {\nentry:\n  br i1 %c, label %b1, label %entry2\n\nentry2:                                           ; preds = %entry\n  br i1 %d, label %b2, label %b3\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp ugt i16 %a, 10\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry2\n  %cmp2 = icmp ugt i16 %b, 8\n  br i1 %cmp2, label %exit, label %preheader\n\nb3:                                               ; preds = %entry2\n  %cmp3 = icmp ugt i16 %b, 12\n  br i1 %cmp3, label %exit, label %preheader\n\npreheader:                                        ; preds = %b3, %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ], [ %b, %b3 ]\n  %cmp4 = icmp ne i16 %count, 0\n  br i1 %cmp4, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, -1\n  %exitcond = icmp eq i16 %iv.next, 0\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b3, %b2, %b1\n  ret void\n}\n"
-        },
-        {
           "test_name": "pr120615",
           "test_body": "define void @pr120615() {\nentry:\n  br label %header\n\nbb:                                               ; No predecessors!\n  br label %header\n\nheader:                                           ; preds = %header, %bb, %entry\n  %0 = phi i32 [ %1, %header ], [ 0, %bb ], [ 0, %entry ]\n  %1 = add i32 %0, 1\n  %icmp = icmp slt i32 %0, 0\n  br i1 %icmp, label %header, label %exit\n\nexit:                                             ; preds = %header\n  ret void\n}\n"
-        },
-        {
-          "test_name": "pr120442",
-          "test_body": "; Function Attrs: nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write)\ndeclare void @llvm.assume(i1 noundef) #0\n\ndefine void @pr120442(i1 %c.1, i1 %c.2) {\nentry:\n  call void @llvm.assume(i1 %c.1)\n  call void @llvm.assume(i1 %c.2)\n  br label %outer.header\n\nouter.header:                                     ; preds = %bb, %entry\n  %phi7 = phi i32 [ 0, %bb ], [ 0, %entry ]\n  br label %inner.header\n\nbb:                                               ; preds = %bb\n  br i1 false, label %outer.header, label %bb\n\ninner.header:                                     ; preds = %inner.header, %outer.header\n  %phi = phi i32 [ %add, %inner.header ], [ 0, %outer.header ]\n  %add = add i32 %phi, 1\n  %icmp = icmp ugt i32 %add, 0\n  br i1 %icmp, label %exit, label %inner.header\n\nexit:                                             ; preds = %inner.header\n  ret void\n}\n\nattributes #0 = { nocallback nofree nosync nounwind willreturn memory(inaccessiblemem: write) }\n"
-        },
-        {
-          "test_name": "ugt",
-          "test_body": "define void @ugt(i16 %a, i16 %b, i1 %c) {\nentry:\n  br i1 %c, label %b1, label %b2\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp ugt i16 %a, 11\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry\n  %cmp2 = icmp ugt i16 %b, 7\n  br i1 %cmp2, label %exit, label %preheader\n\npreheader:                                        ; preds = %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ]\n  %cmp3 = icmp ne i16 %count, 0\n  br i1 %cmp3, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, -1\n  %exitcond = icmp eq i16 %iv.next, 0\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b2, %b1\n  ret void\n}\n"
-        },
-        {
-          "test_name": "slt",
-          "test_body": "define void @slt(i16 %a, i16 %b, i1 %c) {\nentry:\n  br i1 %c, label %b1, label %b2\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp slt i16 %a, 1\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry\n  %cmp2 = icmp slt i16 %b, 4\n  br i1 %cmp2, label %exit, label %preheader\n\npreheader:                                        ; preds = %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ]\n  %cmp3 = icmp sle i16 %count, 19\n  br i1 %cmp3, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, 1\n  %exitcond = icmp eq i16 %iv.next, 20\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b2, %b1\n  ret void\n}\n"
-        },
-        {
-          "test_name": "ult",
-          "test_body": "define void @ult(i16 %a, i16 %b, i1 %c) {\nentry:\n  br i1 %c, label %b1, label %b2\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp ult i16 %a, 2\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry\n  %cmp2 = icmp ult i16 %b, 5\n  br i1 %cmp2, label %exit, label %preheader\n\npreheader:                                        ; preds = %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ]\n  %cmp3 = icmp ule i16 %count, 20\n  br i1 %cmp3, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, 1\n  %exitcond = icmp eq i16 %iv.next, 22\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b2, %b1\n  ret void\n}\n"
-        },
-        {
-          "test_name": "sgt",
-          "test_body": "define void @sgt(i16 %a, i16 %b, i1 %c) {\nentry:\n  br i1 %c, label %b1, label %b2\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp sgt i16 %a, 10\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry\n  %cmp2 = icmp sgt i16 %b, 8\n  br i1 %cmp2, label %exit, label %preheader\n\npreheader:                                        ; preds = %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ]\n  %cmp3 = icmp sge i16 %count, 1\n  br i1 %cmp3, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, -1\n  %exitcond = icmp eq i16 %iv.next, 0\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b2, %b1\n  ret void\n}\n"
-        },
-        {
-          "test_name": "mixed",
-          "test_body": "define void @mixed(i16 %a, i16 %b, i1 %c) {\nentry:\n  br i1 %c, label %b1, label %b2\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp ugt i16 %a, 10\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry\n  %cmp2 = icmp sgt i16 %b, 8\n  br i1 %cmp2, label %exit, label %preheader\n\npreheader:                                        ; preds = %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ]\n  %cmp3 = icmp ne i16 %count, 0\n  br i1 %cmp3, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, -1\n  %exitcond = icmp eq i16 %iv.next, 0\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b2, %b1\n  ret void\n}\n"
-        },
-        {
-          "test_name": "one_constant",
-          "test_body": "define void @one_constant(i16 %a, i16 %b, i1 %c, i16 %d) {\nentry:\n  br i1 %c, label %b1, label %b2\n\nb1:                                               ; preds = %entry\n  %cmp1 = icmp ugt i16 %a, 10\n  br i1 %cmp1, label %exit, label %preheader\n\nb2:                                               ; preds = %entry\n  %cmp2 = icmp ugt i16 %b, %d\n  br i1 %cmp2, label %exit, label %preheader\n\npreheader:                                        ; preds = %b2, %b1\n  %count = phi i16 [ %a, %b1 ], [ %b, %b2 ]\n  %cmp3 = icmp ne i16 %count, 0\n  br i1 %cmp3, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %preheader\n  %iv = phi i16 [ %iv.next, %loop ], [ %count, %preheader ]\n  %iv.next = add i16 %iv, -1\n  %exitcond = icmp eq i16 %iv.next, 0\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop, %preheader, %b2, %b1\n  ret void\n}\n"
         }
       ]
     }
@@ -99,5 +63,6 @@
         "body": "Related, but slightly different, should be fixed here https://github.com/llvm/llvm-project/pull/120749."
       }
     ]
-  }
+  },
+  "verified": true
 }

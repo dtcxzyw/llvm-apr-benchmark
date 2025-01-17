@@ -43,8 +43,8 @@
           "test_body": "define i32 @disjoint_indirect(i64 %x) {\n  %and = and i64 %x, 1\n  %trunc = trunc i64 %and to i32\n  %or = or disjoint i32 %trunc, -2\n  ret i32 %or\n}\n"
         },
         {
-          "test_name": "PR34179",
-          "test_body": "define void @PR34179(ptr %a) {\n  %t0 = load volatile i32, ptr %a, align 4\n  %vla = alloca i32, i32 %t0, align 4\n  ret void\n}\n"
+          "test_name": "disjoint",
+          "test_body": "define i64 @disjoint(i64 %x) {\n  %and = and i64 %x, 1\n  %or = or disjoint i64 %and, -2\n  ret i64 %or\n}\n"
         }
       ]
     }
@@ -79,5 +79,6 @@
         "body": "Fixed another issue I noticed in this code in https://github.com/llvm/llvm-project/commit/cb6240d247b3419dea29eb99261171ea239b1c5c."
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -35,8 +35,16 @@
       ],
       "tests": [
         {
+          "test_name": "test_cttz_not_bw_multiuse",
+          "test_body": "define i32 @test_cttz_not_bw_multiuse(i32 %x) {\n  %ct = tail call i32 @llvm.cttz.i32(i32 %x, i1 false)\n  %cmp = icmp ne i32 %x, 0\n  %sel = select i1 %cmp, i32 %ct, i32 123\n  %res = or i32 %sel, %ct\n  ret i32 %res\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.cttz.i32(i32, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
           "test_name": "test_cttz_not_bw",
           "test_body": "define i32 @test_cttz_not_bw(i32 %x) {\n  %ct = tail call i32 @llvm.cttz.i32(i32 %x, i1 false)\n  %cmp = icmp ne i32 %x, 0\n  %res = select i1 %cmp, i32 %ct, i32 123\n  ret i32 %res\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.cttz.i32(i32, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "test_cttz_not_bw_noundef",
+          "test_body": "define i32 @test_cttz_not_bw_noundef(i32 %x) {\n  %ct = tail call noundef i32 @llvm.cttz.i32(i32 %x, i1 false)\n  %cmp = icmp ne i32 %x, 0\n  %res = select i1 %cmp, i32 %ct, i32 123\n  ret i32 %res\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.cttz.i32(i32, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }
       ]
     }
@@ -50,5 +58,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

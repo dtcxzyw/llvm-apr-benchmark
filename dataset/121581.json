@@ -45,6 +45,22 @@
         {
           "test_name": "pointer_icmp_aligned_with_offset_negative",
           "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @pointer_icmp_aligned_with_offset_negative(ptr align 8 %a, ptr align 8 %a2) {\n  %gep = getelementptr i8, ptr %a, i64 8\n  %cmp = icmp eq ptr %gep, %a2\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "gep_diff_base_same_indices_nuw_nusw",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @gep_diff_base_same_indices_nuw_nusw(ptr %x, ptr %y, i64 %z) {\n  %gep1 = getelementptr nuw i8, ptr %x, i64 %z\n  %gep2 = getelementptr nusw i8, ptr %y, i64 %z\n  %cmp = icmp ult ptr %gep1, %gep2\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "gep_diff_base_same_indices",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @gep_diff_base_same_indices(ptr %x, ptr %y, i64 %z) {\n  %gep1 = getelementptr i8, ptr %x, i64 %z\n  %gep2 = getelementptr i8, ptr %y, i64 %z\n  %cmp = icmp ult ptr %gep1, %gep2\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "gep_diff_base_same_indices_nusw",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @gep_diff_base_same_indices_nusw(ptr %x, ptr %y, i64 %z) {\n  %gep1 = getelementptr nusw i8, ptr %x, i64 %z\n  %gep2 = getelementptr nusw i8, ptr %y, i64 %z\n  %cmp = icmp ult ptr %gep1, %gep2\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "gep_diff_base_same_indices_nuw",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @gep_diff_base_same_indices_nuw(ptr %x, ptr %y, i64 %z) {\n  %gep1 = getelementptr nuw i8, ptr %x, i64 %z\n  %gep2 = getelementptr nuw i8, ptr %y, i64 %z\n  %cmp = icmp ult ptr %gep1, %gep2\n  ret i1 %cmp\n}\n"
         }
       ]
     }
@@ -58,5 +74,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

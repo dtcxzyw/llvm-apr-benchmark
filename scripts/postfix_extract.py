@@ -56,7 +56,10 @@ knowledge_cutoff = issue["created_at"]
 timeline = session.get(issue["timeline_url"]).json()
 fix_commit = None
 fix_commit_map = {
+    "76789": None,  # Cannot reproduce with alive2
     "78024": None,  # Reverted
+    "79137": None,  # Cannot reproduce with alive2
+    "80836": "1c10821022f1799452065fb57474e894e2562b7f",
     "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
     "85568": None,  # Object bug
     "86280": None,  # Object bug
@@ -79,7 +82,12 @@ fix_commit_map = {
     "113301": None,  # miscompilation:undef
     "113425": None,  # miscompilation:undef
     "114905": "889215a30ed60474e573f9632d1fa362dfa1b04e",  # Use the second fix
+    "116668": None,  # Cannot reproduce with alive2
+    "117170": None,  # Cannot reproduce with alive2
     "122166": None,  # Duplicate of #117308
+    "122324": None,  # Cannot confirm fix with alive2
+    "122430": None,  # Cannot confirm fix with alive2
+    "122602": None,  # Duplicate of #122496
 }
 
 

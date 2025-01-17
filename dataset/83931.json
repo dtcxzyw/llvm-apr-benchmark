@@ -83,5 +83,6 @@
         "body": "Reduced test case: https://godbolt.org/z/5qocbWsW3\r\n```\r\ndefine <vscale x 2 x i1> @test(<vscale x 2 x i64> %p) {\r\nentry:\r\n  %1 = sdiv <vscale x 2 x i64> %p, splat (i64 309383)\r\n  %2 = icmp sge <vscale x 2 x i64> %1, zeroinitializer\r\n  ret <vscale x 2 x i1> %2\r\n}\r\n\r\n```"
       }
     ]
-  }
+  },
+  "verified": true
 }

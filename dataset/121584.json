@@ -49,6 +49,18 @@
         {
           "test_name": "srem_XY_XZ_with_CY_gt_CZ_no_nuw_out",
           "test_body": "define <2 x i8> @srem_XY_XZ_with_CY_gt_CZ_no_nuw_out(<2 x i8> %X) {\n  %BO0 = mul nsw <2 x i8> %X, splat (i8 10)\n  %BO1 = shl nuw nsw <2 x i8> %X, splat (i8 3)\n  %r = srem <2 x i8> %BO0, %BO1\n  ret <2 x i8> %r\n}\n"
+        },
+        {
+          "test_name": "srem_XY_XZ_with_CY_gt_CZ_drop_nsw_commuted",
+          "test_body": "define i8 @srem_XY_XZ_with_CY_gt_CZ_drop_nsw_commuted(i8 noundef %X) {\n  %BO0 = mul nsw i8 %X, 127\n  %BO1 = shl nsw i8 %X, 7\n  %r = srem i8 %BO0, %BO1\n  ret i8 %r\n}\n"
+        },
+        {
+          "test_name": "srem_XY_XZ_with_CY_gt_CZ_drop_nsw",
+          "test_body": "define i8 @srem_XY_XZ_with_CY_gt_CZ_drop_nsw(i8 noundef %X) {\n  %BO0 = mul nsw i8 %X, 127\n  %BO1 = shl nsw i8 %X, 7\n  %r = srem i8 %BO1, %BO0\n  ret i8 %r\n}\n"
+        },
+        {
+          "test_name": "srem_XY_XZ_with_CY_gt_CZ_fail_missing_flag1",
+          "test_body": "define i8 @srem_XY_XZ_with_CY_gt_CZ_fail_missing_flag1(i8 %X) {\n  %BO0 = mul nuw nsw i8 %X, 10\n  %BO1 = mul nuw i8 %X, 6\n  %r = srem i8 %BO0, %BO1\n  ret i8 %r\n}\n"
         }
       ]
     }
@@ -62,5 +74,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

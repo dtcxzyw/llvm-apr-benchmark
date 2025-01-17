@@ -37,6 +37,14 @@
         {
           "test_name": "bitcast_from_single_element_pointer_vector_to_pointer",
           "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\ntarget triple = \"x86_64-apple-darwin10.0.0\"\n\ndefine ptr @bitcast_from_single_element_pointer_vector_to_pointer(<1 x ptr> %ptrvec) {\n  %ptr = bitcast <1 x ptr> %ptrvec to ptr\n  ret ptr %ptr\n}\n"
+        },
+        {
+          "test_name": "bitcast_shl",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\ntarget triple = \"x86_64-apple-darwin10.0.0\"\n\ndefine <4 x i32> @bitcast_shl(i32 %arg) {\n  %i = zext i32 %arg to i64\n  %i1 = shl i64 %i, 32\n  %i2 = or i64 %i1, 65\n  %i3 = zext i64 %i2 to i128\n  %i4 = shl i128 %i3, 64\n  %i5 = bitcast i128 %i4 to <4 x i32>\n  ret <4 x i32> %i5\n}\n"
+        },
+        {
+          "test_name": "select_bitcast_unsized_pointer",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\ntarget triple = \"x86_64-apple-darwin10.0.0\"\n\ndeclare void @f1()\n\ndeclare void @f2()\n\ndefine ptr @select_bitcast_unsized_pointer(i1 %c) {\n  %s = select i1 %c, ptr @f1, ptr @f2\n  ret ptr %s\n}\n"
         }
       ]
     }
@@ -59,5 +67,6 @@
         "body": "> Looks like this bug is almost 11 years old: [feb3471](https://github.com/llvm/llvm-project/commit/feb34713d531d1f48c37116e8cab84814202d057)! Thanks for fixing\r\n\r\nBased on my experience, we likely have many more latent bugs. :)"
       }
     ]
-  }
+  },
+  "verified": true
 }

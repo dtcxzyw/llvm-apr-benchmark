@@ -58,18 +58,20 @@ def infer_related_components(diff_files):
                     .removesuffix(".h")
                 )
                 if component_name != "":
-                    if component_name.startswith("VPlan") or component_name.startswith(
-                        "LoopVectoriz"
-                    ) or component_name.startswith("VPRecipe"):
+                    if (
+                        component_name.startswith("VPlan")
+                        or component_name.startswith("LoopVectoriz")
+                        or component_name.startswith("VPRecipe")
+                    ):
                         component_name = "LoopVectorize"
                     if component_name.startswith("ScalarEvolution"):
                         component_name = "ScalarEvolution"
                     if component_name.startswith("ConstantFold"):
                         component_name = "ConstantFold"
-                    if 'AliasAnalysis' in component_name:
-                        component_name = 'AliasAnalysis'
-                    if component_name.startswith('Attributor'):
-                        component_name = 'Attributor'
+                    if "AliasAnalysis" in component_name:
+                        component_name = "AliasAnalysis"
+                    if component_name.startswith("Attributor"):
+                        component_name = "Attributor"
                     if file.startswith("llvm/lib/IR"):
                         component_name = "IR"
                     components.add(component_name)
@@ -195,7 +197,7 @@ def lli_check(tgt: bytes, expected_out: str):
         out = subprocess.check_output(
             [os.path.join(llvm_build_dir, "bin/lli")],
             input=tgt,
-            timeout=60.0,
+            timeout=10.0,
             stderr=subprocess.STDOUT,
         ).decode()
         if out == expected_out:
@@ -256,7 +258,11 @@ def verify_dispatch(
     )
     try:
         out = subprocess.run(
-            args_list, input=input.encode(), timeout=60.0, check=True, capture_output=True
+            args_list,
+            input=input.encode(),
+            timeout=10.0,
+            check=True,
+            capture_output=True,
         )
         if type == "miscompilation":
             output = out.stdout
@@ -271,13 +277,19 @@ def verify_dispatch(
             if isinstance(log, str):
                 log = decode_output(out.stderr) + "\n" + log
             else:
-                log['opt_stderr'] = decode_output(out.stderr)
+                log["opt_stderr"] = decode_output(out.stderr)
             return (res, log)
         return (not repro, "success\n" + decode_output(out.stderr))
     except subprocess.CalledProcessError as e:
-        return (repro and type == "crash", str(e) + "\n" + decode_output(e.output) + "\n" + decode_output(e.stderr))
+        return (
+            repro and type == "crash",
+            str(e) + "\n" + decode_output(e.output) + "\n" + decode_output(e.stderr),
+        )
     except subprocess.TimeoutExpired as e:
-        return (repro and type == "hang", str(e) + "\n" + decode_output(e.output) + "\n" + decode_output(e.stderr))
+        return (
+            repro and type == "hang",
+            str(e) + "\n" + decode_output(e.output) + "\n" + decode_output(e.stderr),
+        )
 
 
 def verify_test_group(repro: bool, input, type: str):

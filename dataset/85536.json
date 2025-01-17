@@ -35,6 +35,14 @@
       ],
       "tests": [
         {
+          "test_name": "test_drop_noundef",
+          "test_body": "define i8 @test_drop_noundef(i1 %cond, i8 %val) {\nentry:\n  %sel = select i1 %cond, i8 -1, i8 %val\n  %ret = call noundef i8 @llvm.smin.i8(i8 %sel, i8 0)\n  ret i8 %ret\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i8 @llvm.smin.i8(i8, i8) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pr85536",
+          "test_body": "define i1 @pr85536(i32 %a) {\nentry:\n  %cmp1 = icmp ugt i32 %a, 30\n  %shl1 = shl nsw i32 -1, %a\n  %zext = zext i32 %shl1 to i64\n  %shl2 = shl i64 %zext, 48\n  %shr = ashr exact i64 %shl2, 48\n  %sel = select i1 %cmp1, i64 -1, i64 %shr\n  %smin = call noundef i64 @llvm.smin.i64(i64 %sel, i64 0)\n  %masked = and i64 %smin, 65535\n  %ret = icmp eq i64 %masked, 0\n  ret i1 %ret\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i64 @llvm.smin.i64(i64, i64) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
           "test_name": "vec_to_scalar_select_vector",
           "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.vector.reduce.add.v2i32(<2 x i32>) #0\n\ndefine i32 @vec_to_scalar_select_vector(<2 x i1> %b) {\n  %s = select <2 x i1> %b, <2 x i32> <i32 1, i32 2>, <2 x i32> <i32 3, i32 4>\n  %c = call i32 @llvm.vector.reduce.add.v2i32(<2 x i32> %s)\n  ret i32 %c\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }
@@ -79,5 +87,6 @@
         "body": "@dtcxzyw We're probably missing a call to dropUBImplyingAttrsAndMetadata in FoldOpIntoSelect."
       }
     ]
-  }
+  },
+  "verified": true
 }

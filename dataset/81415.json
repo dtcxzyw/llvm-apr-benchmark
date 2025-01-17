@@ -2,7 +2,7 @@
   "bug_id": "81415",
   "issue_url": "https://github.com/llvm/llvm-project/issues/81415",
   "bug_type": "crash",
-  "base_commit": "9e5da05da7357fed26eb814275d5edeaa5561956",
+  "base_commit": "0ea64ad88abcbb939547a92000d98efb2b00d95f",
   "knowledge_cutoff": "2024-02-11T14:16:02Z",
   "lit_test_dir": [
     "llvm/test/Transforms/LoopVectorize"
@@ -39,36 +39,8 @@
       ],
       "tests": [
         {
-          "test_name": "reduction_smin_trunc",
-          "test_body": "define i8 @reduction_smin_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %min, %for.body ], [ 256, %entry ]\n  %sum.02 = and i32 %sum.02p, 255\n  %gep = getelementptr inbounds i8, ptr %ptr, i32 %iv\n  %load = load i8, ptr %gep, align 1\n  %ext = sext i8 %load to i32\n  %icmp = icmp slt i32 %sum.02, %ext\n  %min = select i1 %icmp, i32 %sum.02, i32 %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %min to i8\n  ret i8 %ret\n}\n"
-        },
-        {
-          "test_name": "reduction_umin_trunc",
-          "test_body": "define i8 @reduction_umin_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %min, %for.body ], [ 0, %entry ]\n  %sum.02 = and i32 %sum.02p, 255\n  %gep = getelementptr inbounds i8, ptr %ptr, i32 %iv\n  %load = load i8, ptr %gep, align 1\n  %ext = zext i8 %load to i32\n  %icmp = icmp ult i32 %sum.02, %ext\n  %min = select i1 %icmp, i32 %sum.02, i32 %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %min to i8\n  ret i8 %ret\n}\n"
-        },
-        {
-          "test_name": "reduction_and_trunc",
-          "test_body": "define i8 @reduction_and_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %and, %for.body ], [ 0, %entry ]\n  %sum.02 = and i32 %sum.02p, 255\n  %gep = getelementptr inbounds i8, ptr %ptr, i32 %iv\n  %load = load i8, ptr %gep, align 1\n  %ext = zext i8 %load to i32\n  %and = and i32 %sum.02, %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %and to i8\n  ret i8 %ret\n}\n"
-        },
-        {
-          "test_name": "reduction_smax_trunc",
-          "test_body": "define i16 @reduction_smax_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %min, %for.body ], [ 0, %entry ]\n  %sum.02 = and i32 %sum.02p, 65535\n  %gep = getelementptr inbounds i16, ptr %ptr, i32 %iv\n  %load = load i16, ptr %gep, align 2\n  %ext = sext i16 %load to i32\n  %icmp = icmp sgt i32 %sum.02, %ext\n  %min = select i1 %icmp, i32 %sum.02, i32 %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %min to i16\n  ret i16 %ret\n}\n"
-        },
-        {
-          "test_name": "reduction_umax_trunc",
-          "test_body": "define i16 @reduction_umax_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %min, %for.body ], [ 0, %entry ]\n  %sum.02 = and i32 %sum.02p, 65535\n  %gep = getelementptr inbounds i16, ptr %ptr, i32 %iv\n  %load = load i16, ptr %gep, align 2\n  %ext = zext i16 %load to i32\n  %icmp = icmp ugt i32 %sum.02, %ext\n  %min = select i1 %icmp, i32 %sum.02, i32 %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %min to i16\n  ret i16 %ret\n}\n"
-        },
-        {
-          "test_name": "reduction_or_trunc",
-          "test_body": "define i16 @reduction_or_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %xor, %for.body ], [ 0, %entry ]\n  %sum.02 = and i32 %sum.02p, 65535\n  %gep = getelementptr inbounds i16, ptr %ptr, i32 %iv\n  %load = load i16, ptr %gep, align 2\n  %ext = zext i16 %load to i32\n  %xor = or i32 %sum.02, %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %xor to i16\n  ret i16 %ret\n}\n"
-        },
-        {
           "test_name": "reduction_and_or",
           "test_body": "define i32 @reduction_and_or(i16 %a, i32 %b, ptr %src) {\nentry:\n  %ext1 = zext i16 %a to i32\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop ]\n  %or67 = phi i32 [ 10, %entry ], [ %or, %loop ]\n  %t = trunc i32 %b to i16\n  %ext = sext i16 %t to i32\n  %cmp = icmp sgt i32 %ext, %ext1\n  %ext2 = zext i1 %cmp to i32\n  %cmp3 = icmp sge i32 %iv, %ext2\n  %ext4 = zext i1 %cmp3 to i32\n  %div = sdiv i32 %ext4, %b\n  %and = and i32 %div, 0\n  %gep = getelementptr inbounds i32, ptr %src, i32 %iv\n  %l = load i32, ptr %gep, align 4\n  %add = add i32 %and, %l\n  %or = or i32 %or67, %add\n  %iv.next = add nsw i32 %iv, 1\n  %tobool.not = icmp eq i32 %iv.next, 999\n  br i1 %tobool.not, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  %or.lcssa = phi i32 [ %or, %loop ]\n  ret i32 %or.lcssa\n}\n"
-        },
-        {
-          "test_name": "reduction_xor_trunc",
-          "test_body": "define i16 @reduction_xor_trunc(ptr noalias nocapture %ptr) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %iv = phi i32 [ %iv.next, %for.body ], [ 0, %entry ]\n  %sum.02p = phi i32 [ %xor, %for.body ], [ 0, %entry ]\n  %sum.02 = and i32 %sum.02p, 65535\n  %gep = getelementptr inbounds i16, ptr %ptr, i32 %iv\n  %load = load i16, ptr %gep, align 2\n  %ext = zext i16 %load to i32\n  %xor = xor i32 %sum.02, %ext\n  %iv.next = add i32 %iv, 1\n  %exitcond = icmp eq i32 %iv.next, 256\n  br i1 %exitcond, label %for.end, label %for.body\n\nfor.end:                                          ; preds = %for.body\n  %ret = trunc i32 %xor to i16\n  ret i16 %ret\n}\n"
         }
       ]
     }
@@ -91,5 +63,6 @@
         "body": "Thanks for the test case, should be fixed! \r\n\r\nIt looks like this only gets triggered when the resulting truncated compare is dead. Please let me know if you see any issues with similar cases where the resulting loop/compares in the loop aren't dead."
       }
     ]
-  }
+  },
+  "verified": true
 }

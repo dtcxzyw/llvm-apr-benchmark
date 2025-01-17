@@ -35,6 +35,14 @@
       ],
       "tests": [
         {
+          "test_name": "pr120361",
+          "test_body": "define i1 @pr120361(i8 %x, i8 %y) {\n  %cmp1 = icmp samesign eq i8 %x, -1\n  %cmp2 = icmp ne i8 %x, 0\n  %result = select i1 %cmp2, i1 %cmp1, i1 false\n  ret i1 %result\n}\n"
+        },
+        {
+          "test_name": "pr120361_v2",
+          "test_body": "define i1 @pr120361_v2(i32 %x) {\n  %and1 = and i32 %x, 15\n  %cmp1 = icmp ne i32 %and1, 0\n  %and2 = and i32 %x, -113\n  %cmp2 = icmp samesign eq i32 %and2, 15\n  %and = select i1 %cmp1, i1 %cmp2, i1 false\n  ret i1 %and\n}\n"
+        },
+        {
           "test_name": "masked_icmps_bmask_notmixed_not_subset_notoptimized",
           "test_body": "define i1 @masked_icmps_bmask_notmixed_not_subset_notoptimized(i32 %A) {\n  %mask1 = and i32 %A, 254\n  %tst1 = icmp ne i32 %mask1, 252\n  %mask2 = and i32 %A, 253\n  %tst2 = icmp ne i32 %mask2, 252\n  %res = and i1 %tst1, %tst2\n  ret i1 %res\n}\n"
         }
@@ -50,5 +58,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

@@ -35,6 +35,10 @@
       ],
       "tests": [
         {
+          "test_name": "select_vector_cmp_with_bitcasts",
+          "test_body": "define <4 x i32> @select_vector_cmp_with_bitcasts(<2 x i64> %x, <4 x i32> %y) {\n  %x.bc = bitcast <2 x i64> %x to <4 x i32>\n  %y.bc = bitcast <4 x i32> %y to <2 x i64>\n  %sub = sub <2 x i64> %x, %y.bc\n  %sub.bc = bitcast <2 x i64> %sub to <4 x i32>\n  %cmp = icmp eq <4 x i32> %y, %x.bc\n  %sel = select <4 x i1> %cmp, <4 x i32> %sub.bc, <4 x i32> zeroinitializer\n  ret <4 x i32> %sel\n}\n"
+        },
+        {
           "test_name": "select_or_disjoint_eq",
           "test_body": "define i8 @select_or_disjoint_eq(i8 %x, i8 %y) {\n  %cmp = icmp eq i8 %x, %y\n  %or = or disjoint i8 %x, %y\n  %sel = select i1 %cmp, i8 %x, i8 %or\n  ret i8 %sel\n}\n"
         }
@@ -51,5 +55,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

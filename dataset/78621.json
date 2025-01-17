@@ -47,6 +47,14 @@
       ],
       "tests": [
         {
+          "test_name": "umin_poison_call_before_UB",
+          "test_body": "define i1 @umin_poison_call_before_UB(i32 %arg) {\n  %icmp = icmp slt i32 %arg, 0\n  %shl = shl nuw nsw i32 %arg, 3\n  %min = call i32 @llvm.umin.i32(i32 %shl, i32 80)\n  call void @fn()\n  call void @noundef(i32 noundef %min)\n  %cmp2 = shl nuw nsw i32 %arg, 3\n  ret i1 %icmp\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.umin.i32(i32, i32) #0\n\ndeclare void @noundef(i32 noundef)\n\ndeclare void @fn()\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "umin_not_used",
+          "test_body": "define i1 @umin_not_used(i32 %arg) {\n  %icmp = icmp slt i32 %arg, 0\n  %shl = shl nuw nsw i32 %arg, 3\n  %1 = call i32 @llvm.umin.i32(i32 %shl, i32 80)\n  %cmp2 = shl nuw nsw i32 %arg, 3\n  ret i1 %icmp\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.umin.i32(i32, i32) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
           "test_name": "umin_poison_is_UB_via_call",
           "test_body": "define i1 @umin_poison_is_UB_via_call(i32 %arg) {\n  %icmp = icmp slt i32 %arg, 0\n  %shl = shl nuw nsw i32 %arg, 3\n  %min = call i32 @llvm.umin.i32(i32 %shl, i32 80)\n  call void @noundef(i32 noundef %min)\n  %cmp2 = shl nuw nsw i32 %arg, 3\n  ret i1 %icmp\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.umin.i32(i32, i32) #0\n\ndeclare void @noundef(i32 noundef)\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }
@@ -116,5 +124,6 @@
         "body": "> @fhahn I'm not familiar with how this pass works, so I have a question: will this pass still use min/max/etc. to infer facts about the arguments of those intrinsics? I'm just a bit confused by the terminology: I see that it adds \"constraints\" based on things like `icmp`, which on their own don't actually constrain anything unless you branch on the result (or do something similar).\r\n\r\nConstraints for icmps will only be added in branches that the icmp dominates (or code that an assume with an icmp dominates). The intrinsic handling was a bit special in that constraints are added unconditionally."
       }
     ]
-  }
+  },
+  "verified": true
 }

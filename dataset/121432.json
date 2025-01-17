@@ -35,8 +35,20 @@
       ],
       "tests": [
         {
+          "test_name": "copysign_sign_arg_mixed",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare float @llvm.copysign.f32(float, float) #0\n\ndefine float @copysign_sign_arg_mixed(float %x, float %y, float %z) {\n  %s = call ninf nsz float @llvm.copysign.f32(float %y, float %z)\n  %r = call nnan nsz float @llvm.copysign.f32(float %x, float %s)\n  ret float %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
           "test_name": "copysign_sign_arg",
-          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare float @llvm.copysign.f32(float, float) #0\n\ndefine float @copysign_sign_arg(float %x, float %y, float %z) {\n  %s = call reassoc float @llvm.copysign.f32(float %y, float %z)\n  %r = call ninf float @llvm.copysign.f32(float %x, float %s)\n  ret float %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare float @llvm.copysign.f32(float, float) #0\n\ndefine float @copysign_sign_arg(float %x, float %y, float %z) {\n  %s = call float @llvm.copysign.f32(float %y, float %z)\n  %r = call ninf float @llvm.copysign.f32(float %x, float %s)\n  ret float %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "fneg_mag",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare float @llvm.copysign.f32(float, float) #0\n\ndefine float @fneg_mag(float %x, float %y) {\n  %n = fneg float %x\n  %r = call float @llvm.copysign.f32(float %n, float %y)\n  ret float %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "copysign_sign_arg_nnan",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare float @llvm.copysign.f32(float, float) #0\n\ndefine float @copysign_sign_arg_nnan(float %x, float %y, float %z) {\n  %s = call nnan float @llvm.copysign.f32(float %y, float %z)\n  %r = call nnan float @llvm.copysign.f32(float %x, float %s)\n  ret float %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         },
         {
           "test_name": "not_known_positive_sign_arg",
@@ -55,5 +67,6 @@
       "floating-point"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }
