@@ -77,6 +77,8 @@ fix_commit_map = {
     "111709": None,  # Cannot reproduce with alive2
     "112633": None,  # Multi-commit fix
     "113301": None,  # miscompilation:undef
+    "113425": None,  # miscompilation:undef
+    "114905": "889215a30ed60474e573f9632d1fa362dfa1b04e",  # Use the second fix
     "122166": None,  # Duplicate of #117308
 }
 

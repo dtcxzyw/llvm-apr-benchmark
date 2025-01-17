@@ -35,8 +35,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/MemorySSAUpdater.cpp": [
-        "MemorySSAUpdater::createMemoryAccessInBB",
-        "MemorySSAUpdater::createMemoryAccessBefore"
+        "MemorySSAUpdater::createMemoryAccessBefore",
+        "MemorySSAUpdater::createMemoryAccessInBB"
       ],
       "llvm/lib/Transforms/Scalar/LICM.cpp": [
         "cloneInstructionInExitBlock"
@@ -68,5 +68,6 @@
       "llvm:transforms"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

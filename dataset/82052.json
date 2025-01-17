@@ -67,5 +67,6 @@
         "body": "A slightly smaller test case:\r\nhttps://alive2.llvm.org/ce/z/6AMPWC\r\n```llvm\r\ndefine <2 x i8> @src(<2 x i8> %x, <2 x i8> %y) {\r\n  %xsplat = shufflevector <2 x i8> %x, <2 x i8> poison, <2 x i32> <i32 poison, i32 0>\r\n  %vv = mul <2 x i8> %xsplat, %y\r\n  %m = mul <2 x i8> %x, %y\r\n  %msplat = shufflevector <2 x i8> %m, <2 x i8> poison, <2 x i32> <i32 poison, i32 0>\r\n  %res = add <2 x i8> %vv, %msplat\r\n  ret <2 x i8> %res\r\n}\r\n```\r\nThis doesn't extract the vector, and instead manually specifies the poisonous elements in the shuffles. As Alive notes, the output for `src(<0, 0>, <0, 0>)` goes from `<poison, 0>` to `<poison, poison>`"
       }
     ]
-  }
+  },
+  "verified": true
 }

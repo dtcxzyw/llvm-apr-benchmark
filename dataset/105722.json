@@ -10,7 +10,7 @@
   "hints": {
     "fix_commit": "533e6bbd0d344a710c491a9eb0ce0ba0852b08cb",
     "components": [
-      "VPRecipeBuilder"
+      "LoopVectorize"
     ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/VPRecipeBuilder.h": [

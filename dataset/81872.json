@@ -40,8 +40,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorizationPlanner.h": [
-        "VPBuilder",
-        "clearInsertionPoint"
+        "clearInsertionPoint",
+        "VPBuilder"
       ],
       "llvm/lib/Transforms/Vectorize/VPlan.h": [
         "hasNoSignedWrap"

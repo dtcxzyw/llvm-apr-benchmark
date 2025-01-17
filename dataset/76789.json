@@ -10,8 +10,7 @@
   "hints": {
     "fix_commit": "5f57ad85a1a7c46eb43eee3c7d93b11d8fd7fcfa",
     "components": [
-      "AliasAnalysis",
-      "BasicAliasAnalysis"
+      "AliasAnalysis"
     ],
     "bug_location_lineno": {
       "llvm/lib/Analysis/AliasAnalysis.cpp": [

@@ -60,5 +60,6 @@
         "body": "Reproducer: https://alive2.llvm.org/ce/z/fLN5gw\r\n```\r\n; bin/opt -passes=constraint-elimination test.ll -S\r\ndefine i1 @test(i16 %n) {\r\nentry:\r\n  %cond = icmp slt i16 %n, 1\r\n  br i1 %cond, label %exit, label %loop.preheader\r\n\r\nloop.preheader:\r\n  %sub = add nsw i16 %n, -1\r\n  %ext = zext nneg i16 %sub to i32\r\n  br label %loop\r\n\r\nloop:\r\n  %indvar = phi i32 [ %indvar.inc, %loop.latch ], [ 0, %loop.preheader ]\r\n  %12 = icmp eq i32 %indvar, %ext\r\n  br i1 %12, label %exit, label %loop.latch\r\n\r\nloop.latch:\r\n  %indvar.inc = add nuw nsw i32 %indvar, 1\r\n  br label %loop\r\n\r\nexit:\r\n  %cmp = icmp sgt i16 %n, 0\r\n  ret i1 %cmp\r\n}\r\n\r\n```\r\nI will post a fix later.\r\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

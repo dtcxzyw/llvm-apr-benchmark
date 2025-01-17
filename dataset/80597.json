@@ -60,5 +60,6 @@
         "body": "Reopen this issue to backport the fix to the 18.X release.\r\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -10,8 +10,7 @@
   "hints": {
     "fix_commit": "954ed05c1001489802ae43d4bea403181570a799",
     "components": [
-      "LoopVectorize",
-      "VPRecipeBuilder"
+      "LoopVectorize"
     ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [

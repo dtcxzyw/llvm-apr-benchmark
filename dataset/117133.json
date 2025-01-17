@@ -37,10 +37,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/ScalarEvolution.cpp": [
-        "ScalarEvolution::isSCEVExprNeverPoison",
+        "ScalarEvolution::getSequentialMinMaxExpr",
         "ScalarEvolution::isGuaranteedNotToBePoison",
-        "ScalarEvolution::createAddRecFromPHI",
-        "ScalarEvolution::getSequentialMinMaxExpr"
+        "ScalarEvolution::isSCEVExprNeverPoison",
+        "ScalarEvolution::createAddRecFromPHI"
       ]
     }
   },
@@ -93,5 +93,6 @@
         "body": "> Is this a fuzzer-generated test case?\n\nHi @nikic , yes this test was fuzzer-generated."
       }
     ]
-  }
+  },
+  "verified": true
 }

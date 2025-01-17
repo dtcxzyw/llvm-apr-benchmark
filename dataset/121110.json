@@ -78,5 +78,6 @@
         "body": "Reproducer: https://alive2.llvm.org/ce/z/jdkwFh\n```\n; bin/opt -passes=vector-combine test.ll -S\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine <2 x i1> @src() {\nentry:\n  %0 = icmp samesign ugt <2 x i32> zeroinitializer, zeroinitializer\n  %1 = icmp sgt <2 x i32> zeroinitializer, <i32 6, i32 -4>\n  %2 = shufflevector <2 x i1> %0, <2 x i1> %1, <2 x i32> <i32 0, i32 3>\n  ret <2 x i1> %2\n}\n```\n```\ndefine <2 x i1> @tgt() {\nentry:\n  ret <2 x i1> zeroinitializer\n}\n```\n```\n\n----------------------------------------\ndefine <2 x i1> @src() {\nentry:\n  %#0 = icmp samesign ugt <2 x i32> { 0, 0 }, { 0, 0 }\n  %#1 = icmp sgt <2 x i32> { 0, 0 }, { 6, 4294967292 }\n  %#2 = shufflevector <2 x i1> %#0, <2 x i1> %#1, 0, 3\n  ret <2 x i1> %#2\n}\n=>\ndefine <2 x i1> @tgt() {\nentry:\n  ret <2 x i1> { 0, 0 }\n}\nTransformation doesn't verify!\n\nERROR: Value mismatch\n\nExample:\n\nSource:\n<2 x i1> %#0 = < #x0 (0), #x0 (0) >\n<2 x i1> %#1 = < #x0 (0), #x1 (1) >\n<2 x i1> %#2 = < #x0 (0), #x1 (1) >\n\nTarget:\nSource value: < #x0 (0), #x1 (1) >\nTarget value: < #x0 (0), #x0 (0) >\n```\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -63,5 +63,6 @@
         "body": "> I'm inclined to having a patch that removes SCEV from simple-loop-unswitch 's list of preserved analyses.\n\nSome SCEVs should be invalidated in `unswitchNontrivialInvariants`. Removing SCEV from the list of preserved analyses doesn't fix the issue.\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

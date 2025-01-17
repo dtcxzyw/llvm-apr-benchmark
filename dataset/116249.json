@@ -50,5 +50,6 @@
       "llvm:transforms"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

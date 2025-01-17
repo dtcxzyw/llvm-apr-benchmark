@@ -10,7 +10,7 @@
   "hints": {
     "fix_commit": "2d61692d4b75b7d92b44bfafb1011c1723955151",
     "components": [
-      "AttributorAttributes"
+      "Attributor"
     ],
     "bug_location_lineno": {
       "llvm/lib/Transforms/IPO/AttributorAttributes.cpp": [

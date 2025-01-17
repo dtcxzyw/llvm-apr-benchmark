@@ -52,12 +52,12 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/MemorySSAUpdater.cpp": [
-        "MemorySSAUpdater::privateUpdateExitBlocksForClonedLoop",
-        "onlySingleValue",
-        "getNewDefiningAccessForClone",
-        "MemorySSAUpdater::cloneUsesAndDefs",
         "MemorySSAUpdater::updateForClonedBlockIntoPred",
-        "MemorySSAUpdater::updateForClonedLoop"
+        "MemorySSAUpdater::updateForClonedLoop",
+        "onlySingleValue",
+        "MemorySSAUpdater::privateUpdateExitBlocksForClonedLoop",
+        "MemorySSAUpdater::cloneUsesAndDefs",
+        "getNewDefiningAccessForClone"
       ]
     }
   },
@@ -110,5 +110,6 @@
         "body": "We go from:\n```llvm\nMemorySSA for function: test\ndefine void @test(i1 %arg) {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n; 2 = MemoryPhi({entry,liveOnEntry},{for.body,1})\n; 1 = MemoryDef(2)\n  %call.i = call ptr @malloc()\n  %cmp.i = icmp ne ptr %call.i, null\n  %or.cond.i = select i1 %cmp.i, i1 %arg, i1 false\n  br i1 %or.cond.i, label %exit, label %for.body\n\nexit:                                             ; preds = %for.body\n  ret void\n}\n```\nTo:\n```llvm\nMemorySSA for function: test\ndefine void @test(i1 %arg) {\nentry:\n  %arg.fr = freeze i1 %arg\n  br i1 %arg.fr, label %entry.split, label %entry.split.us\n\nentry.split.us:                                   ; preds = %entry\n  br label %for.body.us\n\nfor.body.us:                                      ; preds = %for.body.us, %entry.split.us\n; 3 = MemoryPhi({entry.split.us,liveOnEntry},{for.body.us,1})\n  br label %for.body.us\n\nentry.split:                                      ; preds = %entry\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry.split\n; 2 = MemoryPhi({entry.split,liveOnEntry},{for.body,1})\n; 1 = MemoryDef(2)\n  %call.i = call ptr @malloc()\n  %cmp.i = icmp ne ptr %call.i, null\n  %or.cond.i = select i1 %cmp.i, i1 true, i1 false\n  br i1 %or.cond.i, label %exit, label %for.body\n\nexit:                                             ; preds = %for.body\n  ret void\n}\n```\n\nMemoryPhi 3 is broken.\n\nI think this is because we first delete the dead cloned instructions and then update MSSA and something gets confused in that case..."
       }
     ]
-  }
+  },
+  "verified": true
 }

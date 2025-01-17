@@ -60,12 +60,16 @@ def infer_related_components(diff_files):
                 if component_name != "":
                     if component_name.startswith("VPlan") or component_name.startswith(
                         "LoopVectoriz"
-                    ):
+                    ) or component_name.startswith("VPRecipe"):
                         component_name = "LoopVectorize"
                     if component_name.startswith("ScalarEvolution"):
                         component_name = "ScalarEvolution"
                     if component_name.startswith("ConstantFold"):
                         component_name = "ConstantFold"
+                    if 'AliasAnalysis' in component_name:
+                        component_name = 'AliasAnalysis'
+                    if component_name.startswith('Attributor'):
+                        component_name = 'Attributor'
                     if file.startswith("llvm/lib/IR"):
                         component_name = "IR"
                     components.add(component_name)
@@ -264,8 +268,8 @@ def verify_dispatch(
                 res, log = alive2_check(new_input, output.decode(), additional_args)
             if repro == True:
                 res = not res
-            if log is str:
-                log = decode_output(e.stderr) + "\n" + log
+            if isinstance(log, str):
+                log = decode_output(out.stderr) + "\n" + log
             else:
                 log['opt_stderr'] = decode_output(out.stderr)
             return (res, log)

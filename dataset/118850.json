@@ -63,5 +63,6 @@
         "body": "Hi @huang-me, @fhahn, yes this crash was found by the fuzzer generated test.  "
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -11,7 +11,7 @@
     "fix_commit": "4f32f5d5720fbef06672714a62376f236a36aef5",
     "components": [
       "JumpThreading",
-      "BasicAliasAnalysis"
+      "AliasAnalysis"
     ],
     "bug_location_lineno": {
       "llvm/include/llvm/Analysis/AliasAnalysis.h": [
@@ -125,5 +125,6 @@
         "body": "PR has been created, we will track the status there."
       }
     ]
-  }
+  },
+  "verified": true
 }
