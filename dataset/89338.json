@@ -37,6 +37,10 @@
         {
           "test_name": "fsh_unary_shuffle_ops_partial_widening",
           "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <2 x i32> @llvm.fshr.v2i32(<2 x i32>, <2 x i32>, <2 x i32>) #0\n\ndefine <2 x i32> @fsh_unary_shuffle_ops_partial_widening(<3 x i32> %x, <2 x i32> %y, <2 x i32> %z) {\n  %a = shufflevector <3 x i32> %x, <3 x i32> poison, <2 x i32> <i32 1, i32 0>\n  %b = shufflevector <2 x i32> %y, <2 x i32> poison, <2 x i32> <i32 1, i32 0>\n  %c = shufflevector <2 x i32> %z, <2 x i32> poison, <2 x i32> <i32 1, i32 0>\n  %r = call <2 x i32> @llvm.fshr.v2i32(<2 x i32> %a, <2 x i32> %b, <2 x i32> %c)\n  ret <2 x i32> %r\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "fshr_vec_zero_elem",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <2 x i32> @llvm.fshr.v2i32(<2 x i32>, <2 x i32>, <2 x i32>) #0\n\ndefine <2 x i32> @fshr_vec_zero_elem(<2 x i32> %x, <2 x i32> %y) {\n  %fsh = call <2 x i32> @llvm.fshr.v2i32(<2 x i32> %x, <2 x i32> %y, <2 x i32> <i32 2, i32 0>)\n  ret <2 x i32> %fsh\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
         }
       ]
     }
@@ -59,5 +63,6 @@
         "body": "I believe the root cause is the fshr to fshl canonicalization: https://alive2.llvm.org/ce/z/NQM3tR\r\n\r\nWe're performing this transform: https://alive2.llvm.org/ce/z/6UUEsS But we don't verify the pre-condition that the (modular) shift amount is not zero!\r\n\r\nFor non-vectors this is a non-issue because we'd fold a zero shift earlier, but for vectors it is an issue."
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -26,8 +26,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
-        "LoopVectorizationCostModel::collectLoopUniforms",
-        "VPReplicateRecipe::execute"
+        "VPReplicateRecipe::execute",
+        "LoopVectorizationCostModel::collectLoopUniforms"
       ]
     }
   },
@@ -50,23 +50,6 @@
         {
           "test_name": "sdiv_feeding_gep",
           "test_body": "define void @sdiv_feeding_gep(ptr %dst, i32 %x, i64 %M, i64 %conv6, i64 %N) {\nentry:\n  %conv61 = zext i32 %x to i64\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %div18 = sdiv i64 %M, %conv6\n  %conv20 = trunc i64 %div18 to i32\n  %mul30 = mul i64 %div18, %conv61\n  %sub31 = sub i64 %iv, %mul30\n  %conv34 = trunc i64 %sub31 to i32\n  %mul35 = mul i32 %x, %conv20\n  %add36 = add i32 %mul35, %conv34\n  %idxprom = sext i32 %add36 to i64\n  %gep = getelementptr double, ptr %dst, i64 %idxprom\n  store double 0.000000e+00, ptr %gep, align 8\n  %iv.next = add i64 %iv, 1\n  %ec = icmp eq i64 %iv.next, %N\n  br i1 %ec, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n}\n"
-        }
-      ]
-    },
-    {
-      "file": "llvm/test/Transforms/LoopVectorize/X86/consecutive-ptr-uniforms.ll",
-      "commands": [
-        "opt < %s -aa-pipeline=basic-aa -passes=loop-vectorize,instcombine -S -debug-only=loop-vectorize -disable-output -print-after=instcombine 2>&1",
-        "opt < %s -passes=loop-vectorize -force-vector-width=2 -S"
-      ],
-      "tests": [
-        {
-          "test_name": "PR31671",
-          "test_body": "target datalayout = \"e-m:e-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n%data = type { [32000 x float], [3 x i32], [4 x i8], [32000 x float] }\n\ndefine void @PR31671(float %x, ptr %d) #0 {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %i = phi i64 [ %i.next, %for.body ], [ 0, %entry ]\n  %tmp0 = getelementptr inbounds %data, ptr %d, i64 0, i32 3, i64 %i\n  %tmp1 = load float, ptr %tmp0, align 4\n  %tmp2 = fmul float %x, %tmp1\n  %tmp3 = getelementptr inbounds %data, ptr %d, i64 0, i32 0, i64 %i\n  %tmp4 = load float, ptr %tmp3, align 4\n  %tmp5 = fadd float %tmp4, %tmp2\n  store float %tmp5, ptr %tmp3, align 4\n  %i.next = add nuw nsw i64 %i, 5\n  %cond = icmp slt i64 %i.next, 32000\n  br i1 %cond, label %for.body, label %for.end\n\nfor.end:                                          ; preds = %for.body\n  ret void\n}\n\nattributes #0 = { \"target-cpu\"=\"knl\" }\n"
-        },
-        {
-          "test_name": "PR40816",
-          "test_body": "target datalayout = \"e-m:e-i64:64-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n@a = external hidden constant [3 x i32], align 1\n@b = external global i32, align 1\n\ndefine void @PR40816() #0 {\nentry:\n  br label %for.body\n\nfor.body:                                         ; preds = %for.body, %entry\n  %0 = phi i32 [ 0, %entry ], [ %inc, %for.body ]\n  store i32 %0, ptr @b, align 1\n  %arrayidx1 = getelementptr inbounds [3 x i32], ptr @a, i32 0, i32 %0\n  %1 = load i32, ptr %arrayidx1, align 1\n  %cmp2 = icmp eq i32 %1, 0\n  %inc = add nuw nsw i32 %0, 1\n  br i1 %cmp2, label %return, label %for.body\n\nreturn:                                           ; preds = %for.body\n  ret void\n}\n\nattributes #0 = { \"target-cpu\"=\"core2\" }\n"
         }
       ]
     }
@@ -105,5 +88,6 @@
         "body": "@eastB233 unfortunately I don't think this change is correct, e.g. consider https://github.com/llvm/llvm-project/blob/967eba07549d64f15e7a91e798aa46214704f62b/llvm/test/Transforms/LoopVectorize/X86/divs-with-tail-folding.ll#L251 when the sdiv/udiv is executed conditionally in the loop"
       }
     ]
-  }
+  },
+  "verified": true
 }

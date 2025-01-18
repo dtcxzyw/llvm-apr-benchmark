@@ -37,6 +37,10 @@
         {
           "test_name": "rem_euclid_pow2_false_arm_folded",
           "test_body": "define i32 @rem_euclid_pow2_false_arm_folded(i32 %n) {\n  %rem = srem i32 %n, 2\n  %nonneg = icmp sge i32 %rem, 0\n  %res = select i1 %nonneg, i32 %rem, i32 1\n  ret i32 %res\n}\n"
+        },
+        {
+          "test_name": "pr89516",
+          "test_body": "define i8 @pr89516(i8 %n, i8 %x) {\n  %cond = icmp slt i8 %x, 0\n  %pow2 = shl nuw i8 1, %n\n  %srem = srem i8 1, %pow2\n  %add = add nuw i8 %srem, %pow2\n  %res = select i1 %cond, i8 %add, i8 %srem\n  ret i8 %res\n}\n"
         }
       ]
     }
@@ -50,5 +54,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

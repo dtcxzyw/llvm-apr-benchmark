@@ -35,12 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "iv.4_used_as_vector_and_first_lane",
-          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\n\ndefine void @iv.4_used_as_vector_and_first_lane(ptr %src, ptr noalias %dst) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %g.src = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %g.src, align 8\n  %iv.4 = add nuw nsw i64 %iv, 4\n  %c = icmp ule i64 %l, 128\n  br i1 %c, label %loop.then, label %loop.latch\n\nloop.then:                                        ; preds = %loop.header\n  %or = or disjoint i64 %iv.4, 1\n  %g.dst = getelementptr inbounds i64, ptr %dst, i64 %or\n  store i64 %iv.4, ptr %g.dst, align 4\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %loop.then, %loop.header\n  %iv.next = add nuw nsw i64 %iv, 1\n  %exitcond = icmp eq i64 %iv.next, 32\n  br i1 %exitcond, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n"
-        },
-        {
-          "test_name": "iv.4_used_as_first_lane",
-          "test_body": "target datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\n\ndefine void @iv.4_used_as_first_lane(ptr %src, ptr noalias %dst) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %g.src = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %g.src, align 8\n  %iv.4 = add nuw nsw i64 %iv, 4\n  %c = icmp ule i64 %l, 128\n  br i1 %c, label %loop.then, label %loop.latch\n\nloop.then:                                        ; preds = %loop.header\n  %or = or disjoint i64 %iv.4, 1\n  %g.dst = getelementptr inbounds i64, ptr %dst, i64 %or\n  store i64 %l, ptr %g.dst, align 4\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %loop.then, %loop.header\n  %iv.next = add nuw nsw i64 %iv, 1\n  %exitcond = icmp eq i64 %iv.next, 32\n  br i1 %exitcond, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\n\n; Test cases based on https://github.com/llvm/llvm-project/issues/91883.\ndefine void @iv.4_used_as_vector_and_first_lane(ptr %src, ptr noalias %dst) {\n;\nentry:\n  br label %loop.header\n\nloop.header:\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %g.src = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %g.src\n  %iv.4 = add nuw nsw i64 %iv, 4\n  %c = icmp ule i64 %l, 128\n  br i1 %c, label %loop.then, label %loop.latch\n\nloop.then:\n  %or = or disjoint i64 %iv.4, 1\n  %g.dst = getelementptr inbounds i64, ptr %dst, i64 %or\n  store i64 %iv.4, ptr %g.dst, align 4\n  br label %loop.latch\n\nloop.latch:\n  %iv.next = add nuw nsw i64 %iv, 1\n  %exitcond = icmp eq i64 %iv.next, 32\n  br i1 %exitcond, label %exit, label %loop.header\n\nexit:\n  ret void\n}\n\ndefine void @iv.4_used_as_first_lane(ptr %src, ptr noalias %dst) {\n;\nentry:\n  br label %loop.header\n\nloop.header:\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %g.src = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %g.src\n  %iv.4 = add nuw nsw i64 %iv, 4\n  %c = icmp ule i64 %l, 128\n  br i1 %c, label %loop.then, label %loop.latch\n\nloop.then:\n  %or = or disjoint i64 %iv.4, 1\n  %g.dst = getelementptr inbounds i64, ptr %dst, i64 %or\n  store i64 %l, ptr %g.dst, align 4\n  br label %loop.latch\n\nloop.latch:\n  %iv.next = add nuw nsw i64 %iv, 1\n  %exitcond = icmp eq i64 %iv.next, 32\n  br i1 %exitcond, label %exit, label %loop.header\n\nexit:\n  ret void\n}\n;.\n;."
         }
       ]
     }
@@ -54,5 +50,6 @@
       "crash"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

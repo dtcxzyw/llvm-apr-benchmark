@@ -35,8 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "pr89959",
-          "test_body": "define void @pr89959() {\ntop:\n  br label %L3\n\nL3:                                               ; preds = %L13, %top\n  %value_phi = phi ptr [ null, %top ], [ %0, %L13 ]\n  %0 = getelementptr i8, ptr %value_phi, i64 8\n  %.not = icmp ule ptr %value_phi, null\n  br i1 %.not, label %L13, label %L15\n\nL13:                                              ; preds = %L3\n  br label %L3\n\nL15:                                              ; preds = %L3\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\n; Make sure we don't crash.\ndefine void @pr89959() {\n;\ntop:\n  br label %L3\n\nL3:\n  %value_phi = phi ptr [ null, %top ], [ %0, %L13 ]\n  %0 = getelementptr i8, ptr %value_phi, i64 8\n  %.not = icmp ule ptr %value_phi, null\n  br i1 %.not, label %L13, label %L15\n\nL13:\n  br label %L3\n\nL15:\n  ret void\n}"
         }
       ]
     }
@@ -50,5 +50,6 @@
       "crash-on-valid"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

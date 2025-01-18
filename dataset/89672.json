@@ -39,40 +39,12 @@
       ],
       "tests": [
         {
-          "test_name": "load_before_store_escape",
-          "test_body": "define i32 @load_before_store_escape(i64 %i, i32 %b) {\nentry:\n  %a = alloca [2 x i32], align 8\n  store i64 4294967296, ptr %a, align 8\n  call void @fork_some_threads(ptr %a)\n  %arrayidx = getelementptr inbounds [2 x i32], ptr %a, i64 0, i64 %i\n  %0 = load i32, ptr %arrayidx, align 4\n  %cmp = icmp slt i32 %0, %b\n  br i1 %cmp, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  store i32 %b, ptr %arrayidx, align 4\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %1 = load i32, ptr %a, align 4\n  %arrayidx2 = getelementptr inbounds [2 x i32], ptr %a, i64 0, i64 1\n  %2 = load i32, ptr %arrayidx2, align 4\n  %add = add nsw i32 %1, %2\n  call void @join_some_threads()\n  ret i32 %add\n}\n\ndeclare void @fork_some_threads(ptr)\n\ndeclare void @join_some_threads()\n"
-        },
-        {
-          "test_name": "not_alone_in_block",
-          "test_body": "define i32 @not_alone_in_block(i64 %i, i32 %b) {\nentry:\n  %a = alloca [2 x i32], align 8\n  store i64 4294967296, ptr %a, align 8\n  %arrayidx = getelementptr inbounds [2 x i32], ptr %a, i64 0, i64 %i\n  %0 = load i32, ptr %arrayidx, align 4\n  %cmp = icmp slt i32 %0, %b\n  br i1 %cmp, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  store i32 %b, ptr %arrayidx, align 4\n  store i32 %b, ptr %a, align 4\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %1 = load i32, ptr %a, align 4\n  %arrayidx2 = getelementptr inbounds [2 x i32], ptr %a, i64 0, i64 1\n  %2 = load i32, ptr %arrayidx2, align 4\n  %add = add nsw i32 %1, %2\n  ret i32 %add\n}\n"
-        },
-        {
-          "test_name": "load_before_store_noescape",
-          "test_body": "define i32 @load_before_store_noescape(i64 %i, i32 %b) {\nentry:\n  %a = alloca [2 x i32], align 8\n  store i64 4294967296, ptr %a, align 8\n  %arrayidx = getelementptr inbounds [2 x i32], ptr %a, i64 0, i64 %i\n  %0 = load i32, ptr %arrayidx, align 4\n  %cmp = icmp slt i32 %0, %b\n  br i1 %cmp, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  store i32 %b, ptr %arrayidx, align 4\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %1 = load i32, ptr %a, align 4\n  %arrayidx2 = getelementptr inbounds [2 x i32], ptr %a, i64 0, i64 1\n  %2 = load i32, ptr %arrayidx2, align 4\n  %add = add nsw i32 %1, %2\n  ret i32 %add\n}\n"
-        },
-        {
-          "test_name": "noifconvertstore_volatile",
-          "test_body": "define void @noifconvertstore_volatile(ptr %A, i32 %B, i32 %C, i32 %D) {\nentry:\n  store i32 %B, ptr %A, align 4\n  %cmp6 = icmp sgt i32 %D, 42\n  br i1 %cmp6, label %if.then, label %ret.end\n\nif.then:                                          ; preds = %entry\n  store volatile i32 %C, ptr %A, align 4\n  br label %ret.end\n\nret.end:                                          ; preds = %if.then, %entry\n  ret void\n}\n"
-        },
-        {
-          "test_name": "noifconvertstore2",
-          "test_body": "declare void @unknown_fun()\n\ndefine void @noifconvertstore2(ptr %A, i32 %B, i32 %C, i32 %D) {\nentry:\n  store i32 %B, ptr %A, align 4\n  call void @unknown_fun()\n  %cmp6 = icmp sgt i32 %D, 42\n  br i1 %cmp6, label %if.then, label %ret.end\n\nif.then:                                          ; preds = %entry\n  store i32 %C, ptr %A, align 4\n  br label %ret.end\n\nret.end:                                          ; preds = %if.then, %entry\n  ret void\n}\n"
-        },
-        {
           "test_name": "wrong_align_store",
           "test_body": "define void @wrong_align_store(ptr %A, i32 %B, i32 %C, i32 %D) {\nentry:\n  store i32 %B, ptr %A, align 4\n  %cmp = icmp sgt i32 %D, 42\n  br i1 %cmp, label %if.then, label %ret.end\n\nif.then:                                          ; preds = %entry\n  store i32 %C, ptr %A, align 8\n  br label %ret.end\n\nret.end:                                          ; preds = %if.then, %entry\n  ret void\n}\n"
         },
         {
-          "test_name": "ifconvertstore",
-          "test_body": "define void @ifconvertstore(ptr %A, i32 %B, i32 %C, i32 %D) {\nentry:\n  store i32 %B, ptr %A, align 4\n  %cmp = icmp sgt i32 %D, 42\n  br i1 %cmp, label %if.then, label %ret.end, !prof !0\n\nif.then:                                          ; preds = %entry\n  store i32 %C, ptr %A, align 4\n  br label %ret.end\n\nret.end:                                          ; preds = %if.then, %entry\n  ret void\n}\n\n!0 = !{!\"branch_weights\", i32 3, i32 5}\n"
-        },
-        {
           "test_name": "wrong_align_load",
           "test_body": "define void @wrong_align_load(i32 %C, i32 %D) {\nentry:\n  %A = alloca i32, align 4\n  %0 = load i32, ptr %A, align 4\n  %cmp = icmp sgt i32 %D, 42\n  br i1 %cmp, label %if.then, label %ret.end\n\nif.then:                                          ; preds = %entry\n  store i32 %C, ptr %A, align 8\n  br label %ret.end\n\nret.end:                                          ; preds = %if.then, %entry\n  ret void\n}\n"
-        },
-        {
-          "test_name": "noifconvertstore1",
-          "test_body": "define void @noifconvertstore1(ptr %A1, ptr %A2, i32 %B, i32 %C, i32 %D) {\nentry:\n  store i32 %B, ptr %A1, align 4\n  %cmp = icmp sgt i32 %D, 42\n  br i1 %cmp, label %if.then, label %ret.end\n\nif.then:                                          ; preds = %entry\n  store i32 %C, ptr %A2, align 4\n  br label %ret.end\n\nret.end:                                          ; preds = %if.then, %entry\n  ret void\n}\n"
         }
       ]
     }
@@ -95,5 +67,6 @@
         "body": "Specifically this is isSafeToSpeculateStore(), which looks for a preceding store to check whether it is safe to speculate, but fails to check alignment."
       }
     ]
-  }
+  },
+  "verified": true
 }

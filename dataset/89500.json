@@ -44,11 +44,11 @@
     },
     "bug_location_funcname": {
       "llvm/include/llvm/IR/PatternMatch.h": [
-        "isValue",
-        "m_AllOnes",
         "m_Not",
+        "match",
         "m_c_SMin",
-        "match"
+        "isValue",
+        "m_AllOnes"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
         "foldSelectICmpEq"
@@ -88,5 +88,6 @@
         "body": "I'll not forget to create a testcase with poison.\r\n"
       }
     ]
-  }
+  },
+  "verified": true
 }

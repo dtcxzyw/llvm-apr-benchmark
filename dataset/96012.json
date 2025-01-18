@@ -36,9 +36,9 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineNegator.cpp": [
-        "Negator::Negate",
-        "Negator::Negator",
         "Negator::visitImpl",
+        "Negator::Negator",
+        "Negator::Negate",
         "Negator::~Negator"
       ]
     }
@@ -52,8 +52,8 @@
       ],
       "tests": [
         {
-          "test_name": "pr96012",
-          "test_body": "target datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\n\ndefine i32 @pr96012() {\nentry:\n  br label %for.cond\n\nfor.cond:                                         ; preds = %for.cond, %entry\n  %indvar = phi i32 [ 1, %entry ], [ %shl, %for.cond ]\n  %conv1 = trunc i32 %indvar to i8\n  %neg = sub i8 0, %conv1\n  %conv2 = zext i8 %neg to i32\n  %shl = shl nuw i32 %conv2, 24\n  br label %for.cond\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ntarget datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\n\n; Make sure we don't hang here.\ndefine i32 @pr96012() {\n;\nentry:\n  br label %for.cond\n\nfor.cond:\n  %indvar = phi i32 [ 1, %entry ], [ %shl, %for.cond ]\n  %conv1 = trunc i32 %indvar to i8\n  %neg = sub i8 0, %conv1\n  %conv2 = zext i8 %neg to i32\n  %shl = shl nuw i32 %conv2, 24\n  br label %for.cond\n}"
         }
       ]
     }
@@ -67,5 +67,6 @@
       "llvm:hang"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

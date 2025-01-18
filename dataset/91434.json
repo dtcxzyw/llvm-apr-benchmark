@@ -35,8 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "foo",
-          "test_body": "define void @foo(ptr addrspace(1) %in) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iter = phi i64 [ %next, %loop ], [ 0, %entry ]\n  %ascast = addrspacecast ptr addrspace(1) %in to ptr\n  %next = add i64 %iter, 1\n  %arrayidx = getelementptr inbounds i64, ptr %ascast, i64 %next\n  store i64 %next, ptr %arrayidx, align 4\n  %cmp = icmp eq i64 %next, 7\n  br i1 %cmp, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ndefine void @foo(ptr addrspace(1) %in) {\nentry:\n  br label %loop\n\nloop:\n  %iter = phi i64 [ %next, %loop ], [ 0, %entry ]\n  %ascast = addrspacecast ptr addrspace(1) %in to ptr\n  %next = add i64 %iter, 1\n  %arrayidx = getelementptr inbounds i64, ptr %ascast, i64 %next\n  store i64 %next, ptr %arrayidx, align 4\n\n; check that we find the two interleaved blocks with ascast, gep and store:\n\n\n  %cmp = icmp eq i64 %next, 7\n  br i1 %cmp, label %exit, label %loop\n\n; check that we branch to the exit block\n\nexit:\n  ret void\n}\n"
         }
       ]
     }
@@ -55,5 +55,6 @@
         "body": "Hi, this should be addressed by https://github.com/llvm/llvm-project/pull/92107"
       }
     ]
-  }
+  },
+  "verified": true
 }

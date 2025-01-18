@@ -35,12 +35,28 @@
       ],
       "tests": [
         {
+          "test_name": "test_icmp_shl_sgt",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test_icmp_shl_sgt(i64 %x) {\n  %shl = shl i64 %x, 32\n  %cmp = icmp sgt i64 %shl, 8589934591\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test_icmp_shl_nuw_i31",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test_icmp_shl_nuw_i31(i31 %x) {\n  %shl = shl nuw i31 %x, 23\n  %cmp = icmp ugt i31 %shl, -50331648\n  ret i1 %cmp\n}\n"
+        },
+        {
+          "test_name": "test_icmp_shl_vec",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine <2 x i1> @test_icmp_shl_vec(<2 x i64> %x) {\n  %shl = shl <2 x i64> %x, splat (i64 32)\n  %cmp = icmp ult <2 x i64> %shl, splat (i64 8589934593)\n  ret <2 x i1> %cmp\n}\n"
+        },
+        {
+          "test_name": "test_icmp_shl_nsw_i31",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test_icmp_shl_nsw_i31(i31 %x) {\n  %shl = shl nsw i31 %x, 23\n  %cmp = icmp ugt i31 %shl, -50331648\n  ret i1 %cmp\n}\n"
+        },
+        {
           "test_name": "test_icmp_shl_nsw",
           "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test_icmp_shl_nsw(i64 %x) {\n  %shl = shl nsw i64 %x, 32\n  %cmp = icmp ult i64 %shl, 8589934593\n  ret i1 %cmp\n}\n"
         },
         {
-          "test_name": "test_icmp_shl_sgt",
-          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @test_icmp_shl_sgt(i64 %x) {\n  %shl = shl i64 %x, 32\n  %cmp = icmp sgt i64 %shl, 8589934591\n  ret i1 %cmp\n}\n"
+          "test_name": "pr94897",
+          "test_body": "target datalayout = \"e-p:64:64:64-p1:16:16:16-p2:32:32:32-p3:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine i1 @pr94897(i32 range(i32 -2147483648, 0) %x) {\n  %shl = shl nsw i32 %x, 24\n  %cmp = icmp ugt i32 %shl, -50331648\n  ret i1 %cmp\n}\n"
         },
         {
           "test_name": "test_icmp_shl_nuw",
@@ -68,5 +84,6 @@
         "body": "Caused by https://github.com/llvm/llvm-project/commit/5c7c1f6aba467b1c5a51d58fc591314ecd7147ce."
       }
     ]
-  }
+  },
+  "verified": true
 }

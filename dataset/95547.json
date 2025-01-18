@@ -37,6 +37,10 @@
         {
           "test_name": "trunc_nuw_xor_vector",
           "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndefine <2 x i1> @trunc_nuw_xor_vector(<2 x i8> %x, <2 x i8> %y) {\n  %xor = xor <2 x i8> %x, %y\n  %r = trunc nuw <2 x i8> %xor to <2 x i1>\n  ret <2 x i1> %r\n}\n"
+        },
+        {
+          "test_name": "pr95547",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64\"\n\ndeclare void @use.i8(i8)\n\ndefine void @pr95547(i32 %x) {\n  %x.trunc = trunc i32 %x to i16\n  %div = udiv i16 11, %x.trunc\n  %cmp = icmp ult i32 %x, 256\n  br i1 %cmp, label %loop, label %exit\n\nloop:                                             ; preds = %loop, %0\n  %trunc = trunc i16 %div to i8\n  call void @use.i8(i8 %trunc)\n  br label %loop\n\nexit:                                             ; preds = %0\n  ret void\n}\n"
         }
       ]
     }
@@ -75,5 +79,6 @@
         "body": "Reduced test case:\r\n```llvm\r\ndefine void @src(i32 %x) {\r\n  %x.trunc = trunc i32 %x to i16\r\n  %div = udiv i16 11, %x.trunc\r\n  %cmp = icmp ult i32 %x, 256\r\n  br i1 %cmp, label %loop, label %exit\r\n\r\nloop:\r\n  %trunc = trunc i16 %div to i8\r\n  call void @use(i8 %trunc)\r\n  br label %loop\r\n\r\nexit:\r\n  ret void\r\n}\r\n\r\ndeclare void @use(i8)\r\n```\r\n\r\nThe issue is that canEvaluateTruncated() preserves context instruction across non-speculatable operations."
       }
     ]
-  }
+  },
+  "verified": true
 }

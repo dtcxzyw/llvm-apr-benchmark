@@ -61,8 +61,12 @@ fix_commit_map = {
     "79137": None,  # Cannot reproduce with alive2
     "80836": "1c10821022f1799452065fb57474e894e2562b7f",
     "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
+    "81793": None,  # Cannot reproduce with alive2
+    "81872": None,  # Multi-commit fix
     "85568": None,  # Object bug
     "86280": None,  # Object bug
+    "87534": None,  # IPO miscompilation
+    "88640": None,  # Invalid reproducer
     "88804": None,  # Duplicate of #88297
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
     "102784": None,  # Multi-commit fix

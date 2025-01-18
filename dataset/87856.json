@@ -35,24 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "null_ptr_is_valid_call_with_undef",
-          "test_body": "; Function Attrs: null_pointer_is_valid\ndefine void @null_ptr_is_valid_call_with_undef() #0 {\n  call void @store_as0(ptr undef)\n  ret void\n}\n\ndeclare void @store_as0(ptr)\n\nattributes #0 = { null_pointer_is_valid }\n"
-        },
-        {
-          "test_name": "store_as0",
-          "test_body": "define void @store_as0(ptr %0) {\n  store i16 0, ptr %0, align 2\n  ret void\n}\n"
-        },
-        {
-          "test_name": "call_store_as1",
-          "test_body": "define void @call_store_as1() {\n  call void @store_as1(ptr addrspace(1) null)\n  ret void\n}\n\ndeclare void @store_as1(ptr addrspace(1))\n"
-        },
-        {
-          "test_name": "null_ptr_is_valid_call_with_null",
-          "test_body": "; Function Attrs: null_pointer_is_valid\ndefine void @null_ptr_is_valid_call_with_null() #0 {\n  call void @store_as0(ptr null)\n  ret void\n}\n\ndeclare void @store_as0(ptr)\n\nattributes #0 = { null_pointer_is_valid }\n"
-        },
-        {
-          "test_name": "store_as1",
-          "test_body": "define void @store_as1(ptr addrspace(1) %arg) {\n  store i16 0, ptr addrspace(1) %arg, align 2\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ndefine void @null_ptr_is_valid_call_with_null() #0 {\n;\n  call void @store_as0(ptr null)\n  ret void\n}\n\ndefine void @null_ptr_is_valid_call_with_undef() #0 {\n;\n  call void @store_as0(ptr undef)\n  ret void\n}\n\ndefine void @store_as0(ptr %0) {\n;\n  store i16 0, ptr %0, align 2\n  ret void\n}\n\ndefine void @call_store_as1() {\n;\n  call void @store_as1(ptr addrspace(1) null)\n  ret void\n}\n\ndefine void @store_as1(ptr addrspace(1) %arg) {\n;\n  store i16 0, ptr addrspace(1) %arg, align 2\n  ret void\n}\n\nattributes #0 = { null_pointer_is_valid }\n;.\n;."
         }
       ]
     }
@@ -79,5 +63,6 @@
         "body": "Just returning on the null function seems to work, but I don't understand exactly why it reaches here. AANoCapture::isImpliedByIR is incorrectly reimplementing NullPointerIsDefined but fixing that doesn't seem to help any "
       }
     ]
-  }
+  },
+  "verified": true
 }

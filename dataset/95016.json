@@ -35,8 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "uselistorder_test",
-          "test_body": "target datalayout = \"e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @uselistorder_test() {\n  %max1 = call double @llvm.maximum.f64(double 0.000000e+00, double 0.000000e+00) [ \"a_list\"(ptr null) ]\n  %add1 = fadd double %max1, 0.000000e+00\n  %mul1 = fmul double 0.000000e+00, %add1\n  %mul2 = fmul double %mul1, 0.000000e+00\n  %sel1 = select i1 false, double 0.000000e+00, double %mul2\n  %max2 = call double @llvm.maximum.f64(double 0.000000e+00, double 0.000000e+00)\n  %add2 = fadd double %max2, 0.000000e+00\n  %mul3 = fmul double 0.000000e+00, %add2\n  %mul4 = fmul double %mul3, 0.000000e+00\n  %sel2 = select i1 false, double 0.000000e+00, double %mul4\n  %mul5 = fmul double %sel2, 0.000000e+00\n  %add3 = fadd double 0.000000e+00, %mul5\n  %gep1 = getelementptr { double, [1 x [2 x double]] }, ptr null, i64 0, i32 1\n  store double %add3, ptr %gep1, align 8\n  %mul6 = fmul double %sel1, 0.000000e+00\n  %add4 = fadd double %mul6, 0.000000e+00\n  store double %add4, ptr null, align 8\n  ret void\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare double @llvm.maximum.f64(double, double) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+          "test_name": "<module>",
+          "test_body": "\ntarget datalayout = \"e-m:e-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"aarch64-unknown-linux-gnu\"\n\n; This test has UB but the crash in #95016 only happens with it\ndefine void @uselistorder_test() {\n;\n  %max1 = call double @llvm.maximum.f64(double 0.000000e+00, double 0.000000e+00) [ \"a_list\"(ptr null) ]\n  %add1 = fadd double %max1, 0.000000e+00\n  %mul1 = fmul double 0.000000e+00, %add1\n  %mul2 = fmul double %mul1, 0.000000e+00\n  %sel1 = select i1 false, double 0.000000e+00, double %mul2\n  %max2 = call double @llvm.maximum.f64(double 0.000000e+00, double 0.000000e+00)\n  %add2 = fadd double %max2, 0.000000e+00\n  %mul3 = fmul double 0.000000e+00, %add2\n  %mul4 = fmul double %mul3, 0.000000e+00\n  %sel2 = select i1 false, double 0.000000e+00, double %mul4\n  %mul5 = fmul double %sel2, 0.000000e+00\n  %add3 = fadd double 0.000000e+00, %mul5\n  %gep1 = getelementptr { double, [1 x [2 x double]] }, ptr null, i64 0, i32 1\n  store double %add3, ptr %gep1, align 8\n  %mul6 = fmul double %sel1, 0.000000e+00\n  %add4 = fadd double %mul6, 0.000000e+00\n  store double %add4, ptr null, align 8\n  ret void\n}\n\ndeclare double @llvm.maximum.f64(double, double) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }"
         }
       ]
     }
@@ -50,5 +50,6 @@
       "crash"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

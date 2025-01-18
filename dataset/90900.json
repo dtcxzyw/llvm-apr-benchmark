@@ -39,8 +39,8 @@
       ],
       "tests": [
         {
-          "test_name": "crash",
-          "test_body": "define void @crash() {\nentry:\n  %a = callbr i64 asm \"\", \"=r,r,!i\"(i64 0)\n          to label %then [label %else]\n\nthen:                                             ; preds = %entry\n  %b = inttoptr i64 %a to ptr\n  br label %else\n\nelse:                                             ; preds = %then, %entry\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ndefine void @crash() {\n;\nentry:\n  %a = callbr i64 asm \"\", \"=r,r,!i\"(i64 0)\n  to label %then [label %else]\n\nthen:\n  %b = inttoptr i64 %a to ptr\n  br label %else\n\nelse:\n  ret void\n}"
         }
       ]
     }
@@ -54,5 +54,6 @@
       "llvm:transforms"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

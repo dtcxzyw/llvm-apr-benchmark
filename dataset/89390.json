@@ -2,7 +2,7 @@
   "bug_id": "89390",
   "issue_url": "https://github.com/llvm/llvm-project/issues/89390",
   "bug_type": "miscompilation",
-  "base_commit": "3fbaad5a0c67d0a04739ccf51c180c7d829200a7",
+  "base_commit": "d674f45d51bffbba474b12e07f7d57a2390d2f31",
   "knowledge_cutoff": "2024-04-19T14:44:07Z",
   "lit_test_dir": [
     "llvm/test/Transforms/VectorCombine"
@@ -38,6 +38,10 @@
         {
           "test_name": "shuf_and_v16i16_yy_expensive_shuf",
           "test_body": "define <16 x i16> @shuf_and_v16i16_yy_expensive_shuf(<16 x i16> %x, <16 x i16> %y, <16 x i16> %z) {\n  %b0 = and <16 x i16> %x, %y\n  %b1 = and <16 x i16> %y, %z\n  %r = shufflevector <16 x i16> %b0, <16 x i16> %b1, <16 x i32> <i32 15, i32 22, i32 25, i32 13, i32 28, i32 0, i32 poison, i32 3, i32 0, i32 30, i32 3, i32 7, i32 9, i32 19, i32 2, i32 22>\n  ret <16 x i16> %r\n}\n"
+        },
+        {
+          "test_name": "shuf_srem_v4i32_poison",
+          "test_body": "define <4 x i32> @shuf_srem_v4i32_poison(<4 x i32> %a0, <4 x i32> %a1) {\n  %srem0 = srem <4 x i32> %a1, %a0\n  %srem1 = srem <4 x i32> splat (i32 1), %a0\n  %r = shufflevector <4 x i32> %srem0, <4 x i32> %srem1, <4 x i32> <i32 0, i32 poison, i32 6, i32 3>\n  ret <4 x i32> %r\n}\n"
         }
       ]
     }
@@ -56,5 +60,6 @@
         "body": "I'll take a look at this"
       }
     ]
-  }
+  },
+  "verified": true
 }

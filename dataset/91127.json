@@ -37,6 +37,30 @@
         {
           "test_name": "trunc_equality_both_sext",
           "test_body": "define i1 @trunc_equality_both_sext(i32 %x, i8 %y) {\n  %xt = trunc nuw nsw i32 %x to i16\n  %ye = sext i8 %y to i16\n  %c = icmp ne i16 %xt, %ye\n  ret i1 %c\n}\n"
+        },
+        {
+          "test_name": "test_slt_nuw",
+          "test_body": "define i1 @test_slt_nuw(i32 %x, i16 %y) {\n  %conv1 = trunc nuw nsw i32 %x to i8\n  %conv2 = trunc nuw nsw i16 %y to i8\n  %cond = icmp slt i8 %conv1, %conv2\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_slt",
+          "test_body": "define i1 @test_slt(i32 %x, i16 %y) {\n  %conv1 = trunc nsw i32 %x to i8\n  %conv2 = trunc nsw i16 %y to i8\n  %cond = icmp slt i8 %conv1, %conv2\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_ult_nuw",
+          "test_body": "define i1 @test_ult_nuw(i32 %x, i16 %y) {\n  %conv1 = trunc nuw nsw i32 %x to i8\n  %conv2 = trunc nuw nsw i16 %y to i8\n  %cond = icmp ult i8 %conv1, %conv2\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_ult",
+          "test_body": "define i1 @test_ult(i32 %x, i16 %y) {\n  %conv1 = trunc nsw i32 %x to i8\n  %conv2 = trunc nsw i16 %y to i8\n  %cond = icmp ult i8 %conv1, %conv2\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_eq1",
+          "test_body": "define i1 @test_eq1(i32 %x, i16 %y) {\n  %conv1 = trunc nsw i32 %x to i8\n  %conv2 = trunc nsw i16 %y to i8\n  %cond = icmp eq i8 %conv1, %conv2\n  ret i1 %cond\n}\n"
+        },
+        {
+          "test_name": "test_eq2",
+          "test_body": "define i1 @test_eq2(i32 %x, i16 %y) {\n  %conv1 = trunc nsw i32 %x to i8\n  %conv2 = trunc nsw i16 %y to i8\n  %cond = icmp eq i8 %conv2, %conv1\n  ret i1 %cond\n}\n"
         }
       ]
     }
@@ -59,5 +83,6 @@
         "body": "POC without DataLayout:\r\n```\r\ndefine i1 @test_eq(i32 %x, i16 %y) {\r\n  %conv1 = trunc nsw i32 %x to i8\r\n  %conv2 = trunc nsw i16 %y to i8\r\n  %cond = icmp eq i8 %conv1, %conv2\r\n  ret i1 %cond\r\n}\r\n\r\ndefine i1 @test_ult(i32 %x, i16 %y) {\r\n  %conv1 = trunc nsw i32 %x to i8\r\n  %conv2 = trunc nsw i16 %y to i8\r\n  %cond = icmp ult i8 %conv1, %conv2\r\n  ret i1 %cond\r\n}\r\n\r\ndefine i1 @test_slt(i32 %x, i16 %y) {\r\n  %conv1 = trunc nsw i32 %x to i8\r\n  %conv2 = trunc nsw i16 %y to i8\r\n  %cond = icmp slt i8 %conv1, %conv2\r\n  ret i1 %cond\r\n}\r\n```"
       }
     ]
-  }
+  },
+  "verified": true
 }
