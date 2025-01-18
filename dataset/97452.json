@@ -35,8 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "pr97452_scalable_vf1_for",
-          "test_body": "target datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"riscv64-unknown-linux-gnu\"\n\ndefine i64 @pr97452_scalable_vf1_for(ptr %src) #0 {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %for = phi i64 [ 0, %entry ], [ %l, %loop ]\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.next = add i64 %iv, 1\n  %gep = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %gep, align 8\n  %ec = icmp eq i64 %iv, 22\n  br i1 %ec, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  %res = phi i64 [ %for, %loop ]\n  ret i64 %res\n}\n\nattributes #0 = { \"target-features\"=\"+64bit,+v,+zvl128b,+zvl256b\" }\n"
+          "test_name": "<module>",
+          "test_body": "\ntarget datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"riscv64-unknown-linux-gnu\"\n\n; Make sure we do not pick <vscale x 1 x i64> as VF for a loop with a\n; first-order recurrence.\ndefine i64 @pr97452_scalable_vf1_for(ptr %src) #0 {\n;\nentry:\n  br label %loop\n\nloop:\n  %for = phi i64 [ 0, %entry ], [ %l, %loop ]\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.next = add i64 %iv, 1\n  %gep = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %gep, align 8\n  %ec = icmp eq i64 %iv, 22\n  br i1 %ec, label %exit, label %loop\n\nexit:\n  %res = phi i64 [ %for, %loop ]\n  ret i64 %res\n}\n\nattributes #0 = { \"target-features\"=\"+64bit,+v,+zvl128b,+zvl256b\" }\n;.\n;."
         }
       ]
     },
@@ -47,12 +47,8 @@
       ],
       "tests": [
         {
-          "test_name": "pr97452_scalable_vf1_for_live_out",
-          "test_body": "target datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\n\ndefine i64 @pr97452_scalable_vf1_for_live_out(ptr %src) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %for = phi i64 [ 0, %entry ], [ %l, %loop ]\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.next = add i64 %iv, 1\n  %gep = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %gep, align 8\n  %ec = icmp eq i64 %iv, 22\n  br i1 %ec, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  %res = phi i64 [ %for, %loop ]\n  ret i64 %res\n}\n"
-        },
-        {
-          "test_name": "pr97452_scalable_vf1_for_no_live_out",
-          "test_body": "target datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\n\ndefine void @pr97452_scalable_vf1_for_no_live_out(ptr %src, ptr noalias %dst) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %for = phi i64 [ 0, %entry ], [ %l, %loop ]\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.next = add i64 %iv, 1\n  %gep = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %gep, align 8\n  %gep.dst = getelementptr inbounds i64, ptr %dst, i64 %iv\n  store i64 %l, ptr %gep.dst, align 8\n  %ec = icmp eq i64 %iv, 22\n  br i1 %ec, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ntarget datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\n\n\ndefine i64 @pr97452_scalable_vf1_for_live_out(ptr %src) {\n;\nentry:\n  br label %loop\n\nloop:\n  %for = phi i64 [ 0, %entry ], [ %l, %loop ]\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.next = add i64 %iv, 1\n  %gep = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %gep, align 8\n  %ec = icmp eq i64 %iv, 22\n  br i1 %ec, label %exit, label %loop\n\nexit:\n  %res = phi i64 [ %for, %loop ]\n  ret i64 %res\n}\n\n\ndefine void @pr97452_scalable_vf1_for_no_live_out(ptr %src, ptr noalias %dst) {\n;\nentry:\n  br label %loop\n\nloop:\n  %for = phi i64 [ 0, %entry ], [ %l, %loop ]\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.next = add i64 %iv, 1\n  %gep = getelementptr inbounds i64, ptr %src, i64 %iv\n  %l = load i64, ptr %gep, align 8\n  %gep.dst = getelementptr inbounds i64, ptr %dst, i64 %iv\n  store i64 %l, ptr %gep.dst\n  %ec = icmp eq i64 %iv, 22\n  br i1 %ec, label %exit, label %loop\n\nexit:\n  ret void\n}"
         }
       ]
     }
@@ -75,5 +71,6 @@
         "body": "Thanks for the test case. Should be fixed now. The assertion highlighted a case where we previously miscompiled for the case where VF is <vscale x 1 x ..>; in that case we are unable to extract the penultimate value (second-to-last) if vscale = 1"
       }
     ]
-  }
+  },
+  "verified": true
 }

@@ -35,8 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "e",
-          "test_body": "define void @e() {\nentry:\n  %0 = extractelement <1 x i64> zeroinitializer, i64 0\n  %bf.value = and i64 %0, 0\n  %bf.set = or i64 0, %bf.value\n  store i64 %bf.set, ptr getelementptr inbounds (i8, ptr null, i64 8), align 8\n  %bf.value2 = and i64 0, 0\n  %bf.set4 = or i64 0, %bf.value2\n  store i64 %bf.set4, ptr null, align 8\n  ret void\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ndefine void @e() {\n;\nentry:\n  %0 = extractelement <1 x i64> zeroinitializer, i64 0\n  %bf.value = and i64 %0, 0\n  %bf.set = or i64 0, %bf.value\n  store i64 %bf.set, ptr getelementptr inbounds (i8, ptr null, i64 8), align 8\n  %bf.value2 = and i64 0, 0\n  %bf.set4 = or i64 0, %bf.value2\n  store i64 %bf.set4, ptr null, align 8\n  ret void\n}"
         }
       ]
     }
@@ -63,5 +63,6 @@
         "body": "Close the issue since https://github.com/llvm/llvm-project/commit/b634e057ddecc41dce046887d0f0854fed305374 is merged."
       }
     ]
-  }
+  },
+  "verified": true
 }

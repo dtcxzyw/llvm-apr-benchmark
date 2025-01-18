@@ -35,12 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "callee",
-          "test_body": "define void @callee(ptr %p) {\nentry:\n  ret void\n}\n"
-        },
-        {
-          "test_name": "caller",
-          "test_body": "define void @caller(<1 x ptr> %x) {\nentry:\n  %p = bitcast <1 x ptr> %x to ptr\n  call void @callee(ptr %p)\n  ret void\n}\n\ndeclare void @callee(ptr)\n"
+          "test_name": "<module>",
+          "test_body": "\n; Check that we don't crash when computing the\n; base pointer of `bitcast <1 x ptr> to ptr`\n\ndefine void @caller(<1 x ptr> %x) {\n;\nentry:\n  %p = bitcast <1 x ptr> %x to ptr\n  call void @callee(ptr %p)\n  ret void\n}\n\ndefine void @callee(ptr %p) {\n;\nentry:\n  ret void\n}"
         }
       ]
     }
@@ -63,5 +59,6 @@
         "body": "Reduced reproducer: https://godbolt.org/z/rbjK6ETEW\r\n```\r\n; bin/opt -passes=inline reduced.ll -S\r\ndefine void @caller(<1 x ptr> %x) {\r\nentry:\r\n  %p = bitcast <1 x ptr> %x to ptr\r\n  call void @callee(ptr %p)\r\n  ret void\r\n}\r\n\r\ndefine void @callee(ptr %p) {\r\nentry:\r\n  ret void\r\n}\r\n```"
       }
     ]
-  }
+  },
+  "verified": true
 }

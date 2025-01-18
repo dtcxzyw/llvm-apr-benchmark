@@ -68,7 +68,14 @@ fix_commit_map = {
     "87534": None,  # IPO miscompilation
     "88640": None,  # Invalid reproducer
     "88804": None,  # Duplicate of #88297
+    "91417": "645fb04a3389e69801d401e669eae9ee42d70217",  # Use the second fix
+    "92217": None,  # See also https://github.com/AliveToolkit/alive2/issues/1037
+    "93017": None,  # Constant expr
+    "96857": None,  # miscompilation:undef
+    "97702": None,  # uninit mem
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
+    "98133": None,  # Invalid reproducer
+    "99436": None,   # Complicated fix
     "102784": None,  # Multi-commit fix
     "104397": None,  # Invalid reproducer
     "104718": None,  # Test change

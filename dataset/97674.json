@@ -41,6 +41,14 @@
         {
           "test_name": "and_with_poison",
           "test_body": "define <2 x i16> @and_with_poison(<2 x i8> %a) {\n  %zext = zext <2 x i8> %a to <2 x i16>\n  %res = and <2 x i16> %zext, <i16 255, i16 poison>\n  ret <2 x i16> %res\n}\n"
+        },
+        {
+          "test_name": "issue_97674_getConstant",
+          "test_body": "define <4 x i64> @issue_97674_getConstant() {\nentry:\n  %folds = add <4 x i64> zeroinitializer, zeroinitializer\n  ret <4 x i64> %folds\n}\n"
+        },
+        {
+          "test_name": "issue_97674_getConstantOnEdge",
+          "test_body": "define <4 x i64> @issue_97674_getConstantOnEdge(i1 %cond) {\nentry:\n  br i1 %cond, label %if.then, label %if.end\n\nif.then:                                          ; preds = %entry\n  %folds = add <4 x i64> zeroinitializer, splat (i64 1)\n  br label %if.end\n\nif.end:                                           ; preds = %if.then, %entry\n  %r = phi <4 x i64> [ %folds, %if.then ], [ zeroinitializer, %entry ]\n  ret <4 x i64> %r\n}\n"
         }
       ]
     }
@@ -67,5 +75,6 @@
         "body": "Fix at: https://github.com/llvm/llvm-project/pull/97682"
       }
     ]
-  }
+  },
+  "verified": true
 }

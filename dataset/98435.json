@@ -67,5 +67,6 @@
         "body": "@jf-botto Agree. It assumes that !isNullValue() means \"is true\", which is not the case."
       }
     ]
-  }
+  },
+  "verified": true
 }

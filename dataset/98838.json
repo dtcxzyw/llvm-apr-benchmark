@@ -31,7 +31,7 @@
     {
       "file": "llvm/test/Transforms/SLPVectorizer/X86/select-reduction-op.ll",
       "commands": [
-        "opt -S --passes=slp-vectorizer -mtriple=x86_64-unknown-linux < %s"
+        "opt -S --passes=slp-vectorizer < %s"
       ],
       "tests": [
         {
@@ -56,5 +56,6 @@
         "body": "Reproducer: https://alive2.llvm.org/ce/z/Whfr_a\r\n```\r\n; bin/opt -passes=slp-vectorizer -S test.ll\r\ndefine i1 @src(i1 %cmp4.118.i) {\r\n  %cmp4.118.i.not = xor i1 %cmp4.118.i, true\r\n  %brmerge = select i1 %cmp4.118.i.not, i1 true, i1 poison\r\n  %.not = xor i1 poison, true\r\n  %brmerge2 = select i1 %brmerge, i1 true, i1 %.not\r\n  %.not3 = xor i1 poison, true\r\n  %brmerge4 = select i1 %brmerge2, i1 true, i1 %.not3\r\n  %.not5 = xor i1 poison, true\r\n  %brmerge6 = select i1 %brmerge4, i1 true, i1 %.not5\r\n  %.not7 = xor i1 poison, true\r\n  %brmerge8 = select i1 %brmerge6, i1 true, i1 %.not7\r\n  ret i1 %brmerge8\r\n}\r\n```\r\n```\r\ndefine i1 @tgt(i1 %cmp4.118.i) {\r\n  %1 = insertelement <4 x i1> <i1 poison, i1 true, i1 true, i1 true>, i1 %cmp4.118.i, i32 0\r\n  %2 = xor <4 x i1> %1, <i1 true, i1 poison, i1 poison, i1 poison>\r\n  %.not7 = xor i1 poison, true\r\n  %3 = freeze <4 x i1> %2\r\n  %4 = call i1 @llvm.vector.reduce.or.v4i1(<4 x i1> %3)\r\n  %op.rdx = select i1 %4, i1 true, i1 %.not7\r\n  %op.rdx1 = select i1 poison, i1 true, i1 %op.rdx\r\n  ret i1 %op.rdx1\r\n}\r\n```\r\ncc @alexey-bataev "
       }
     ]
-  }
+  },
+  "verified": true
 }

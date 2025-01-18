@@ -37,6 +37,10 @@
         {
           "test_name": "do_not_forward_offset_and_store",
           "test_body": "define void @do_not_forward_offset_and_store(ptr %src, ptr %dest) {\n  %cpy_tmp = alloca [9 x i8], align 1\n  call void @llvm.memcpy.p0.p0.i64(ptr align 1 %cpy_tmp, ptr align 1 %src, i64 7, i1 false)\n  %src_offset = getelementptr inbounds i8, ptr %src, i64 1\n  store i8 1, ptr %src_offset, align 1\n  %cpy_tmp_offset = getelementptr inbounds i8, ptr %cpy_tmp, i64 1\n  call void @llvm.memcpy.p0.p0.i64(ptr align 1 %dest, ptr align 1 %cpy_tmp_offset, i64 5, i1 false)\n  ret void\n}\n\n; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)\ndeclare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }\n"
+        },
+        {
+          "test_name": "pr98675",
+          "test_body": "@buf = external global [32 x i8]\n\ndefine void @pr98675(ptr noalias %p1, ptr noalias %p2) {\n  call void @llvm.memcpy.p0.p0.i64(ptr %p1, ptr @buf, i64 26, i1 false)\n  %gep = getelementptr i8, ptr %p1, i64 10\n  call void @llvm.memmove.p0.p0.i64(ptr %p2, ptr %gep, i64 1, i1 false)\n  ret void\n}\n\n; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)\ndeclare void @llvm.memcpy.p0.p0.i64(ptr noalias nocapture writeonly, ptr noalias nocapture readonly, i64, i1 immarg) #0\n\n; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: readwrite)\ndeclare void @llvm.memmove.p0.p0.i64(ptr nocapture writeonly, ptr nocapture readonly, i64, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nounwind willreturn memory(argmem: readwrite) }\n"
         }
       ]
     }
@@ -55,5 +59,6 @@
         "body": "It looks similar to https://lab.llvm.org/buildbot/#/builders/41/builds/587. I really shouldn't have merged the code before going to bed :3"
       }
     ]
-  }
+  },
+  "verified": true
 }

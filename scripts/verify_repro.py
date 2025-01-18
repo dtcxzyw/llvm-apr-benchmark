@@ -82,9 +82,8 @@ task_list.sort()
 
 for idx, task in enumerate(task_list):
     print("Verifying", idx + 1, task.removesuffix(".json"))
-    try:
-        verify_issue(task)
-    except Exception as e:
-        print(e)
-        exit(1)
-        pass
+    verify_issue(task)
+    # try:
+    #     verify_issue(task)
+    # except Exception:
+    #     pass

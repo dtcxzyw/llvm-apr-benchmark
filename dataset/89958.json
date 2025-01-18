@@ -36,23 +36,23 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp": [
-        "SCEVExpander::expandMinMaxExpr",
         "SCEVExpander::visitSMaxExpr",
-        "SCEVExpander::visitUDivExpr"
+        "SCEVExpander::visitUDivExpr",
+        "SCEVExpander::expandMinMaxExpr"
       ]
     }
   },
   "patch": "commit b060661da8b3b53db55644e5e358bb2dca8b56d7\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Thu Oct 17 13:55:20 2024 -0700\n\n    [SCEVExpander] Expand UDiv avoiding UB when in seq_min/max. (#92177)\n    \n    Update SCEVExpander to introduce an SafeUDivMode, which is set\n    when expanding operands of SCEVSequentialMinMaxExpr. In this mode,\n    the expander will make sure that the divisor of the expanded UDiv is\n    neither 0 nor poison.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/89958.\n    \n    \n    PR https://github.com/llvm/llvm-project/pull/92177\n\ndiff --git a/llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h b/llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h\nindex 5697d983c9ad..7dd754a2bc0d 100644\n--- a/llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h\n+++ b/llvm/include/llvm/Transforms/Utils/ScalarEvolutionExpander.h\n@@ -126,6 +126,11 @@ class SCEVExpander : public SCEVVisitor<SCEVExpander, Value *> {\n   /// \"expanded\" form.\n   bool LSRMode;\n \n+  /// When true, rewrite any divisors of UDiv expressions that may be 0 to\n+  /// umax(Divisor, 1) to avoid introducing UB. If the divisor may be poison,\n+  /// freeze it first.\n+  bool SafeUDivMode = false;\n+\n   typedef IRBuilder<InstSimplifyFolder, IRBuilderCallbackInserter> BuilderType;\n   BuilderType Builder;\n \ndiff --git a/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp b/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp\nindex c412d0398b95..39da38e49181 100644\n--- a/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp\n+++ b/llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp\n@@ -681,7 +681,21 @@ Value *SCEVExpander::visitUDivExpr(const SCEVUDivExpr *S) {\n                          SCEV::FlagAnyWrap, /*IsSafeToHoist*/ true);\n   }\n \n-  Value *RHS = expand(S->getRHS());\n+  const SCEV *RHSExpr = S->getRHS();\n+  Value *RHS = expand(RHSExpr);\n+  if (SafeUDivMode) {\n+    bool GuaranteedNotPoison =\n+        ScalarEvolution::isGuaranteedNotToBePoison(RHSExpr);\n+    if (!GuaranteedNotPoison)\n+      RHS = Builder.CreateFreeze(RHS);\n+\n+    // We need an umax if either RHSExpr is not known to be zero, or if it is\n+    // not guaranteed to be non-poison. In the later case, the frozen poison may\n+    // be 0.\n+    if (!SE.isKnownNonZero(RHSExpr) || !GuaranteedNotPoison)\n+      RHS = Builder.CreateIntrinsic(RHS->getType(), Intrinsic::umax,\n+                                    {RHS, ConstantInt::get(RHS->getType(), 1)});\n+  }\n   return InsertBinop(Instruction::UDiv, LHS, RHS, SCEV::FlagAnyWrap,\n                      /*IsSafeToHoist*/ SE.isKnownNonZero(S->getRHS()));\n }\n@@ -1376,11 +1390,14 @@ Value *SCEVExpander::visitSignExtendExpr(const SCEVSignExtendExpr *S) {\n Value *SCEVExpander::expandMinMaxExpr(const SCEVNAryExpr *S,\n                                       Intrinsic::ID IntrinID, Twine Name,\n                                       bool IsSequential) {\n+  bool PrevSafeMode = SafeUDivMode;\n+  SafeUDivMode |= IsSequential;\n   Value *LHS = expand(S->getOperand(S->getNumOperands() - 1));\n   Type *Ty = LHS->getType();\n   if (IsSequential)\n     LHS = Builder.CreateFreeze(LHS);\n   for (int i = S->getNumOperands() - 2; i >= 0; --i) {\n+    SafeUDivMode = (IsSequential && i != 0) || PrevSafeMode;\n     Value *RHS = expand(S->getOperand(i));\n     if (IsSequential && i != 0)\n       RHS = Builder.CreateFreeze(RHS);\n@@ -1395,6 +1412,7 @@ Value *SCEVExpander::expandMinMaxExpr(const SCEVNAryExpr *S,\n     }\n     LHS = Sel;\n   }\n+  SafeUDivMode = PrevSafeMode;\n   return LHS;\n }\n \n",
   "tests": [
     {
-      "file": "llvm/test/Transforms/LoopVectorize/trip-count-expansion-may-introduce-ub.ll",
+      "file": "<issue>",
       "commands": [
         "opt -p loop-vectorize -force-vector-width=4 -S %s"
       ],
       "tests": [
         {
-          "test_name": "multi_exit_4_exit_count_with_udiv_by_value_in_latch1",
-          "test_body": "define i64 @multi_exit_4_exit_count_with_udiv_by_value_in_latch1(ptr %dst, i64 %N) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %gep = getelementptr inbounds i32, ptr %dst, i64 %iv\n  store i32 1, ptr %gep, align 4\n  %c.0 = icmp slt i64 %iv, %N\n  br i1 %c.0, label %loop.latch, label %exit\n\nloop.latch:                                       ; preds = %loop.header\n  %iv.next = add i64 %iv, 1\n  %d = udiv i64 42, %N\n  %x = sub i64 100, %d\n  %c.1 = icmp slt i64 %iv, %d\n  br i1 %c.1, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch, %loop.header\n  %p = phi i64 [ 1, %loop.header ], [ 0, %loop.latch ]\n  ret i64 %p\n}\n"
+          "test_name": "f",
+          "test_body": "define i64 @f(i64 %0) {\n  br label %2\n\n2:                                                ; preds = %5, %1\n  %3 = phi i64 [ 0, %1 ], [ %6, %5 ]\n  %4 = icmp slt i64 %3, %0\n  br i1 %4, label %5, label %9\n\n5:                                                ; preds = %2\n  %6 = add i64 %3, 1\n  %7 = udiv i64 42, %0\n  %8 = icmp slt i64 %3, %7\n  br i1 %8, label %2, label %9\n\n9:                                                ; preds = %5, %2\n  %10 = phi i64 [ 1, %2 ], [ 0, %5 ]\n  ret i64 %10\n}"
         }
       ]
     }
@@ -71,5 +71,6 @@
         "body": "cc @fhahn "
       }
     ]
-  }
+  },
+  "verified": true
 }

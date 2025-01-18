@@ -64,5 +64,6 @@
         "body": "Reproducer: https://alive2.llvm.org/ce/z/GAUsBC\r\n```\r\ndefine i8 @src(i16 %a, i16 %b, i1 %cond) {\r\n  %sel = select i1 %cond, i16 1, i16 254\r\n  %cond1 = icmp ne i16 %b, 0\r\n  %mask = and i16 %a, 255\r\n  %cond2 = icmp ne i16 %mask, 255\r\n  %cond3 = or i1 %cond1, %cond2\r\n  %sel2 = select i1 %cond3, i16 %sel, i16 255\r\n  %sub = sub i16 %sel2, %a\r\n  %trunc = trunc i16 %sub to i8\r\n  ret i8 %trunc\r\n}\r\n\r\ndefine i8 @tgt(i16 %a1, i16 %a2, i1 %cond) {\r\n  %1 = trunc i16 %a1 to i8\r\n  %conv6 = xor i8 %1, -1\r\n  ret i8 %conv6\r\n}\r\n```"
       }
     ]
-  }
+  },
+  "verified": true
 }

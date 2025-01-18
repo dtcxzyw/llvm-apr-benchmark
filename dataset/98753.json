@@ -39,8 +39,8 @@
     "bug_location_funcname": {
       "llvm/lib/Analysis/InstructionSimplify.cpp": [
         "llvm::simplifyWithOpReplaced",
-        "simplifyAndOrWithICmpEq",
-        "simplifySelectWithICmpEq"
+        "simplifySelectWithICmpEq",
+        "simplifyAndOrWithICmpEq"
       ]
     }
   },
@@ -55,6 +55,10 @@
         {
           "test_name": "and_is_constant",
           "test_body": "define i1 @and_is_constant(ptr %arg, ptr %arg2) {\n  %icmp = icmp eq ptr %arg, %arg2\n  %call = call i1 @llvm.is.constant.i1(i1 %icmp)\n  %and = and i1 %call, %icmp\n  ret i1 %and\n}\n\n; Function Attrs: convergent nocallback nofree nosync nounwind willreturn memory(none)\ndeclare i1 @llvm.is.constant.i1(i1) #0\n\nattributes #0 = { convergent nocallback nofree nosync nounwind willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "pr98753",
+          "test_body": "define i1 @pr98753(i32 noundef %x, i32 %y) {\n  %cmp1 = icmp ne i32 %x, 0\n  %sel = select i1 %cmp1, i32 %y, i32 undef\n  %cmp2 = icmp sgt i32 %sel, 0\n  %and = and i1 %cmp1, %cmp2\n  ret i1 %and\n}\n"
         }
       ]
     }
@@ -94,5 +98,6 @@
         "body": "I'll add the milestone anyway as it's easier to track for downstream backports then."
       }
     ]
-  }
+  },
+  "verified": true
 }

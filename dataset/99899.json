@@ -35,8 +35,8 @@
       ],
       "tests": [
         {
-          "test_name": "test",
-          "test_body": "define i1 @test(i64 %0, i64 %1, ptr %2) {\nentry:\n  %gep44 = getelementptr i8, ptr null, i64 %0\n  %gep45 = getelementptr i8, ptr null, i64 %1\n  %3 = icmp ult ptr %gep44, %gep45\n  %umin = select i1 %3, ptr %gep44, ptr %gep45\n  %gep48 = getelementptr i8, ptr null, i64 %0\n  %gep49 = getelementptr i8, ptr null, i64 %1\n  %4 = icmp ult ptr %gep48, %gep49\n  %umin50 = select i1 %4, ptr %gep48, ptr %gep49\n  %b095 = icmp ult ptr %umin, %2\n  %b196 = icmp ult ptr %umin50, %2\n  %res = and i1 %b095, %b196\n  ret i1 %res\n}\n"
+          "test_name": "<module>",
+          "test_body": "\ndefine i1 @test(i64 %0, i64 %1, ptr %2) {\n;\nentry:\n  %gep44 = getelementptr i8, ptr null, i64 %0\n  %gep45 = getelementptr i8, ptr null, i64 %1\n  %4 = icmp ult ptr %gep44, %gep45\n  %umin = select i1 %4, ptr %gep44, ptr %gep45\n  %gep48 = getelementptr i8, ptr null, i64 %0\n  %gep49 = getelementptr i8, ptr null, i64 %1\n  %5 = icmp ult ptr %gep48, %gep49\n  %umin50 = select i1 %5, ptr %gep48, ptr %gep49\n  %b095 = icmp ult ptr %umin, %2\n  %b196 = icmp ult ptr %umin50, %2\n  %res = and i1 %b095, %b196\n  ret i1 %res\n}"
         }
       ]
     }
@@ -50,5 +50,6 @@
       "crash-on-valid"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }

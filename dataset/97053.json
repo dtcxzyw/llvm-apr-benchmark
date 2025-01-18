@@ -43,6 +43,10 @@
       ],
       "tests": [
         {
+          "test_name": "extract_element_binop_splat_variable_index_may_trap",
+          "test_body": "define i8 @extract_element_binop_splat_variable_index_may_trap(<4 x i8> %x, <4 x i8> %y, i32 %z) {\n  %b = sdiv <4 x i8> splat (i8 42), %y\n  %r = extractelement <4 x i8> %b, i32 %z\n  ret i8 %r\n}\n"
+        },
+        {
           "test_name": "extract_element_binop_splat_variable_index",
           "test_body": "define i8 @extract_element_binop_splat_variable_index(<4 x i8> %x, i32 %y) {\n  %b = sdiv <4 x i8> %x, splat (i8 42)\n  %r = extractelement <4 x i8> %b, i32 %y\n  ret i8 %r\n}\n"
         }
@@ -58,5 +62,6 @@
       "llvm:instcombine"
     ],
     "comments": []
-  }
+  },
+  "verified": true
 }
