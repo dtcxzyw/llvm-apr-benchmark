@@ -343,7 +343,7 @@ def verify_lit(test_commit, dirs, max_test_jobs):
                 "1",
                 "--order",
                 "lexical",
-                "-s",
+                "-sv",
             ]
             + test_dirs,
             stderr=subprocess.STDOUT,
