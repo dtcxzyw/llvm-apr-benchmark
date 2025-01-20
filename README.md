@@ -15,28 +15,33 @@ All bugs can be triggered with an `opt` command and a small piece of LLVM textua
 
 This dataset collects some fixed LLVM middle-end bugs from GitHub issues since 2024-01-01. Each issue contains issue description, test cases, a reference patch, and some hints. All issues are checked against the following criteria:
 
-+ At least one of the given test cases can be used to reproduce the bug at a specific commit (`base_commit`). For miscompilation bugs, the `src` and `tgt` functions will be checked with alive2, an automatic refinement verification tool for LLVM. If miscompilation happens, `alive-tv` will provide a counterexample.
++ At least one of the given test cases can be used to reproduce the bug at a specific commit (`base_commit`). For most of the miscompilation bugs, the `src` and `tgt` functions will be checked with alive2, an automatic refinement verification tool for LLVM. If miscompilation happens, `alive-tv` will provide a counterexample. The remaining miscompilation bugs will be checked by `lli`.
 + `opt` passes all the given tests after fixing the bug with the given reference patch (`patch`).
 + `opt` passes all regression tests at a specific commit (`hints.fix_commit`).
 
 Take [Issue121459](https://github.com/llvm/llvm-project/issues/121459) as an example:
 ```jsonc
 {
-  // Identifier of the bug. It can be an issue number, a pull request number, or a commit hash.
+  // Identifier of the bug. It can be an issue number, a pull request number,
+  // or a commit hash.
   "bug_id": "121459",
   // Points to issue/PR/commit url
   "issue_url": "https://github.com/llvm/llvm-project/issues/121459",
-  // crash/miscompilation/hang
+  // Bug type: crash/miscompilation/hang
   "bug_type": "miscompilation",
   // Fixes should be applied at the base commit
   "base_commit": "68d265666e708bad1c63b419b6275aaba1a7dcd2",
-  // Knowledge cutoff date. It is not allowed to use the web knowledge base after this date or use a large language model trained with newer information. Please check the "Rules" section for exemptions.
+  // Knowledge cutoff date. It is not allowed to use the web knowledge base
+  // after this date or use a large language model trained with newer
+  // information. Please check the "Rules" section for exemptions.
   "knowledge_cutoff": "2025-01-02T09:03:32Z",
   // Regression test directories
   "lit_test_dir": [
     "llvm/test/Transforms/InstCombine"
   ],
-  // Bug localization hints at different granularity levels. Note that this information is provided in a best-effort way. They are not guaranteed to be available or accurate.
+  // Bug localization hints at different granularity levels.
+  // Note that this information is provided in a best-effort way.
+  // They are not guaranteed to be available or accurate.
   "hints": {
     "fix_commit": "a4d92400a6db9566d84cb4b900149e36e117f452",
     "components": [
@@ -64,7 +69,7 @@ Take [Issue121459](https://github.com/llvm/llvm-project/issues/121459) as an exa
       ]
     }
   },
-  // a reference patch extracted from hints.fix_commit
+  // A reference patch extracted from hints.fix_commit
   "patch": "<omitted>",
   // Minimal reproducible tests
   "tests": [
@@ -185,7 +190,7 @@ You can see from the statistics that more than half of the bugs can be fixed wit
 + A C++17 compatible compiler
 + ninja
 + ccache
-+ Prebuilt LLVM core libraries
++ Pre-built LLVM core libraries
 + [alive-tv](https://github.com/AliveToolkit/alive2)
 
 You can follow the [Dockerfile](./Dockerfile) to setup the environment.
@@ -239,7 +244,7 @@ if isinstance(log, list):
 [lab_env](./scripts/lab_env.py)
 ```python
 env = Env(
-    # load an issue from dataset/{issue_id}.json
+    # Load an issue from dataset/{issue_id}.json
     issue_id,
     # The knowledge cutoff date of LLM
     base_model_knowledge_cutoff = "2024-01-01Z",
@@ -313,9 +318,7 @@ To claim that your APR tool successfully fixes a bug, please obey the following 
   + Any content in the LLVM source tree before the base commit
   + Large language model trained with dataset before the knowledge cutoff date
   + Any other content on the web created before the knowledge cutoff date
-+ The patch passed both the given tests and the regression testsuite.
-
-
++ `opt` with this patch passes both the given tests and the regression testsuite.
 
 ## License
 
