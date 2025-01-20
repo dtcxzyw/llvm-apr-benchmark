@@ -18,6 +18,9 @@ import subprocess
 import re
 import tempfile
 
+# NOTE: llvm-lit requires psutil
+import psutil
+
 llvm_dir = os.environ["LAB_LLVM_DIR"]
 llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
 llvm_alive_tv = os.environ["LAB_LLVM_ALIVE_TV"]
@@ -332,7 +335,6 @@ def verify_lit(test_commit, dirs, max_test_jobs):
     try:
         git_execute(["checkout", test_commit, "llvm/test"])
         test_dirs = [os.path.join(llvm_dir, x) for x in dirs]
-        # NOTE: llvm-lit requires psutil
         out = subprocess.check_output(
             [
                 os.path.join(llvm_build_dir, "bin/llvm-lit"),

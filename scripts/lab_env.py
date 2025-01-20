@@ -44,7 +44,6 @@ class Environment:
         issue_id,
         base_model_knowledge_cutoff: str,
         *,
-        additional_knowledge_list: Sequence[Tuple[str, str]] = [],
         max_build_jobs=None,
         max_test_jobs=None,
     ):
@@ -58,8 +57,6 @@ class Environment:
         )
         self.used_knowledge = dict()
         self.use_knowledge("base_model", base_model_knowledge_cutoff)
-        for k, v in additional_knowledge_list:
-            self.use_knowledge(k, v)
         self.interaction_time_compensation = 0.0
         self.interaction_time_compensation_enter = 0
         self.build_count = 0

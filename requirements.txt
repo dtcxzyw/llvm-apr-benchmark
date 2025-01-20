@@ -1,0 +1,8 @@
+dateparser==1.2.0
+openai==1.59.8
+psutil==6.1.1
+Requests==2.32.3
+tqdm==4.66.5
+tree_sitter==0.23.2
+tree_sitter_cpp==0.23.4
+unidiff==0.7.5

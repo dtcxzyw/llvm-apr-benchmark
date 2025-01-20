@@ -1,0 +1,11 @@
+cff-version: 1.2.0
+message: "If you use this dataset, please cite it as below."
+title: "LLVM APR Benchmark: A Large-Scale Automated Program Repair Benchmark of Real-World LLVM Middle-End Bugs"
+type: dataset
+authors:
+  - given-names: Yingwei
+    family-names: Zheng
+    email: dtcxzyw2333@gmail.com
+    affiliation: Southern University of Science and Technology
+url: "https://github.com/dtcxzyw/llvm-apr-benchmark"
+license: Apache-2.0
