@@ -2,7 +2,7 @@
 
 ## Motivation
 
-The compiler is a critical infrastructure in the software development. The LLVM compiler infrastructure is widely used in both academia and industry. However, due to its inherent complexity, the LLVM compiler still contains many bugs that can be triggered in edge cases. As one of the LLVM maintainers, my job is to provide the minimal reproducible test cases for issues from fuzzers/downstream users, and fix these bugs (or assign them to the right person). However, the process is time-consuming and boring. Thanks to the recent advances in compiler testing, we can automatically generate interesting test cases that trigger bugs and automatically reduce the tests to minimal ones. If we can also perform bug localization and repair automatically, it will significantly reduce the workload of us maintainers! Recently, LLM-based automated program repair (APR) techniques have been proposed. We have seen some successful cases in APR benchmarks like Defects4J and SWE-bench. But I believe that fixing LLVM bugs is more challenging than existing benchmarks due to its large C/C++ codebase, complex logic, long history, and the need for domain-specific knowledge. Therefore, I build this benchmark to see if we can automatically repair real-world LLVM bugs with the help of large language models and APR techniques. I hope this benchmark can help both SE researchers and LLVM community to understand how APR techniques work on a large-scale, real-world C/C++ project.
+The compiler is a critical infrastructure in the software development. The LLVM compiler infrastructure is widely used in both academia and industry. However, due to its inherent complexity, the LLVM compiler still contains many bugs that can be triggered in edge cases. As one of the LLVM maintainers, my job is to provide the minimal reproducible test cases for issues from fuzzers/ downstream users, and fix these bugs (or assign them to the right person). However, the process is time-consuming and boring. Thanks to the recent advances in compiler testing, we can automatically generate interesting test cases that trigger bugs and automatically reduce the tests to minimal ones. If we can also perform bug localization and repair automatically, it will significantly reduce the workload of us maintainers! Recently, LLM-based automated program repair (APR) techniques have been proposed. We have seen some successful cases in APR benchmarks like Defects4J and SWE-bench. But I believe that fixing LLVM bugs is more challenging than existing benchmarks due to its large C/C++ codebase, complex logic, long history, and the need for domain-specific knowledge. Therefore, I build this benchmark to see if we can automatically repair real-world LLVM bugs with the help of large language models and APR techniques. I hope this benchmark can help both SE researchers and LLVM community to understand how APR techniques work on a large-scale, real-world C/C++ project.
 
 ## Dataset Description
 
@@ -284,7 +284,7 @@ keywords = env.get_ir_keywords(llvm_ir)
 desc = env.get_langref_desc(keywords)
 ```
 
-A simple repair loop:
+Here is a simple repair loop:
 ```python
 env = Env(...)
 # System prompts and user prompts
@@ -308,13 +308,13 @@ while True:
   messages.append(construct_user_prompt_from_feedback(log))
 ```
 
-I have drafted a poor [baseline](./examples/baseline.py) which is powered by DeepSeek-V3. This baseline implementation is only for reference purposes since I am neither an expert in LLM nor APR.
+I have drafted a poor [baseline](./examples/baseline.py) which is powered by (DeepSeek-V3)[https://www.deepseek.com]. This baseline implementation is only for reference purposes since I am neither an expert in LLM nor APR.
 
 ### Rules
 
 To claim that your APR tool successfully fixes a bug, please obey the following rules:
 + Knowledge allowed to use:
-  + Any static content/dynamic feedback provided by lab_env.Environment
+  + Any static content/ dynamic feedback provided by `lab_env.Environment`
   + Any content in the LLVM source tree before the base commit
   + Large language model trained with dataset before the knowledge cutoff date
   + Any other content on the web created before the knowledge cutoff date
