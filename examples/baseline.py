@@ -16,6 +16,7 @@
 import sys
 import os
 import json
+import re
 
 sys.path.append(os.path.join(os.path.dirname(os.environ["LAB_DATASET_DIR"]), "scripts"))
 import llvm_helper
@@ -24,7 +25,7 @@ from openai import OpenAI
 
 token = os.environ["LAB_LLM_TOKEN"]
 url = os.environ.get("LAB_LLM_URL", "https://api.deepseek.com")
-model = os.environ.get("LAB_LLM_MODEL", "deepseek-chat")
+model = os.environ.get("LAB_LLM_MODEL", "deepseek-reasoner")
 basemodel_cutoff = os.environ.get("LAB_LLM_BASEMODEL_CUTOFF", "2023-12-31Z")
 client = OpenAI(api_key=token, base_url=url)
 temperature = 0.0
@@ -34,44 +35,70 @@ os.makedirs(fix_dir, exist_ok=True)
 
 
 def estimate_input_tokens(messages):
-    characters = 0
-    for chat in messages:
-        if isinstance(chat, dict):
-            characters += len(chat["content"])
-        else:
-            characters += len(chat.content)
-    return characters * 0.3
+    return sum(len(chat["content"]) for chat in messages) * 0.3
 
 
-def append_message(messages, message):
-    if isinstance(message, dict):
-        role = message["role"]
-        content = message["content"]
-    else:
-        role = message.role
-        content = message.content
-    print(f"{role}: {content}")
-    messages.append(message)
+def append_message(messages, full_messages, message, dump=True):
+    role = message["role"]
+    content = message["content"]
+    if dump:
+        print(f"{role}: {content}")
+    messages.append({"role": role, "content": content})
+    full_messages.append(message)
 
 
-def chat(messages):
-    response = client.chat.completions.create(
-        model=model,
-        messages=messages,
-        stream=False,
-        timeout=300,
-        temperature=temperature,
-    )
-    answer = response.choices[0].message
-    append_message(messages, answer)
-    return answer.content
+def chat(messages, full_messages):
+    reasoning_content = ""
+    content = ""
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            stream=True,
+            timeout=300,
+            temperature=temperature,
+        )
+
+        print("assistant:")
+        thinking = False
+        for chunk in response:
+            if (
+                hasattr(chunk.choices[0].delta, "reasoning_content")
+                and chunk.choices[0].delta.reasoning_content
+            ):
+                if not thinking:
+                    print("Thinking: ", end="")
+                    thinking = True
+                val = chunk.choices[0].delta.reasoning_content
+                print(val, end="")
+                reasoning_content += val
+            elif chunk.choices[0].delta.content:
+                content += chunk.choices[0].delta.content
+        print("Answer:")
+        print(content)
+    except json.JSONDecodeError as e:
+        print(e)
+        print(e.doc)
+        raise e
+    answer = {"role": "assistant", "content": content}
+    if len(reasoning_content) > 0:
+        answer["reasoning_content"] = reasoning_content
+    append_message(messages, full_messages, answer, dump=False)
+    return content
+
+
+format_requirement = """
+Please answer with the code directly. Do not include any additional information in the output.
+Please answer with the complete code snippet (including the unmodified part) that replaces the original code. Do not answer with a diff.
+"""
 
 
 def get_system_prompt() -> str:
-    return """You are an LLVM maintainer.
-You are fixing a middle-end bug in the LLVM project.
-Please answer with the code directly. Do not include any additional information.
-"""
+    return (
+        """You are an LLVM maintainer.
+You are fixing a middle-end bug in the LLVM project."""
+        + format_requirement
+    )
 
 
 def get_hunk(env: Env) -> str:
@@ -83,7 +110,7 @@ def get_hunk(env: Env) -> str:
     for range in bug_hunks:
         min_lineno = min(min_lineno, range[0])
         max_lineno = max(max_lineno, range[1])
-    margin = 15
+    margin = 30
     base_commit = env.get_base_commit()
     source_code = str(
         llvm_helper.git_execute(["show", f"{base_commit}:{bug_file}"])
@@ -94,8 +121,24 @@ def get_hunk(env: Env) -> str:
     return bug_file, hunk
 
 
+def extract_code_from_reply(tgt: str):
+    if tgt.startswith("```"):
+        tgt = tgt.strip().removeprefix("```cpp").removeprefix("```").removesuffix("```")
+        return tgt
+    # Match the last code block
+    re1 = re.compile("```cpp([\s\S]+)```")
+    matches = re.findall(re1, tgt)
+    if len(matches) > 0:
+        return matches[-1]
+    re2 = re.compile("```([\s\S]+)```")
+    matches = re.findall(re2, tgt)
+    if len(matches) > 0:
+        return matches[-1]
+    return tgt
+
+
 def modify_inplace(file, src, tgt):
-    tgt = tgt.removeprefix("```cpp").removeprefix("```").removesuffix("```").strip()
+    tgt = extract_code_from_reply(tgt)
     path = os.path.join(llvm_helper.llvm_dir, file)
     with open(path) as f:
         code = f.read()
@@ -119,33 +162,32 @@ def normalize_feedback(log) -> str:
     return json.dumps(llvm_helper.get_first_failed_test(log), indent=2)
 
 
-def issue_fixing_iter(env: Env, file, src, messages):
+def issue_fixing_iter(
+    env: Env, file, src, messages, full_messages, context_requirement
+):
     env.reset()
-    tgt = chat(messages)
+    tgt = chat(messages, full_messages)
     modify_inplace(file, src, tgt)
     res, log = env.check_full()
     if res:
         return True
     append_message(
         messages,
+        full_messages,
         {
             "role": "user",
             "content": "Feedback:\n"
             + normalize_feedback(log)
-            + "\nPlease adjust code according to the feedback. Do not include any additional information.\n",
+            + "\nPlease adjust code according to the feedback."
+            + format_requirement
+            + context_requirement,
         },
     )
     return False
 
 
 def normalize_messages(messages):
-    normalized = []
-    for message in messages:
-        if isinstance(message, dict):
-            normalized.append(message)
-        else:
-            normalized.append({"role": message.role, "content": message.content})
-    return normalized
+    return {"model": model, "messages": messages}
 
 
 override = False
@@ -162,7 +204,10 @@ def fix_issue(issue_id):
     if len(bug_funcs) != 1 or len(next(iter(bug_funcs.values()))) != 1:
         raise RuntimeError("Multi-func bug is not supported")
     messages = []
-    append_message(messages, {"role": "system", "content": get_system_prompt()})
+    full_messages = []  # Log with COT tokens
+    append_message(
+        messages, full_messages, {"role": "system", "content": get_system_prompt()}
+    )
     bug_type = env.get_bug_type()
     bug_func_name = next(iter(bug_funcs.values()))[0]
     component = next(iter(env.get_hint_components()))
@@ -174,19 +219,25 @@ def fix_issue(issue_id):
     desc += "Detailed information:\n"
     desc += normalize_feedback(log) + "\n"
     file, hunk = get_hunk(env)
-    desc += f"Please modify the following code in {file}:{bug_func_name} to fix the bug:\n```\n{hunk}\n```\n"
-    append_message(messages, {"role": "user", "content": desc})
+    desc += f"Please modify the following code in {file}:{bug_func_name} to fix the bug:\n```cpp\n{hunk}\n```\n"
+    prefix = "\n".join(hunk.splitlines()[:5])
+    suffix = "\n".join(hunk.splitlines()[-5:])
+    context_requirement = f"Please make sure the answer includes the prefix:\n```cpp\n{prefix}\n```\nand the suffix:\n```cpp\n{suffix}\n```\n"
+    desc += format_requirement + context_requirement
+    append_message(messages, full_messages, {"role": "user", "content": desc})
     for idx in range(4):
         print(f"Round {idx + 1}")
         if estimate_input_tokens(messages) > max_input_tokens:
             return
-        if issue_fixing_iter(env, file, hunk, messages):
-            cert = env.dump(normalize_messages(messages))
+        if issue_fixing_iter(
+            env, file, hunk, messages, full_messages, context_requirement
+        ):
+            cert = env.dump(normalize_messages(full_messages))
             print(cert)
             with open(fix_log_path, "w") as f:
                 f.write(json.dumps(cert, indent=2))
             return
-    cert = env.dump(normalize_messages(messages))
+    cert = env.dump(normalize_messages(full_messages))
     with open(fix_log_path, "w") as f:
         f.write(json.dumps(cert, indent=2))
 
