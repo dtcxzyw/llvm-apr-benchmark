@@ -23,6 +23,8 @@ jobs:
 
       - name: Set up Git
         run: |
+          git config --global user.email "dtcxzyw2333@gmail.com"
+          git config --global user.name "Yingwei Zheng"
           git lfs install
           git clone https://dtcxzyw:$HF_TOKEN@huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark
         env:
