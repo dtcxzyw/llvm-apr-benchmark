@@ -308,7 +308,7 @@ while True:
   messages.append(construct_user_prompt_from_feedback(log))
 ```
 
-I have drafted a poor [baseline](./examples/baseline.py) which is powered by [DeepSeek-V3](https://www.deepseek.com). This baseline implementation is only for reference purposes since I am neither an expert in LLM nor APR.
+I have drafted a poor [baseline](./examples/baseline.py) which is powered by [DeepSeek-R1](https://www.deepseek.com). This baseline implementation is only for reference purposes since I am neither an expert in LLM nor APR.
 
 ### Rules
 

@@ -105,6 +105,8 @@ fix_commit_map = {
     "122602": None,  # Duplicate of #122496
     "123920": None,  # Cannot reproduce with alive2
     "124213": None,  # Multi-commit fix
+    "124578": None,  # OpenMP support bug
+    "125259": None,  # Reproducer is too large
 }
 
 if issue_id in fix_commit_map:

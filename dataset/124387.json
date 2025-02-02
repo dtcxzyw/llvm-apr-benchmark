@@ -60,5 +60,6 @@
         "body": "Slightly reduced: https://alive2.llvm.org/ce/z/3Kf7-2\n\nI assume the problem is that we don't clear the return range attribute in SimplifyDemanded."
       }
     ]
-  }
+  },
+  "verified": true
 }
