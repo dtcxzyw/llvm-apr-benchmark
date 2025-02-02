@@ -92,13 +92,19 @@ fix_commit_map = {
     "112633": None,  # Multi-commit fix
     "113301": None,  # miscompilation:undef
     "113425": None,  # miscompilation:undef
+    "113989": None,  # Cannot confirm fix with alive2
     "114905": "889215a30ed60474e573f9632d1fa362dfa1b04e",  # Use the second fix
+    "116144": None,  # Cannot reproduce with alive2
     "116668": None,  # Cannot reproduce with alive2
     "117170": None,  # Cannot reproduce with alive2
+    "119646": None,  # Cannot reproduce with alive2
     "122166": None,  # Duplicate of #117308
     "122324": None,  # Cannot confirm fix with alive2
     "122430": None,  # Cannot confirm fix with alive2
+    "122537": None,  # Clang codegen issue
     "122602": None,  # Duplicate of #122496
+    "123920": None,  # Cannot reproduce with alive2
+    "124213": None,  # Multi-commit fix
 }
 
 if issue_id in fix_commit_map:
