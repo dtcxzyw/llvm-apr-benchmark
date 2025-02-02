@@ -34,7 +34,8 @@ jobs:
         run: |
           cd llvm-apr-benchmark
           rm -rf dataset examples scripts .gitignore CITATION.cff Dockerfile LICENSE README.md requirements.txt
-          cp -r ../dataset ../examples ../scripts ../.gitignore ../CITATION.cff ../Dockerfile ../LICENSE ../README.md ../requirements.txt .
+          cp -r ../dataset ../examples ../scripts ../.gitignore ../CITATION.cff ../Dockerfile ../LICENSE ../requirements.txt .
+          cat ../hf_dataset_card.md ../README.md > README.md
           git add .
           git commit -m "Sync" || exit 0
           git push
