@@ -38,10 +38,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "BoUpSLP::setInsertPointAfterBundle",
         "BoUpSLP::gather",
-        "createShuffle",
-        "createFreeze"
+        "BoUpSLP::setInsertPointAfterBundle",
+        "createFreeze",
+        "createShuffle"
       ]
     }
   },

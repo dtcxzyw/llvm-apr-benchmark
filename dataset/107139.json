@@ -38,10 +38,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Coroutines/CoroSplit.cpp": [
-        "replacePrepare",
         "CoroSplitPass::run",
-        "updateCallGraphAfterCoroutineSplit",
-        "splitCoroutine"
+        "replacePrepare",
+        "splitCoroutine",
+        "updateCallGraphAfterCoroutineSplit"
       ]
     }
   },

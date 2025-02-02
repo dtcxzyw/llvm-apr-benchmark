@@ -26,8 +26,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "BoUpSLP::collectValuesToDemote",
-        "BoUpSLP::buildTree_rec"
+        "BoUpSLP::buildTree_rec",
+        "BoUpSLP::collectValuesToDemote"
       ]
     }
   },

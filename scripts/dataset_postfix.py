@@ -21,8 +21,11 @@ import json
 import hints
 from unidiff import PatchSet
 
+fix_commit_set = set()
+
 
 def verify_issue(issue):
+    global fix_commit_set
     path = os.path.join(llvm_helper.dataset_dir, issue)
     with open(path) as f:
         data = json.load(f)
@@ -56,7 +59,14 @@ def verify_issue(issue):
             print(f"{issue} Warning: bug_location_funcname is empty")
     data["hints"]["bug_location_funcname"] = bug_location_funcname
     # Migration
-    data["hints"].pop("files")
+    if "files" in data["hints"]:
+        data["hints"].pop("files")
+
+    if not llvm_helper.is_valid_fix(fix_commit):
+        print(f"{issue} Warning: fix_commit is invalid")
+    if fix_commit in fix_commit_set:
+        print(f"{issue} Warning: duplicated fix_commit")
+    fix_commit_set.add(fix_commit)
 
     with open(path, "w") as f:
         json.dump(data, f, indent=2)

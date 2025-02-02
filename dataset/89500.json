@@ -44,11 +44,11 @@
     },
     "bug_location_funcname": {
       "llvm/include/llvm/IR/PatternMatch.h": [
-        "m_Not",
-        "match",
-        "m_c_SMin",
         "isValue",
-        "m_AllOnes"
+        "m_AllOnes",
+        "m_Not",
+        "m_c_SMin",
+        "match"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
         "foldSelectICmpEq"

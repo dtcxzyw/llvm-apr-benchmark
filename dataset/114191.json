@@ -57,9 +57,9 @@
         "llvm::ConstantFoldBinaryInstruction"
       ],
       "llvm/lib/Transforms/InstCombine/InstCombineMulDivRem.cpp": [
-        "foldIDivShl",
         "InstCombinerImpl::commonIDivTransforms",
-        "InstCombinerImpl::commonIRemTransforms"
+        "InstCombinerImpl::commonIRemTransforms",
+        "foldIDivShl"
       ]
     }
   },

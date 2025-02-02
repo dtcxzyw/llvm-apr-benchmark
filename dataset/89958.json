@@ -36,9 +36,9 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Utils/ScalarEvolutionExpander.cpp": [
+        "SCEVExpander::expandMinMaxExpr",
         "SCEVExpander::visitSMaxExpr",
-        "SCEVExpander::visitUDivExpr",
-        "SCEVExpander::expandMinMaxExpr"
+        "SCEVExpander::visitUDivExpr"
       ]
     }
   },

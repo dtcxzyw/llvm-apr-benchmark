@@ -75,7 +75,7 @@ fix_commit_map = {
     "97702": None,  # uninit mem
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
     "98133": None,  # Invalid reproducer
-    "99436": None,   # Complicated fix
+    "99436": None,  # Complicated fix
     "102784": None,  # Multi-commit fix
     "104397": None,  # Invalid reproducer
     "104718": None,  # Test change
@@ -101,39 +101,6 @@ fix_commit_map = {
     "122602": None,  # Duplicate of #122496
 }
 
-
-def is_valid_fix(commit):
-    if commit is None:
-        return False
-    try:
-        branches = llvm_helper.git_execute(["branch", "--contains", commit])
-        if "main\n" not in branches:
-            return False
-        changed_files = (
-            subprocess.check_output(
-                [
-                    "git",
-                    "-C",
-                    llvm_helper.llvm_dir,
-                    "show",
-                    "--name-only",
-                    "--format=",
-                    commit,
-                ],
-                stderr=subprocess.DEVNULL,
-            )
-            .decode()
-            .strip()
-        )
-        if "llvm/test/" in changed_files and (
-            "llvm/lib/" in changed_files or "llvm/include/" in changed_files
-        ):
-            return True
-    except subprocess.CalledProcessError:
-        pass
-    return False
-
-
 if issue_id in fix_commit_map:
     fix_commit = fix_commit_map[issue_id]
     if fix_commit is None:
@@ -148,7 +115,7 @@ else:
                 break
         if event["event"] == "referenced" and fix_commit is None:
             commit = event["commit_id"]
-            if is_valid_fix(commit):
+            if llvm_helper.is_valid_fix(commit):
                 fix_commit = commit
 
 if fix_commit is None:

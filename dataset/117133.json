@@ -37,10 +37,10 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Analysis/ScalarEvolution.cpp": [
+        "ScalarEvolution::createAddRecFromPHI",
         "ScalarEvolution::getSequentialMinMaxExpr",
         "ScalarEvolution::isGuaranteedNotToBePoison",
-        "ScalarEvolution::isSCEVExprNeverPoison",
-        "ScalarEvolution::createAddRecFromPHI"
+        "ScalarEvolution::isSCEVExprNeverPoison"
       ]
     }
   },

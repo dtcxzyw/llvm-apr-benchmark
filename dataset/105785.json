@@ -8,7 +8,7 @@
     "llvm/test/Transforms/ConstraintElimination"
   ],
   "hints": {
-    "fix_commit": "3ff9d92aae0945daa85ec6f85f05a3aeaaa9f962",
+    "fix_commit": "85b6aac7c25f9d2a976a76045ace1e7afebb5965",
     "components": [
       "ConstraintElimination"
     ],

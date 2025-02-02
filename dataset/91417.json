@@ -62,12 +62,12 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/Reassociate.cpp": [
-        "LowerNegateToMultiply",
-        "ReassociatePass::RemoveFactorFromExpression",
         "CarmichaelShift",
         "IncorporateWeight",
         "LinearizeExprTree",
-        "ReassociatePass::ReassociateExpression"
+        "LowerNegateToMultiply",
+        "ReassociatePass::ReassociateExpression",
+        "ReassociatePass::RemoveFactorFromExpression"
       ]
     }
   },

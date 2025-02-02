@@ -8,7 +8,7 @@
     "llvm/test/Transforms/InstCombine"
   ],
   "hints": {
-    "fix_commit": "a87fbeb3a77a53ded341277c5b326f7696d47594",
+    "fix_commit": "59eae919c938f890e9b9b4be8a3fa3cb1b11ed89",
     "components": [
       "ValueTracking"
     ],

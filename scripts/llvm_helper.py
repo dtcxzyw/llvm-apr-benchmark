@@ -363,3 +363,35 @@ def get_first_failed_test(test_result):
         if not res["result"]:
             return res
     return None
+
+
+def is_valid_fix(commit):
+    if commit is None:
+        return False
+    try:
+        branches = git_execute(["branch", "--contains", commit])
+        if "main\n" not in branches:
+            return False
+        changed_files = (
+            subprocess.check_output(
+                [
+                    "git",
+                    "-C",
+                    llvm_dir,
+                    "show",
+                    "--name-only",
+                    "--format=",
+                    commit,
+                ],
+                stderr=subprocess.DEVNULL,
+            )
+            .decode()
+            .strip()
+        )
+        if "llvm/test/" in changed_files and (
+            "llvm/lib/" in changed_files or "llvm/include/" in changed_files
+        ):
+            return True
+    except subprocess.CalledProcessError:
+        pass
+    return False

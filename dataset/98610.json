@@ -30,8 +30,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Scalar/MemCpyOptimizer.cpp": [
-        "MemCpyOptPass::processMemSetMemCpyDependence",
-        "MemCpyOptPass::processMemCpy"
+        "MemCpyOptPass::processMemCpy",
+        "MemCpyOptPass::processMemSetMemCpyDependence"
       ]
     }
   },

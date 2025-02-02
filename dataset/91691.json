@@ -34,8 +34,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/InstCombine/InstCombineSelect.cpp": [
-        "isSafeToRemoveBitCeilSelect",
-        "foldBitCeil"
+        "foldBitCeil",
+        "isSafeToRemoveBitCeilSelect"
       ]
     }
   },
