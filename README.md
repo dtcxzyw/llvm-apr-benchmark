@@ -1,4 +1,17 @@
+---
+license: apache-2.0
+task_categories:
+- text2text-generation
+tags:
+- code
+size_categories:
+- 1M<n<10M
+---
 # LLVM APR Benchmark: A Large-Scale Automated Program Repair Benchmark of Real-World LLVM Middle-End Bugs
+
+[GitHub (We only accept pull requests from GitHub)](https://github.com/dtcxzyw/llvm-apr-benchmark)
+
+[Hugging Face mirror](https://huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark)
 
 ## Motivation
 
