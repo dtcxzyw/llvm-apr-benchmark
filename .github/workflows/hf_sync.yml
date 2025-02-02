@@ -1,0 +1,38 @@
+name: huggingface sync
+
+on:
+  schedule:
+  - cron: "0 0 * * 0"
+
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    concurrency:
+      group: baseline
+      cancel-in-progress: false
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: false
+          fetch-depth: 0
+          ref: main
+
+      - name: Set up Git
+        run: |
+          git lfs install
+          git clone https://dtcxzyw:$HF_TOKEN@huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark
+        env:
+          HF_TOKEN: ${{ secrets.HF_TOKEN }}
+
+      - name: Sync files
+        run: |
+          cd llvm-apr-benchmark
+          rm -rf dataset examples scripts .gitignore CITATION.cff Dockerfile LICENSE README.md requirements.txt
+          cp -r ../dataset ../examples ../scripts ../.gitignore ../CITATION.cff ../Dockerfile ../LICENSE ../README.md ../requirements.txt .
+          git add .
+          git commit -m "Sync" || exit 0
+          git push
