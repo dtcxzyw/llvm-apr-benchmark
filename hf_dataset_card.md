@@ -10,5 +10,5 @@ configs:
   - config_name: default
     data_files:
       - split: test
-        path: dataset/*.json
+        path: dataset.jsonl
 ---

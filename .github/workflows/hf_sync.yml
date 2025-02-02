@@ -32,10 +32,12 @@ jobs:
 
       - name: Sync files
         run: |
+          pip3 install jsonlines
           cd llvm-apr-benchmark
           rm -rf dataset examples scripts .gitignore CITATION.cff Dockerfile LICENSE README.md requirements.txt
           cp -r ../dataset ../examples ../scripts ../.gitignore ../CITATION.cff ../Dockerfile ../LICENSE ../requirements.txt .
           cat ../hf_dataset_card.md ../README.md > README.md
+          python3 ../scripts/pack_jsonlines.py ../dataset dataset.jsonl
           git add .
           git commit -m "Sync" || exit 0
           git push
