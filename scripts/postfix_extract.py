@@ -63,6 +63,7 @@ fix_commit_map = {
     "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
     "81793": None,  # Cannot reproduce with alive2
     "81872": None,  # Multi-commit fix
+    "85185": None,  # Duplicate of #79742
     "85568": None,  # Object bug
     "86280": None,  # Object bug
     "87534": None,  # IPO miscompilation
@@ -76,6 +77,7 @@ fix_commit_map = {
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
     "98133": None,  # Invalid reproducer
     "99436": None,  # Complicated fix
+    "99625": None,  # Duplicate of #94328
     "102784": None,  # Multi-commit fix
     "104397": None,  # Invalid reproducer
     "104718": None,  # Test change
@@ -86,6 +88,7 @@ fix_commit_map = {
     "108618": None,  # Multi-commit fix
     "108854": None,  # Multi-commit fix
     "109581": None,  # Too many unrelated changes
+    "110440": None,  # Duplicate of #109528
     "110819": None,  # Outdated issue
     "111585": None,  # Cannot reproduce with alive2
     "111709": None,  # Cannot reproduce with alive2
@@ -93,11 +96,14 @@ fix_commit_map = {
     "113301": None,  # miscompilation:undef
     "113425": None,  # miscompilation:undef
     "113989": None,  # Cannot confirm fix with alive2
+    "114181": None,  # Duplicate of #112666
     "114905": "889215a30ed60474e573f9632d1fa362dfa1b04e",  # Use the second fix
     "116144": None,  # Cannot reproduce with alive2
     "116668": None,  # Cannot reproduce with alive2
     "117170": None,  # Cannot reproduce with alive2
+    "119173": "30f3752e54fa7cd595a434a985efbe9a7abe9b65",
     "119646": None,  # Cannot reproduce with alive2
+    "121430": None,  # Alive2 bug https://github.com/AliveToolkit/alive2/pull/1155
     "122166": None,  # Duplicate of #117308
     "122324": None,  # Cannot confirm fix with alive2
     "122430": None,  # Cannot confirm fix with alive2
@@ -108,6 +114,7 @@ fix_commit_map = {
     "124578": None,  # OpenMP support bug
     "125259": None,  # Reproducer is too large
     "125369": None,  # Reverted
+    "125374": None,  # Duplicate of #119173
     "125400": None,  # Reverted
 }
 
