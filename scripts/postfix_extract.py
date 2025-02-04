@@ -104,6 +104,7 @@ fix_commit_map = {
     "119173": "30f3752e54fa7cd595a434a985efbe9a7abe9b65",
     "119646": None,  # Cannot reproduce with alive2
     "121430": None,  # Alive2 bug https://github.com/AliveToolkit/alive2/pull/1155
+    "121583": None,  # Removed fold
     "122166": None,  # Duplicate of #117308
     "122324": None,  # Cannot confirm fix with alive2
     "122430": None,  # Cannot confirm fix with alive2
