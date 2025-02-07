@@ -2,7 +2,11 @@
 
 [GitHub (We only accept pull requests from GitHub)](https://github.com/dtcxzyw/llvm-apr-benchmark)
 
-[Hugging Face mirror](https://huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark)
+[Hugging Face Mirror](https://huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark)
+
+[Hugging Face Leaderboard](https://huggingface.co/spaces/dtcxzyw/llvm-apr-benchmark-leaderboard)
+
+[Evaluation Result Submission](https://huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark-submissions)
 
 ## Motivation
 
