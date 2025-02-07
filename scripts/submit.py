@@ -16,6 +16,7 @@
 import os
 import sys
 import json
+import llvm_helper
 
 method_name = os.environ["LAB_METHOD_NAME"]
 method_url = os.environ["LAB_METHOD_URL"]
@@ -28,6 +29,13 @@ with open(output_file, "w") as f:
     fixes = []
     with_hint = False
     for file in os.listdir(fix_dir):
+        with open(os.path.join(llvm_helper.dataset_dir, file)) as info:
+            info = json.load(info)
+            if not info.get("verified", False):
+                continue
+            bug_id = info["bug_id"]
+            bug_type = info["bug_type"]
+
         with open(os.path.join(fix_dir, file)) as fix_file:
             cert = json.load(fix_file)
             if "knowledge" in cert:
@@ -35,6 +43,8 @@ with open(output_file, "w") as f:
                     if k.startswith("hint"):
                         with_hint = True
                         break
+            cert["bug_id"] = bug_id
+            cert["bug_type"] = bug_type
             fixes.append(cert)
     json.dump(
         {
