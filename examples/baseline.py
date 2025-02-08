@@ -252,9 +252,9 @@ else:
         override = True
 
 for task in task_list:
-    fix_issue(task)
-    # try:
-    #     fix_issue(task)
-    # except Exception as e:
-    #     print(e)
-    #     pass
+    # fix_issue(task)
+    try:
+        fix_issue(task)
+    except Exception as e:
+        print(e)
+        pass
