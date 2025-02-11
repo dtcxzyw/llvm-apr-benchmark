@@ -34,7 +34,7 @@ session.headers.update(
 )
 
 issue_id_begin = 76663  # Since 2024-01-01
-issue_id_end = 126174
+issue_id_end = 126720
 
 
 def wait(progress):
