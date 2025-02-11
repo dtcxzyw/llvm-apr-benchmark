@@ -31,8 +31,9 @@ basemodel_cutoff = os.environ.get("LAB_LLM_BASEMODEL_CUTOFF", "2023-12-31Z")
 client = OpenAI(api_key=token, base_url=url)
 temperature = 0.0
 max_input_tokens = int(os.environ.get("LAB_LLM_CONTEXT_WINDOW_SIZE", 65536))
+# Seems not working, sad :(
 enable_tooling = os.environ.get("LAB_LLM_ENABLE_TOOLING", "OFF") == "ON"
-max_log_size = 3000
+max_log_size = int(os.environ.get("LAB_LLM_MAX_LOG_SIZE", 1000000000))
 fix_dir = os.environ["LAB_FIX_DIR"]
 os.makedirs(fix_dir, exist_ok=True)
 
