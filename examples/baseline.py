@@ -22,6 +22,7 @@ sys.path.append(os.path.join(os.path.dirname(os.environ["LAB_DATASET_DIR"]), "sc
 import llvm_helper
 from lab_env import Environment as Env
 from openai import OpenAI
+from openai import NOT_GIVEN
 
 token = os.environ["LAB_LLM_TOKEN"]
 url = os.environ.get("LAB_LLM_URL", "https://api.deepseek.com")
@@ -29,9 +30,155 @@ model = os.environ.get("LAB_LLM_MODEL", "deepseek-reasoner")
 basemodel_cutoff = os.environ.get("LAB_LLM_BASEMODEL_CUTOFF", "2023-12-31Z")
 client = OpenAI(api_key=token, base_url=url)
 temperature = 0.0
-max_input_tokens = 65536
+max_input_tokens = int(os.environ.get("LAB_LLM_CONTEXT_WINDOW_SIZE", 65536))
+enable_tooling = os.environ.get("LAB_LLM_ENABLE_TOOLING", "OFF") == "ON"
+max_log_size = 3000
 fix_dir = os.environ["LAB_FIX_DIR"]
 os.makedirs(fix_dir, exist_ok=True)
+
+tools = []
+tool_get_source_prompt = "If you need to view the source code, please call the `get_source` function. It is very helpful to address compilation errors by inspecting the latest LLVM API."
+tool_get_source_desc = {
+    "type": "function",
+    "function": {
+        "name": "get_source",
+        "description": "Get the first 10 lines of the source code starting from the specified line number.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "file": {
+                    "type": "string",
+                    "description": "Relative path to the source file. Must start with 'llvm/'",
+                },
+                "lineno": {
+                    "type": "number",
+                    "description": "The line number to start from. The first line is 1.",
+                },
+            },
+            "required": ["file", "lineno"],
+        },
+    },
+}
+
+
+def tool_get_source(env, args):
+    file = args["file"]
+    if not file.startswith("llvm/") or file.contains(".."):
+        return "Invalid file path"
+    lineno = int(args["lineno"])
+    path = os.path.join(llvm_helper.llvm_dir, file)
+    env.reset()
+    env.use_knowledge(f"source file: {file}:{lineno}", env.knowledge_cutoff)
+    with open(path) as f:
+        source = f.readlines()
+    return "```cpp\n" + "".join(source[lineno - 1 : lineno + 9]) + "```\n"
+
+
+tools.append((tool_get_source_prompt, tool_get_source_desc, tool_get_source))
+
+tool_get_instruction_docs_prompt = "If you need the definition of an LLVM instruction or an intrinsic, please call the `get_instruction_docs` function. It is useful to understand new poison-generating flags."
+tool_get_instruction_docs_desc = {
+    "type": "function",
+    "function": {
+        "name": "get_instruction_docs",
+        "description": "Get the documentation of an LLVM instruction or an intrinsic.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "inst": {
+                    "type": "string",
+                    "description": "The name of the instruction or intrinsic (e.g., 'add', 'llvm.ctpop'). Do not include the suffix for type mangling.",
+                }
+            },
+            "required": ["inst"],
+        },
+    },
+}
+
+
+def tool_get_instruction_docs(env, args):
+    inst = args["inst"]
+    return env.get_langref_desc([inst])[inst]
+
+
+tools.append(
+    (
+        tool_get_instruction_docs_prompt,
+        tool_get_instruction_docs_desc,
+        tool_get_instruction_docs,
+    )
+)
+
+
+tool_check_refinement_prompt = "If you want to check if an optimization is correct, please call the `check_refinement` function. If the optimization is incorrect, the function will provide a counterexample."
+tool_check_refinement_desc = {
+    "type": "function",
+    "function": {
+        "name": "check_refinement",
+        "description": "Check if an optimization is correct. If the optimization is incorrect, the function will provide a counterexample.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "src": {
+                    "type": "string",
+                    "description": "The original LLVM function.",
+                },
+                "tgt": {
+                    "type": "string",
+                    "description": "The optimized LLVM function. The name of target function should be the same as the original function.",
+                },
+            },
+            "required": ["src", "tgt"],
+        },
+    },
+}
+
+
+def tool_check_refinement(env, args):
+    src = args["src"]
+    tgt = args["tgt"]
+    env.use_knowledge(f"alive2", env.knowledge_cutoff)
+    if "ptr" in src and "target datalayout" not in src:
+        src = f'target datalayout = "p:8:8:8"\n{src}'
+    if "ptr" in tgt and "target datalayout" not in tgt:
+        tgt = f'target datalayout = "p:8:8:8"\n{tgt}'
+
+    res, log = llvm_helper.alive2_check(src, tgt, "-src-unroll=8 -tgt-unroll=8")
+    if res:
+        return "The optimization is correct."
+    return log
+
+
+tools.append(
+    (tool_check_refinement_prompt, tool_check_refinement_desc, tool_check_refinement)
+)
+
+
+def get_tooling_prompt():
+    if not enable_tooling:
+        return ""
+    prompt = "You are allowed to use the following functions when fixing this bug:\n"
+    for x in tools:
+        prompt += x[0] + "\n"
+    return prompt
+
+
+def get_available_tools():
+    if not enable_tooling:
+        return NOT_GIVEN
+    return [x[1] for x in tools]
+
+
+def dispatch_tool_call(env, name, args):
+    assert enable_tooling
+
+    try:
+        args = json.loads(args)
+        for tool in tools:
+            if tool[1]["function"]["name"] == name:
+                return tool[2](env, args)
+    except Exception as e:
+        return str(e)
 
 
 def estimate_input_tokens(messages):
@@ -47,33 +194,61 @@ def append_message(messages, full_messages, message, dump=True):
     full_messages.append(message)
 
 
-def chat(messages, full_messages):
+def chat(env, messages, full_messages):
     reasoning_content = ""
     content = ""
     try:
-        response = client.chat.completions.create(
-            model=model,
-            messages=messages,
-            stream=True,
-            timeout=300,
-            temperature=temperature,
-        )
+        while True:
+            response = (
+                client.chat.completions.create(
+                    model=model,
+                    messages=messages,
+                    timeout=300,
+                    temperature=temperature,
+                    tools=get_available_tools(),
+                )
+                .choices[0]
+                .message
+            )
+            if response.tool_calls is None or len(response.tool_calls) == 0:
+                break
+
+            if hasattr(response, "reasoning_content"):
+                reasoning_content += response.reasoning_content
+                print("Thinking:")
+                print(response.reasoning_content)
+
+            messages.append(response)
+
+            for tool_call in response.tool_calls:
+                name = tool_call.function.name
+                args = tool_call.function.arguments
+                res = dispatch_tool_call(env, name, args)
+                print(f"Call tool {name} with")
+                print(args)
+                print("Result: ", res)
+                full_messages.append(
+                    {
+                        "role": "assistant - funccall",
+                        "tool_name": name,
+                        "tool_args": args,
+                        "tool_res": res,
+                    }
+                )
+                messages.append(
+                    {
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "content": str(res),
+                    }
+                )
 
         print("assistant:")
-        thinking = False
-        for chunk in response:
-            if (
-                hasattr(chunk.choices[0].delta, "reasoning_content")
-                and chunk.choices[0].delta.reasoning_content
-            ):
-                if not thinking:
-                    print("Thinking: ", end="")
-                    thinking = True
-                val = chunk.choices[0].delta.reasoning_content
-                print(val, end="")
-                reasoning_content += val
-            elif chunk.choices[0].delta.content:
-                content += chunk.choices[0].delta.content
+        if hasattr(response, "reasoning_content"):
+            reasoning_content += response.reasoning_content
+            print("Thinking:")
+            print(response.reasoning_content)
+        content = response.content
         print("Answer:")
         print(content)
     except json.JSONDecodeError as e:
@@ -98,6 +273,7 @@ def get_system_prompt() -> str:
         """You are an LLVM maintainer.
 You are fixing a middle-end bug in the LLVM project."""
         + format_requirement
+        + get_tooling_prompt()
     )
 
 
@@ -158,6 +334,8 @@ def get_issue_desc(env: Env) -> str:
 
 def normalize_feedback(log) -> str:
     if not isinstance(log, list):
+        if len(log) > max_log_size:
+            return log[:max_log_size] + "\n<Truncated>..."
         return str(log)
     return json.dumps(llvm_helper.get_first_failed_test(log), indent=2)
 
@@ -166,7 +344,7 @@ def issue_fixing_iter(
     env: Env, file, src, messages, full_messages, context_requirement
 ):
     env.reset()
-    tgt = chat(messages, full_messages)
+    tgt = chat(env, messages, full_messages)
     modify_inplace(file, src, tgt)
     res, log = env.check_full()
     if res:
