@@ -118,6 +118,8 @@ fix_commit_map = {
     "125374": None,  # Duplicate of #119173
     "125400": None,  # Reverted
     "126409": None,  # Reverted
+    "127173": None,  # Reverted
+    "127177": None,  # Reverted
 }
 
 if issue_id in fix_commit_map:
