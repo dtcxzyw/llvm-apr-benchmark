@@ -118,6 +118,7 @@ fix_commit_map = {
     "125374": None,  # Duplicate of #119173
     "125400": None,  # Reverted
     "126409": None,  # Reverted
+    "126974": "29f3a352068ce562bcb65e18a676c82a9991583c",
     "127173": None,  # Reverted
     "127177": None,  # Reverted
 }
