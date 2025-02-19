@@ -98,6 +98,7 @@ fix_commit_map = {
     "113989": None,  # Cannot confirm fix with alive2
     "114181": None,  # Duplicate of #112666
     "114905": "889215a30ed60474e573f9632d1fa362dfa1b04e",  # Use the second fix
+    "115976": None,  # Cannot reproduce with alive2
     "116144": None,  # Cannot reproduce with alive2
     "116668": None,  # Cannot reproduce with alive2
     "117170": None,  # Cannot reproduce with alive2
