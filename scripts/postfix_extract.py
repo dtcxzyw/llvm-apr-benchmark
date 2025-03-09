@@ -124,6 +124,8 @@ fix_commit_map = {
     "127173": None,  # Reverted
     "127177": None,  # Reverted
     "127220": None,  # Reverted
+    "129244": None,  # Cannot reproduce the miscompilation
+    "130082": None,  # Non-deterministic bug
 }
 
 if issue_id in fix_commit_map:
