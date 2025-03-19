@@ -126,6 +126,8 @@ fix_commit_map = {
     "127220": None,  # Reverted
     "129244": None,  # Cannot reproduce the miscompilation
     "130082": None,  # Non-deterministic bug
+    "130632": None,  # Reverts #108535
+    "131355": None,  # Non-deterministic bug
 }
 
 if issue_id in fix_commit_map:
@@ -199,7 +201,7 @@ for file in patchset.modified_files:
     source_code = llvm_helper.git_execute(["show", f"{base_commit}:{file.path}"])
     modified_funcs_valid = hints.get_funcname_loc(file, source_code)
     if len(modified_funcs_valid) != 0:
-        bug_location_funcname[file.path] = list(modified_funcs_valid)
+        bug_location_funcname[file.path] = sorted(modified_funcs_valid)
 
 # Extract tests
 test_patchset = PatchSet(

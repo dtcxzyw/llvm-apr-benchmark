@@ -26,8 +26,8 @@
     },
     "bug_location_funcname": {
       "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
-        "BoUpSLP::isGatherShuffledSingleRegisterEntry",
-        "BoUpSLP::isGatherShuffledEntry"
+        "BoUpSLP::isGatherShuffledEntry",
+        "BoUpSLP::isGatherShuffledSingleRegisterEntry"
       ]
     }
   },

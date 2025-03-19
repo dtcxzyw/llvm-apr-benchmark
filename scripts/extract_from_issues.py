@@ -34,7 +34,7 @@ session.headers.update(
 )
 
 issue_id_begin = 76663  # Since 2024-01-01
-issue_id_end = 130472
+issue_id_end = 131718
 
 
 def wait(progress):
@@ -84,6 +84,7 @@ def fetch(issue_id):
             "clang-tidy",
             "mlir:",
             "tools:",
+            "flang:",
         ]:
             if key in label_name:
                 return False
@@ -98,6 +99,7 @@ def fetch(issue_id):
             "llvm:codegen",
             "llvm-reduce",
             "llvm:bitcode",
+            "llvm:openmpirbuilder",
             "BOLT",
         ]:
             return False
@@ -136,6 +138,8 @@ for issue_id in progress:
         except KeyError as e:
             wait(progress)
         except requests.exceptions.RequestException:
+            wait(progress)
+        except ValueError:
             wait(progress)
         except Exception as e:
             print(type(e), e)
