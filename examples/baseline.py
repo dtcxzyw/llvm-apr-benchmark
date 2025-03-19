@@ -33,6 +33,7 @@ temperature = 0.0
 max_input_tokens = int(os.environ.get("LAB_LLM_CONTEXT_WINDOW_SIZE", 65536))
 # Seems not working, sad :(
 enable_tooling = os.environ.get("LAB_LLM_ENABLE_TOOLING", "OFF") == "ON"
+enable_streaming = os.environ.get("LAB_LLM_ENABLE_STREAMING", "OFF") == "ON"
 max_log_size = int(os.environ.get("LAB_LLM_MAX_LOG_SIZE", 1000000000))
 fix_dir = os.environ["LAB_FIX_DIR"]
 os.makedirs(fix_dir, exist_ok=True)
@@ -195,7 +196,7 @@ def append_message(messages, full_messages, message, dump=True):
     full_messages.append(message)
 
 
-def chat(env, messages, full_messages):
+def chat_with_tooling(env, messages, full_messages):
     reasoning_content = ""
     content = ""
     try:
@@ -252,15 +253,61 @@ def chat(env, messages, full_messages):
         content = response.content
         print("Answer:")
         print(content)
-    except json.JSONDecodeError as e:
+    except Exception as e:
         print(e)
-        print(e.doc)
-        raise e
+        append_message(messages, full_messages, {"role": "assistant", "exception": str(e)}, dump=False)
+        return ""
     answer = {"role": "assistant", "content": content}
     if len(reasoning_content) > 0:
         answer["reasoning_content"] = reasoning_content
     append_message(messages, full_messages, answer, dump=False)
     return content
+
+
+def chat_with_streaming(env, messages, full_messages):
+    reasoning_content = ""
+    content = ""
+    try:
+        completion = client.chat.completions.create(
+            model=model,
+            messages=messages,
+            timeout=300,
+            temperature=temperature,
+            stream=True,
+        )
+        is_thinking = False
+        is_answering = False
+        for chunk in completion:
+            delta = chunk.choices[0].delta
+            if hasattr(delta, "reasoning_content") and delta.reasoning_content != None:
+                if not is_thinking:
+                    print("Thinking:")
+                    is_thinking = True
+                print(delta.reasoning_content, end="", flush=True)
+                reasoning_content += delta.reasoning_content
+            else:
+                if delta.content != "" and is_answering is False:
+                    print("\nAnswer:")
+                    is_answering = True
+                print(delta.content, end="", flush=True)
+                content += delta.content
+
+    except Exception as e:
+        print(e)
+        append_message(messages, full_messages, {"role": "assistant", "exception": str(e)}, dump=False)
+        return ""
+    answer = {"role": "assistant", "content": content}
+    if len(reasoning_content) > 0:
+        answer["reasoning_content"] = reasoning_content
+    append_message(messages, full_messages, answer, dump=False)
+    return content
+
+
+def chat(env, messages, full_messages):
+    if enable_streaming:
+        assert not enable_tooling
+        return chat_with_streaming(env, messages, full_messages)
+    return chat_with_tooling(env, messages, full_messages)
 
 
 format_requirement = """
