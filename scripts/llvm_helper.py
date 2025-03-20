@@ -25,7 +25,8 @@ llvm_dir = os.environ["LAB_LLVM_DIR"]
 llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
 llvm_alive_tv = os.environ["LAB_LLVM_ALIVE_TV"]
 dataset_dir = os.environ["LAB_DATASET_DIR"]
-
+if '--quiet' not in subprocess.run(["ninja", "--help"], capture_output=True).stderr.decode("utf-8"):
+    raise RuntimeError("Please update ninja to version 1.11.0 or later")
 
 def git_execute(args):
     return subprocess.check_output(
