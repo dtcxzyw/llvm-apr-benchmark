@@ -255,7 +255,12 @@ def chat_with_tooling(env, messages, full_messages):
         print(content)
     except Exception as e:
         print(e)
-        append_message(messages, full_messages, {"role": "assistant", "exception": str(e)}, dump=False)
+        append_message(
+            messages,
+            full_messages,
+            {"role": "assistant", "content": f"Exception: {e}"},
+            dump=False,
+        )
         return ""
     answer = {"role": "assistant", "content": content}
     if len(reasoning_content) > 0:
@@ -294,7 +299,12 @@ def chat_with_streaming(env, messages, full_messages):
 
     except Exception as e:
         print(e)
-        append_message(messages, full_messages, {"role": "assistant", "exception": str(e)}, dump=False)
+        append_message(
+            messages,
+            full_messages,
+            {"role": "assistant", "content": f"Exception: {e}"},
+            dump=False,
+        )
         return ""
     answer = {"role": "assistant", "content": content}
     if len(reasoning_content) > 0:
@@ -428,7 +438,8 @@ def fix_issue(issue_id):
     env = Env(issue_id, basemodel_cutoff)
     bug_funcs = env.get_hint_bug_functions()
     if len(bug_funcs) != 1 or len(next(iter(bug_funcs.values()))) != 1:
-        raise RuntimeError("Multi-func bug is not supported")
+        print("Multi-func bug is not supported")
+        return
     messages = []
     full_messages = []  # Log with COT tokens
     append_message(
@@ -478,9 +489,8 @@ else:
         override = True
 
 for task in task_list:
-    # fix_issue(task)
     try:
         fix_issue(task)
     except Exception as e:
         print(e)
-        pass
+        exit(-1)

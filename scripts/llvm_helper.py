@@ -130,7 +130,7 @@ def build(max_build_jobs: int):
             cwd=llvm_build_dir,
         ).decode()
         log += subprocess.check_output(
-            ["cmake", "--build", ".", "-j", str(max_build_jobs)],
+            ["cmake", "--build", ".", "-j", str(max_build_jobs), "--", "--quiet"],
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
         ).decode()
