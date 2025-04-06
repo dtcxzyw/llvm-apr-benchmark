@@ -128,6 +128,7 @@ fix_commit_map = {
     "130082": None,  # Non-deterministic bug
     "130632": None,  # Reverts #108535
     "131355": None,  # Non-deterministic bug
+    "134411": None,  # Reverted
 }
 
 if issue_id in fix_commit_map:
