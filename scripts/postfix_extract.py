@@ -129,6 +129,7 @@ fix_commit_map = {
     "130632": None,  # Reverts #108535
     "131355": None,  # Non-deterministic bug
     "134411": None,  # Reverted
+    "135113": None,  # Not supported by Alive2
 }
 
 if issue_id in fix_commit_map:
