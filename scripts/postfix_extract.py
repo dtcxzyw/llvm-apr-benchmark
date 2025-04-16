@@ -130,6 +130,8 @@ fix_commit_map = {
     "131355": None,  # Non-deterministic bug
     "134411": None,  # Reverted
     "135113": None,  # Not supported by Alive2
+    "135410": None,  # Cannot reproduce with Alive2
+    "135531": None,  # Cannot reproduce with Alive2
 }
 
 if issue_id in fix_commit_map:
