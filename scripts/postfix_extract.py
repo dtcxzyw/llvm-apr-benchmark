@@ -128,11 +128,13 @@ fix_commit_map = {
     "130082": None,  # Non-deterministic bug
     "130632": None,  # Reverts #108535
     "131355": None,  # Non-deterministic bug
+    "133984": None,  # Not supported by Alive2
     "134411": None,  # Reverted
     "135113": None,  # Not supported by Alive2
     "135410": None,  # Cannot reproduce with Alive2
     "135531": None,  # Cannot reproduce with Alive2
     "137164": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
+    "138178": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
 }
 
 if issue_id in fix_commit_map:
