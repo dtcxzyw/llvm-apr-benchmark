@@ -135,6 +135,13 @@ fix_commit_map = {
     "135531": None,  # Cannot reproduce with Alive2
     "137164": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
     "138178": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
+    "138819": None,  # Alive2 timeout
+    "138923": None,  # Invalid reproducer
+    "139065": None,  # Duplicate of #139060
+    "139289": None,  # Duplicate of #139103
+    "139308": None,  # Duplicate of #139103
+    "139729": None,  # Non-deterministic bug
+    "140215": None,  # Cannot reproduce with Alive2
 }
 
 if issue_id in fix_commit_map:
