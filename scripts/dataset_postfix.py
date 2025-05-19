@@ -55,7 +55,7 @@ def verify_issue(issue):
         if len(modified_funcs_valid) != 0:
             bug_location_funcname[file.path] = sorted(list(modified_funcs_valid))
     if len(bug_location_funcname) == 0:
-        if issue.removesuffix(".json") not in ["88297"]:
+        if issue.removesuffix(".json") not in ["88297", "83404"]:
             print(f"{issue} Warning: bug_location_funcname is empty")
     data["hints"]["bug_location_funcname"] = bug_location_funcname
     # Migration

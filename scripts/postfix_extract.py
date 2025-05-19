@@ -57,6 +57,7 @@ timeline = session.get(issue["timeline_url"]).json()
 fix_commit = None
 fix_commit_map = {
     "76789": None,  # Cannot reproduce with alive2
+    "77842": None,  # Threshold problem
     "78024": None,  # Reverted
     "79137": None,  # Cannot reproduce with alive2
     "80836": "1c10821022f1799452065fb57474e894e2562b7f",

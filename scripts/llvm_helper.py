@@ -123,7 +123,7 @@ def build(max_build_jobs: int):
                 "-DLLVM_ABI_BREAKING_CHECKS=WITH_ASSERTS",
                 "-DLLVM_ENABLE_WARNINGS=OFF",
                 "-DLLVM_APPEND_VC_REV=OFF",
-                "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon'",
+                "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon;PowerPC;'",
                 "-DLLVM_PARALLEL_LINK_JOBS=4",
                 "-DLLVM_INCLUDE_EXAMPLES=OFF",
             ],

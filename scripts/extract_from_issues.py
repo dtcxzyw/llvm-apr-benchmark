@@ -34,7 +34,7 @@ session.headers.update(
 )
 
 issue_id_begin = 76663  # Since 2024-01-01
-issue_id_end = 140362
+issue_id_end = 140445
 
 
 def wait(progress):
@@ -75,7 +75,12 @@ def fetch(issue_id):
             has_valid_label = True
         if "hang" in label_name:
             has_valid_label = True
-        if "llvm" in label_name or label_name == "vectorizers":
+        if "llvm" in label_name or label_name in [
+            "vectorizers",
+            "loopoptim",
+            "floating-point",
+            "vectorization",
+        ]:
             is_llvm_middleend = True
         for key in [
             "backend",
