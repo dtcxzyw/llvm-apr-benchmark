@@ -162,7 +162,9 @@ def apply(patch: str):
 
 
 def filter_out_unsupported_feats(src: str):
-    return src.replace(" noalias ", " ")
+    src = src.replace(" noalias ", " ")
+    src = src.replace(" nofree ", " ")
+    return src
 
 
 def alive2_check(src: str, tgt: str, additional_args: str):

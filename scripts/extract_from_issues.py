@@ -34,7 +34,7 @@ session.headers.update(
 )
 
 issue_id_begin = 76663  # Since 2024-01-01
-issue_id_end = 140445
+issue_id_end = 140749
 
 
 def wait(progress):
@@ -87,9 +87,15 @@ def fetch(issue_id):
             "clang:",
             "clangd",
             "clang-tidy",
-            "mlir:",
+            "clang-format",
+            "mlir",
             "tools:",
             "flang:",
+            "lld:",
+            "lldb",
+            "tablegen",
+            "polly",
+            "PGO",
         ]:
             if key in label_name:
                 return False
@@ -106,12 +112,15 @@ def fetch(issue_id):
             "llvm:bitcode",
             "llvm:openmpirbuilder",
             "BOLT",
+            "mc",
+            "libc++",
+            "coroutines",
         ]:
             return False
     if not has_valid_label:
         return False
-    if not is_llvm_middleend:
-        return False
+    # if not is_llvm_middleend:
+    #     return False
 
     try:
         out = subprocess.check_output(

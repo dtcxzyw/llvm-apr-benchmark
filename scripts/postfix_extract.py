@@ -64,6 +64,7 @@ fix_commit_map = {
     "81561": "97088b2ab2184ad4bd64f59fba0b92b70468b10d",
     "81793": None,  # Cannot reproduce with alive2
     "81872": None,  # Multi-commit fix
+    "84807": None,  # IPO miscompilation
     "85185": None,  # Duplicate of #79742
     "85568": None,  # Object bug
     "86280": None,  # Object bug
@@ -73,6 +74,7 @@ fix_commit_map = {
     "91417": "645fb04a3389e69801d401e669eae9ee42d70217",  # Use the second fix
     "92217": None,  # See also https://github.com/AliveToolkit/alive2/issues/1037
     "93017": None,  # Constant expr
+    "96197": None,  # Cannot reproduce the crash
     "96857": None,  # miscompilation:undef
     "97702": None,  # uninit mem
     "97837": None,  # Alive2 bug e4508ba85747eb3a5e002915e544d2e08e751425
@@ -88,6 +90,7 @@ fix_commit_map = {
     "107501": None,  # Complicated fix
     "108618": None,  # Multi-commit fix
     "108854": None,  # Multi-commit fix
+    "108936": None,  # Codegen issue
     "109581": None,  # Too many unrelated changes
     "110440": None,  # Duplicate of #109528
     "110819": None,  # Outdated issue
@@ -110,6 +113,7 @@ fix_commit_map = {
     "122166": None,  # Duplicate of #117308
     "122324": None,  # Cannot confirm fix with alive2
     "122430": None,  # Cannot confirm fix with alive2
+    "122467": None,  # Invalid reproducer
     "122537": None,  # Clang codegen issue
     "122602": None,  # Duplicate of #122496
     "123920": None,  # Cannot reproduce with alive2
@@ -136,6 +140,7 @@ fix_commit_map = {
     "135531": None,  # Cannot reproduce with Alive2
     "137164": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
     "138178": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
+    "138194": None,  # LTO bug
     "138819": None,  # Alive2 timeout
     "138923": None,  # Invalid reproducer
     "139065": None,  # Duplicate of #139060
