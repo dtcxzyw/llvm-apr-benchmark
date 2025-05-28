@@ -104,7 +104,7 @@ def decode_output(output):
     return output.decode()
 
 
-def build(max_build_jobs: int):
+def build(max_build_jobs: int, additional_cmake_args = []):
     os.makedirs(llvm_build_dir, exist_ok=True)
     log = ""
     try:
@@ -126,7 +126,7 @@ def build(max_build_jobs: int):
                 "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon;PowerPC;'",
                 "-DLLVM_PARALLEL_LINK_JOBS=4",
                 "-DLLVM_INCLUDE_EXAMPLES=OFF",
-            ],
+            ] + additional_cmake_args,
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
         ).decode()

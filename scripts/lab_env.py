@@ -46,6 +46,7 @@ class Environment:
         *,
         max_build_jobs=None,
         max_test_jobs=None,
+        additional_cmake_args=[],
     ):
         with open(os.path.join(llvm_helper.dataset_dir, f"{issue_id}.json")) as f:
             self.data = json.load(f)
@@ -73,6 +74,7 @@ class Environment:
             self.max_test_jobs = max_build_jobs
         else:
             self.max_test_jobs = max_test_jobs
+        self.additional_cmake_args = additional_cmake_args
         self.start_time = time.time()
 
     def use_knowledge(self, url: str, date: Union[str, datetime.datetime]):
@@ -96,7 +98,9 @@ class Environment:
         with TimeCompensationGuard(self):
             self.build_count += 1
             self.verify_head()
-            res, log = llvm_helper.build(self.max_build_jobs)
+            res, log = llvm_helper.build(
+                self.max_build_jobs, self.additional_cmake_args
+            )
             if not res:
                 self.build_failure_count += 1
             return res, log
