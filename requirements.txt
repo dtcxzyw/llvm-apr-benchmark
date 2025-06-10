@@ -2,7 +2,7 @@ dateparser==1.2.0
 jsonlines==4.0.0
 openai==1.60.1
 psutil==6.1.1
-Requests==2.32.3
+Requests==2.32.4
 tqdm==4.66.5
 tree_sitter==0.23.2
 tree_sitter_cpp==0.23.4
