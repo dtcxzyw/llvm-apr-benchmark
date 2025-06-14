@@ -35,6 +35,8 @@ max_input_tokens = int(os.environ.get("LAB_LLM_CONTEXT_WINDOW_SIZE", 65536))
 enable_tooling = os.environ.get("LAB_LLM_ENABLE_TOOLING", "OFF") == "ON"
 enable_streaming = os.environ.get("LAB_LLM_ENABLE_STREAMING", "OFF") == "ON"
 max_log_size = int(os.environ.get("LAB_LLM_MAX_LOG_SIZE", 1000000000))
+max_sample_count = int(os.environ.get("LAB_LLM_MAX_SAMPLE_COUNT", 4))
+omit_issue_body = os.environ.get("LAB_LLM_OMIT_ISSUE_BODY", "OFF") == "ON"
 fix_dir = os.environ["LAB_FIX_DIR"]
 os.makedirs(fix_dir, exist_ok=True)
 
@@ -290,7 +292,7 @@ def chat_with_streaming(env, messages, full_messages):
                     is_thinking = True
                 print(delta.reasoning_content, end="", flush=True)
                 reasoning_content += delta.reasoning_content
-            else:
+            elif delta.content is not None:
                 if delta.content != "" and is_answering is False:
                     print("\nAnswer:")
                     is_answering = True
@@ -386,7 +388,7 @@ def get_issue_desc(env: Env) -> str:
     if issue is None:
         return ""
     title = issue["title"]
-    body = issue["body"]
+    body = "<omitted>" if omit_issue_body else issue["body"]
     return f"Issue title: {title}\nIssue body: {body}\n"
 
 
@@ -462,7 +464,7 @@ def fix_issue(issue_id):
     context_requirement = f"Please make sure the answer includes the prefix:\n```cpp\n{prefix}\n```\nand the suffix:\n```cpp\n{suffix}\n```\n"
     desc += format_requirement + context_requirement
     append_message(messages, full_messages, {"role": "user", "content": desc})
-    for idx in range(4):
+    for idx in range(max_sample_count):
         print(f"Round {idx + 1}")
         if estimate_input_tokens(messages) > max_input_tokens:
             return
