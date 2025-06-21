@@ -148,6 +148,7 @@ fix_commit_map = {
     "139308": None,  # Duplicate of #139103
     "139729": None,  # Non-deterministic bug
     "140215": None,  # Cannot reproduce with Alive2
+    "140238": None,  # Cannot reproduce with Alive2
     "140992": None,  # Meta issue
     "142091": None,  # Duplicate of #141968
 }

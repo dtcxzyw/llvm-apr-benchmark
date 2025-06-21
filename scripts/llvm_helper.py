@@ -25,8 +25,11 @@ llvm_dir = os.environ["LAB_LLVM_DIR"]
 llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
 llvm_alive_tv = os.environ["LAB_LLVM_ALIVE_TV"]
 dataset_dir = os.environ["LAB_DATASET_DIR"]
-if '--quiet' not in subprocess.run(["ninja", "--help"], capture_output=True).stderr.decode("utf-8"):
+if "--quiet" not in subprocess.run(
+    ["ninja", "--help"], capture_output=True
+).stderr.decode("utf-8"):
     raise RuntimeError("Please update ninja to version 1.11.0 or later")
+
 
 def git_execute(args):
     return subprocess.check_output(
@@ -104,7 +107,7 @@ def decode_output(output):
     return output.decode()
 
 
-def build(max_build_jobs: int, additional_cmake_args = []):
+def build(max_build_jobs: int, additional_cmake_args=[]):
     os.makedirs(llvm_build_dir, exist_ok=True)
     log = ""
     try:
@@ -126,7 +129,8 @@ def build(max_build_jobs: int, additional_cmake_args = []):
                 "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon;PowerPC;'",
                 "-DLLVM_PARALLEL_LINK_JOBS=4",
                 "-DLLVM_INCLUDE_EXAMPLES=OFF",
-            ] + additional_cmake_args,
+            ]
+            + additional_cmake_args,
             stderr=subprocess.STDOUT,
             cwd=llvm_build_dir,
         ).decode()
