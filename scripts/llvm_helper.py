@@ -270,7 +270,7 @@ def verify_dispatch(
         out = subprocess.run(
             args_list,
             input=input.encode(),
-            timeout=10.0,
+            timeout=120.0 if type == "crash" else 10.0,
             check=True,
             capture_output=True,
         )
