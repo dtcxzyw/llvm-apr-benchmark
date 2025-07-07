@@ -89,15 +89,17 @@ def infer_related_components(diff_files):
 def get_langref_desc(keywords, commit):
     langref = str(git_execute(["show", f"{commit}:llvm/docs/LangRef.rst"]))
     desc = dict()
-    sep = ".. _"
+    sep1 = ".. _"
+    sep2 = "\n^^^"
     for keyword in keywords:
         matched = re.search(f"\n'``{keyword}.+\n\\^", langref)
         if matched is None:
             continue
         beg, end = matched.span()
-        beg = langref.rfind(sep, None, beg)
-        end = langref.find(sep, end)
-        desc[keyword] = langref[beg:end]
+        beg = langref.rfind(sep1, None, beg)
+        end1 = langref.find(sep2, end)
+        end2 = langref.rfind(sep1, None, end1)
+        desc[keyword] = langref[beg:end2]
     return desc
 
 
