@@ -29,14 +29,14 @@ url = os.environ.get("LAB_LLM_URL", "https://api.deepseek.com")
 model = os.environ.get("LAB_LLM_MODEL", "deepseek-reasoner")
 basemodel_cutoff = os.environ.get("LAB_LLM_BASEMODEL_CUTOFF", "2023-12-31Z")
 client = OpenAI(api_key=token, base_url=url)
-temperature = 0.0
-max_input_tokens = int(os.environ.get("LAB_LLM_CONTEXT_WINDOW_SIZE", 65536))
+temperature = float(os.environ.get("LAB_LLM_TEMP", "0.8"))
 # Seems not working, sad :(
 enable_tooling = os.environ.get("LAB_LLM_ENABLE_TOOLING", "OFF") == "ON"
 enable_streaming = os.environ.get("LAB_LLM_ENABLE_STREAMING", "OFF") == "ON"
 max_log_size = int(os.environ.get("LAB_LLM_MAX_LOG_SIZE", 1000000000))
 max_sample_count = int(os.environ.get("LAB_LLM_MAX_SAMPLE_COUNT", 4))
 omit_issue_body = os.environ.get("LAB_LLM_OMIT_ISSUE_BODY", "OFF") == "ON"
+max_build_jobs = int(os.environ.get("LAB_MAX_BUILD_JOBS", os.cpu_count()))
 fix_dir = os.environ["LAB_FIX_DIR"]
 os.makedirs(fix_dir, exist_ok=True)
 
@@ -141,7 +141,7 @@ tool_check_refinement_desc = {
 def tool_check_refinement(env, args):
     src = args["src"]
     tgt = args["tgt"]
-    env.use_knowledge(f"alive2", env.knowledge_cutoff)
+    env.use_knowledge("alive2", env.knowledge_cutoff)
     if "ptr" in src and "target datalayout" not in src:
         src = f'target datalayout = "p:8:8:8"\n{src}'
     if "ptr" in tgt and "target datalayout" not in tgt:
@@ -183,10 +183,6 @@ def dispatch_tool_call(env, name, args):
                 return tool[2](env, args)
     except Exception as e:
         return str(e)
-
-
-def estimate_input_tokens(messages):
-    return sum(len(chat["content"]) for chat in messages) * 0.3
 
 
 def append_message(messages, full_messages, message, dump=True):
@@ -286,7 +282,7 @@ def chat_with_streaming(env, messages, full_messages):
         is_answering = False
         for chunk in completion:
             delta = chunk.choices[0].delta
-            if hasattr(delta, "reasoning_content") and delta.reasoning_content != None:
+            if hasattr(delta, "reasoning_content") and delta.reasoning_content is not None:
                 if not is_thinking:
                     print("Thinking:")
                     is_thinking = True
@@ -437,7 +433,7 @@ def fix_issue(issue_id):
         print(f"Skip {issue_id}")
         return
     print(f"Fixing {issue_id}")
-    env = Env(issue_id, basemodel_cutoff)
+    env = Env(issue_id, basemodel_cutoff, max_build_jobs=max_build_jobs)
     bug_funcs = env.get_hint_bug_functions()
     if len(bug_funcs) != 1 or len(next(iter(bug_funcs.values()))) != 1:
         print("Multi-func bug is not supported")
@@ -464,18 +460,19 @@ def fix_issue(issue_id):
     context_requirement = f"Please make sure the answer includes the prefix:\n```cpp\n{prefix}\n```\nand the suffix:\n```cpp\n{suffix}\n```\n"
     desc += format_requirement + context_requirement
     append_message(messages, full_messages, {"role": "user", "content": desc})
-    for idx in range(max_sample_count):
-        print(f"Round {idx + 1}")
-        if estimate_input_tokens(messages) > max_input_tokens:
-            return
-        if issue_fixing_iter(
-            env, file, hunk, messages, full_messages, context_requirement
-        ):
-            cert = env.dump(normalize_messages(full_messages))
-            print(cert)
-            with open(fix_log_path, "w") as f:
-                f.write(json.dumps(cert, indent=2))
-            return
+    try:
+        for idx in range(max_sample_count):
+            print(f"Round {idx + 1}")
+            if issue_fixing_iter(
+                env, file, hunk, messages, full_messages, context_requirement
+            ):
+                cert = env.dump(normalize_messages(full_messages))
+                print(cert)
+                with open(fix_log_path, "w") as f:
+                    f.write(json.dumps(cert, indent=2))
+                return
+    except Exception:
+        pass
     cert = env.dump(normalize_messages(full_messages))
     with open(fix_log_path, "w") as f:
         f.write(json.dumps(cert, indent=2))
