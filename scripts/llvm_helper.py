@@ -19,7 +19,7 @@ import re
 import tempfile
 
 # NOTE: llvm-lit requires psutil
-import psutil
+import psutil  # noqa: F401
 
 llvm_dir = os.environ["LAB_LLVM_DIR"]
 llvm_build_dir = os.environ["LAB_LLVM_BUILD_DIR"]
@@ -190,7 +190,7 @@ def alive2_check(src: str, tgt: str, additional_args: str):
                     src_file.name,
                     tgt_file.name,
                 ]
-                if additional_args != None:
+                if additional_args is not None:
                     args += additional_args.strip().split(" ")
 
                 out = subprocess.check_output(args, stderr=subprocess.STDOUT).decode()
@@ -284,7 +284,7 @@ def verify_dispatch(
                 new_input = copy_triple(input, output)
                 new_input = copy_datalayout(new_input, output)
                 res, log = alive2_check(new_input, output.decode(), additional_args)
-            if repro == True:
+            if repro:
                 res = not res
             if isinstance(log, str):
                 log = decode_output(out.stderr) + "\n" + log
