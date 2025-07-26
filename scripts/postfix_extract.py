@@ -152,6 +152,7 @@ fix_commit_map = {
     "140238": None,  # Cannot reproduce with Alive2
     "140992": None,  # Meta issue
     "142091": None,  # Duplicate of #141968
+    "148431": None,  # Cannot reproduce the crash
 }
 
 if issue_id in fix_commit_map:
