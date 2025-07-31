@@ -142,6 +142,7 @@ fix_commit_map = {
     "137164": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
     "138178": None,  # Cannot reproduce the crash as it requires llvm to build with hardened libc++
     "138194": None,  # LTO bug
+    "138509": None,  # exponential time consumption
     "138819": None,  # Alive2 timeout
     "138923": None,  # Invalid reproducer
     "139065": None,  # Duplicate of #139060
@@ -152,6 +153,7 @@ fix_commit_map = {
     "140238": None,  # Cannot reproduce with Alive2
     "140992": None,  # Meta issue
     "142091": None,  # Duplicate of #141968
+    "148228": None,  # Alive2 cannot unroll nested loops
     "148431": None,  # Cannot reproduce the crash
 }
 
