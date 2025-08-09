@@ -155,6 +155,10 @@ fix_commit_map = {
     "142091": None,  # Duplicate of #141968
     "148228": None,  # Alive2 cannot unroll nested loops
     "148431": None,  # Cannot reproduce the crash
+    "149347": None,  # Reverted
+    "149679": None,  # Duplicate of #147869
+    "151456": None,  # Cannot reproduce the crash
+    "152683": None,  # Cannot reproduce the crash
 }
 
 if issue_id in fix_commit_map:
