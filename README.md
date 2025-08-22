@@ -113,7 +113,14 @@ Take [Issue121459](https://github.com/llvm/llvm-project/issues/121459) as an exa
     ],
     "comments": []
   },
-  "verified": true
+  "verified": true,
+  // You are allowed to choose a subset of issues to fix.
+  // Althrough these properties are obtained from the golden patch,
+  // using properties is not treated as using hints.
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  }
 }
 ```
 
@@ -295,6 +302,9 @@ issue = env.get_hint_issue()
 # It is useful for LLMs to understand new flags/attributes/metadata.
 keywords = env.get_ir_keywords(llvm_ir)
 desc = env.get_langref_desc(keywords)
+# Properties
+is_single_func_fix = env.is_single_func_fix()
+is_single_file_fix = env.is_single_file_fix()
 ```
 
 Here is a simple repair loop:

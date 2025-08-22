@@ -213,3 +213,13 @@ class Environment:
     def get_langref_desc(self, keywords):
         self.use_knowledge("llvm/docs/LangRef.rst", self.knowledge_cutoff)
         return llvm_helper.get_langref_desc(keywords, self.base_commit)
+
+    # NOTE: It is not a hint.
+    def is_single_func_fix(self):
+        self.use_knowledge("is_single_func_fix", self.knowledge_cutoff)
+        return self.data.get("properties").get("is_single_func_fix")
+
+    # NOTE: It is not a hint.
+    def is_single_file_fix(self):
+        self.use_knowledge("is_single_file_fix", self.knowledge_cutoff)
+        return self.data.get("properties").get("is_single_file_fix")

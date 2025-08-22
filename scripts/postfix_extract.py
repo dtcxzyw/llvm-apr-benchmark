@@ -354,6 +354,12 @@ normalized_issue = {
     "comments": issue_comments,
 }
 
+bug_func_count = 0
+for item in bug_location_funcname.values():
+    bug_func_count += len(item)
+is_single_file_fix = len(bug_location_funcname) == 1
+is_single_func_fix = is_single_file_fix and bug_func_count == 1
+
 # Write to file
 metadata = {
     "bug_id": issue_id,
@@ -371,6 +377,10 @@ metadata = {
     "patch": patch,
     "tests": tests,
     "issue": normalized_issue,
+    "properties": {
+        "is_single_file_fix": is_single_file_fix,
+        "is_single_func_fix": is_single_func_fix,
+    },
 }
 print(json.dumps(metadata, indent=2))
 with open(data_json_path, "w") as f:

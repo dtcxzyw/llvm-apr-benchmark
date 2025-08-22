@@ -61,6 +61,15 @@ def verify_issue(issue):
     # Migration
     if "files" in data["hints"]:
         data["hints"].pop("files")
+    bug_func_count = 0
+    for item in bug_location_funcname.values():
+        bug_func_count += len(item)
+    is_single_file_fix = len(bug_location_funcname) == 1
+    is_single_func_fix = is_single_file_fix and bug_func_count == 1
+    data["properties"] = {
+        "is_single_file_fix": is_single_file_fix,
+        "is_single_func_fix": is_single_func_fix,
+    }
 
     if not llvm_helper.is_valid_fix(fix_commit):
         print(f"{issue} Warning: fix_commit is invalid")
