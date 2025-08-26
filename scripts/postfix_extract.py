@@ -160,6 +160,7 @@ fix_commit_map = {
     "151456": None,  # Cannot reproduce the crash
     "152683": None,  # Cannot reproduce the crash
     "153754": None,  # Duplicate of #153676
+    "155162": None,  # Missing reproducer
 }
 
 if issue_id in fix_commit_map:
