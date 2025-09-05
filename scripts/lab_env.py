@@ -74,7 +74,9 @@ class Environment:
             self.max_test_jobs = max_build_jobs
         else:
             self.max_test_jobs = max_test_jobs
-        self.additional_cmake_args = additional_cmake_args
+        self.additional_cmake_args = additional_cmake_args + self.data.get(
+            "additional_cmake_args", []
+        )
         self.start_time = time.time()
 
     def use_knowledge(self, url: str, date: Union[str, datetime.datetime]):

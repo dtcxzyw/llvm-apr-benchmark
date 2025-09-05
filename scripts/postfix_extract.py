@@ -117,6 +117,7 @@ fix_commit_map = {
     "122467": None,  # Invalid reproducer
     "122537": None,  # Clang codegen issue
     "122602": None,  # Duplicate of #122496
+    "123189": None,  # MC bug
     "123920": None,  # Cannot reproduce with alive2
     "124213": None,  # Multi-commit fix
     "124578": None,  # OpenMP support bug
@@ -156,10 +157,12 @@ fix_commit_map = {
     "148228": None,  # Alive2 cannot unroll nested loops
     "148431": None,  # Cannot reproduce the crash
     "149347": None,  # Reverted
+    "149377": None,  # Cannot reproduce the crash (even with expensive checks on)
     "149679": None,  # Duplicate of #147869
     "151456": None,  # Cannot reproduce the crash
     "152683": None,  # Cannot reproduce the crash
     "153754": None,  # Duplicate of #153676
+    "153946": None,  # Unsupported intrinsic llvm.experimental.cttz.elts
     "155162": None,  # Missing reproducer
 }
 
