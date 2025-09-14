@@ -1,0 +1,68 @@
+{
+  "bug_id": "157332",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/157332",
+  "bug_type": "crash",
+  "base_commit": "c71318a9bf168d30bf3ccd59eaa826e93b283d4b",
+  "knowledge_cutoff": "2025-09-07T08:45:43Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/GlobalOpt"
+  ],
+  "hints": {
+    "fix_commit": "cc052667b4b2f3bed12db68da876626e14f231f8",
+    "components": [
+      "GlobalOpt"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/IPO/GlobalOpt.cpp": [
+        [
+          2551,
+          2557
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/IPO/GlobalOpt.cpp": [
+        "OptimizeNonTrivialIFuncs"
+      ]
+    }
+  },
+  "patch": "commit cc052667b4b2f3bed12db68da876626e14f231f8\nAuthor: Justin Riddell <arghnews@hotmail.co.uk>\nDate:   Wed Sep 10 03:32:52 2025 +0100\n\n    [GlobalOpt] Fix unreachable ifunc globalopt crash (#157332) (#157593)\n    \n    Also fixes (#131488)\n    \n    Unreachable case is triggering `Callees.empty()` assert. Since this was\n    [originally\n    ](https://github.com/llvm/llvm-project/pull/87939/commits/02bd5a7013c558f1e5220fc89bafa68f40276549#diff-06aba0dac2a263dc14297a15655291d5506b760f54a736385bcf3208f83df843R2524)\n    a `continue` anyway, have applied that as a fix and added a test case.\n    Please let me know if there's a better way.\n    \n    Not sure who/how to get folks to review, tagging a few people (apologies\n    if you're not the right person/this is the wrong way to do it, please\n    let me know what to do in future if so)\n    \n    @labrinea @dtcxzyw @nikic @fhahn\n\ndiff --git a/llvm/lib/Transforms/IPO/GlobalOpt.cpp b/llvm/lib/Transforms/IPO/GlobalOpt.cpp\nindex d7edd1288309..f88d51f443bc 100644\n--- a/llvm/lib/Transforms/IPO/GlobalOpt.cpp\n+++ b/llvm/lib/Transforms/IPO/GlobalOpt.cpp\n@@ -2551,7 +2551,8 @@ static bool OptimizeNonTrivialIFuncs(\n         }))\n       continue;\n \n-    assert(!Callees.empty() && \"Expecting successful collection of versions\");\n+    if (Callees.empty())\n+      continue;\n \n     LLVM_DEBUG(dbgs() << \"Statically resolving calls to function \"\n                       << Resolver->getName() << \"\\n\");\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/GlobalOpt/resolve-indirect-ifunc.ll",
+      "commands": [
+        "opt --passes=globalopt -o - -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine ptr @f1() {\n;\n  unreachable\n}\n\n@i1 = ifunc void(), ptr @f1"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[GlobalOpt] Assertion `!Callees.empty() && \"Expecting successful collection of versions\"' failed.",
+    "body": "Reproducer:\nhttps://godbolt.org/z/x4Yd38Eav\n\nBacktrace:\n```console\nopt: /root/llvm-project/llvm/lib/Transforms/IPO/GlobalOpt.cpp:2554: bool OptimizeNonTrivialIFuncs(llvm::Module&, llvm::function_ref<llvm::TargetTransformInfo&(llvm::Function&)>): Assertion `!Callees.empty() && \"Expecting successful collection of versions\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=globalopt <source>\n1.\tRunning pass \"globalopt\" on module \"<source>\"\n #0 0x00000000057a24d8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57a24d8)\n #1 0x000000000579f384 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007d453c842520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007d453c8969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007d453c842476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007d453c8287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007d453c82871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007d453c839e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x00000000030ac2e4 OptimizeNonTrivialIFuncs(llvm::Module&, llvm::function_ref<llvm::TargetTransformInfo& (llvm::Function&)>) (.constprop.0) GlobalOpt.cpp:0:0\n #9 0x00000000030b376c optimizeGlobalsInModule(llvm::Module&, llvm::DataLayout const&, llvm::function_ref<llvm::TargetLibraryInfo& (llvm::Function&)>, llvm::function_ref<llvm::TargetTransformInfo& (llvm::Function&)>, llvm::function_ref<llvm::BlockFrequencyInfo& (llvm::Function&)>, llvm::function_ref<llvm::DominatorTree& (llvm::Function&)>, llvm::function_ref<void (llvm::Function&)>, llvm::function_ref<void (llvm::Function&)>) (.constprop.0) GlobalOpt.cpp:0:0\n#10 0x00000000030b480f llvm::GlobalOptPass::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x30b480f)\n#11 0x0000000002e2aaee llvm::detail::PassModel<llvm::Module, llvm::GlobalOptPass, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x2e2aaee)\n#12 0x000000000558c2f1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x558c2f1)\n#13 0x00000000009776b8 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9776b8)\n#14 0x000000000096b727 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96b727)\n#15 0x00007d453c829d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#16 0x00007d453c829e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#17 0x0000000000962845 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x962845)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "k-arrows",
+    "labels": [
+      "ipo",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "k-arrows",
+        "body": "Reduced and modified from the following:\nhttps://github.com/llvm/llvm-project/blob/main/llvm/test/CodeGen/X86/partition.ll"
+      },
+      {
+        "author": "k-arrows",
+        "body": "The program written in C that hits the same assertion failure is listed in the following issue:\nhttps://github.com/llvm/llvm-project/issues/131488"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

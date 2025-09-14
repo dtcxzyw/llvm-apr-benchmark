@@ -45,10 +45,11 @@ if not override and os.path.exists(data_json_path):
     print(f"Item {issue_id}.json already exists")
     exit(0)
 
+force = override
 issue_url = f"https://api.github.com/repos/llvm/llvm-project/issues/{issue_id}"
 print(f"Fetching {issue_url}")
 issue = session.get(issue_url).json()
-if issue["state"] != "closed" or issue["state_reason"] != "completed":
+if (issue["state"] != "closed" or issue["state_reason"] != "completed") and not force:
     print("The issue/PR should be closed")
     exit(1)
 
@@ -184,8 +185,13 @@ else:
                 fix_commit = commit
 
 if fix_commit is None:
-    print("Cannot find the fix commit")
-    exit(0)
+    if force:
+        fix_commit = llvm_helper.git_execute(
+            ["rev-parse", "origin/main"]
+        ).strip()
+    else:
+        print("Cannot find the fix commit")
+        exit(0)
 
 issue_type = "unknown"
 for label in issue["labels"]:
