@@ -55,6 +55,7 @@ def bisect_issue(issue):
     out = subprocess.check_output(
         ["git", "-C", llvm_helper.llvm_dir, "bisect", "run", bisect_runner_file, path],
         cwd=llvm_helper.llvm_dir,
+        timeout=600.0,
     ).decode()
     if not out.endswith("bisect found first bad commit\n"):
         return
