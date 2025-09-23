@@ -26,6 +26,22 @@ bisect_runner_file = os.path.join(
 )
 
 
+def is_llvm_functional_change(commit: str) -> bool:
+    commit = commit.strip()
+    changed_files = llvm_helper.git_execute(
+        [
+            "show",
+            "--name-only",
+            "--format=",
+            commit,
+            "--",
+            "llvm/lib/*",
+            "llvm/include/*",
+        ]
+    ).strip()
+    return changed_files != ""
+
+
 def bisect_issue(issue):
     path = os.path.join(llvm_helper.dataset_dir, issue)
     with open(path) as f:
@@ -33,41 +49,75 @@ def bisect_issue(issue):
     if "bisect" in data:
         return
     print(data["issue"]["title"])
-    base_commit = data["base_commit"]  # bad
-    good_commit = None
-    offset = 100
-    while offset <= 204800:  # ~5 years
-        commit_sha = llvm_helper.git_execute(
-            ["rev-parse", f"{base_commit}~{offset}"]
-        ).strip()
-        if bisect_runner.test(commit_sha, path) == 0:
-            good_commit = commit_sha
-            break
-        offset = int(offset * 1.6)
-    if good_commit is None:
-        print("Cannot find a good commit")
+    try:
+        base_commit = data["base_commit"]  # bad
+        good_commit = None
+        offset = 100
+        while offset <= 204800:  # ~5 years
+            commit_sha = llvm_helper.git_execute(
+                ["rev-parse", f"{base_commit}~{offset}"]
+            ).strip()
+            if bisect_runner.test(commit_sha, path) == 0:
+                good_commit = commit_sha
+                break
+            offset = int(offset * 1.6)
+        if good_commit is None:
+            raise RuntimeError("Cannot find a good commit")
+        print("BAD", base_commit, "GOOD", good_commit)
+        llvm_helper.git_execute(["bisect", "reset"])
+        llvm_helper.git_execute(
+            ["bisect", "start", "--no-checkout", base_commit, good_commit]
+        )
+        out = subprocess.check_output(
+            [
+                "git",
+                "-C",
+                llvm_helper.llvm_dir,
+                "bisect",
+                "run",
+                bisect_runner_file,
+                path,
+            ],
+            cwd=llvm_helper.llvm_dir,
+            timeout=600.0,
+        ).decode()
+        if not out.endswith("bisect found first bad commit\n"):
+            raise RuntimeError("Bisect failed: " + out)
+        pos = out.rfind(" is the first bad commit\n")
+        if pos == -1:
+            raise RuntimeError("Bisect failed")
+        pos2 = out.rfind("\n", 0, pos)
+        if pos2 == -1:
+            raise RuntimeError("Bisect failed")
+        first_bad = out[pos2 + 1 : pos].strip()
+        print(first_bad)
+        data["bisect"] = first_bad
+    except subprocess.TimeoutExpired:
+        data["bisect"] = "N/A"
+        print("Timeout")
+    except subprocess.CalledProcessError as e:
+        out = e.stdout.decode()
+        key = "The first bad commit could be any of:\n"
+        pos = out.rfind(key)
+        if pos == -1:
+            return
+        pos2 = out.find("We cannot bisect more!", pos)
+        if pos2 == -1:
+            return
+        candidates = out[pos + len(key) : pos2].strip().splitlines()
+        if len(candidates) > 1:
+            candidates = list(filter(is_llvm_functional_change, candidates))
+        # TODO: filter by pass name (not component name!)
+        if len(candidates) == 0:
+            data["bisect"] = "N/A"
+        elif len(candidates) == 1:
+            first_bad = candidates[0].strip()
+            print(first_bad)
+            data["bisect"] = first_bad
+    except Exception as e:
+        # data["bisect"] = "N/A"
+        print(e)
         return
-    print("BAD", base_commit, "GOOD", good_commit)
-    llvm_helper.git_execute(["bisect", "reset"])
-    llvm_helper.git_execute(
-        ["bisect", "start", "--no-checkout", base_commit, good_commit]
-    )
-    out = subprocess.check_output(
-        ["git", "-C", llvm_helper.llvm_dir, "bisect", "run", bisect_runner_file, path],
-        cwd=llvm_helper.llvm_dir,
-        timeout=600.0,
-    ).decode()
-    if not out.endswith("bisect found first bad commit\n"):
-        return
-    pos = out.rfind(" is the first bad commit\n")
-    if pos == -1:
-        return
-    pos2 = out.rfind("\n", 0, pos)
-    if pos2 == -1:
-        return
-    first_bad = out[pos2 + 1 : pos].strip()
-    print(first_bad)
-    data["bisect"] = first_bad
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 

@@ -101,5 +101,6 @@
   "properties": {
     "is_single_file_fix": false,
     "is_single_func_fix": false
-  }
+  },
+  "bisect": "2a46e5d03985620cbc55ed9839a263dc9646c240"
 }
