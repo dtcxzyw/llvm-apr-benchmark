@@ -61,5 +61,6 @@
     "is_single_file_fix": true,
     "is_single_func_fix": true
   },
-  "verified": true
+  "verified": true,
+  "bisect": "6bd844812385dd5cb65e08fe9561be9f91ace876"
 }

@@ -74,5 +74,6 @@
   "properties": {
     "is_single_file_fix": true,
     "is_single_func_fix": true
-  }
+  },
+  "bisect": "f48884ded884d982a7fd13394b0e93e6588f4143"
 }

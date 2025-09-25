@@ -65,5 +65,6 @@
   "properties": {
     "is_single_file_fix": true,
     "is_single_func_fix": true
-  }
+  },
+  "bisect": "5d12274646ee9bad8e9f59d7d2de44706aa58145"
 }
