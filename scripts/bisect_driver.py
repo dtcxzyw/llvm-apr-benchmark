@@ -20,6 +20,7 @@ import llvm_helper
 import json
 import bisect_runner
 import subprocess
+import signal
 
 bisect_runner_file = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "bisect_runner.py"
@@ -68,7 +69,7 @@ def bisect_issue(issue):
         llvm_helper.git_execute(
             ["bisect", "start", "--no-checkout", base_commit, good_commit]
         )
-        out = subprocess.check_output(
+        p = subprocess.Popen(
             [
                 "git",
                 "-C",
@@ -79,8 +80,11 @@ def bisect_issue(issue):
                 path,
             ],
             cwd=llvm_helper.llvm_dir,
-            timeout=600.0,
-        ).decode()
+            start_new_session=True,
+            stdout=subprocess.PIPE,
+        )
+        out, _ = p.communicate(timeout=600)
+        out = out.decode(errors="ignore")
         if not out.endswith("bisect found first bad commit\n"):
             raise RuntimeError("Bisect failed: " + out)
         pos = out.rfind(" is the first bad commit\n")
@@ -93,6 +97,11 @@ def bisect_issue(issue):
         print(first_bad)
         data["bisect"] = first_bad
     except subprocess.TimeoutExpired:
+        try:
+            pgid = os.getpgid(p.pid)
+            os.killpg(pgid, signal.SIGKILL)
+        except Exception:
+            pass
         data["bisect"] = "N/A"
         print("Timeout")
     except subprocess.CalledProcessError as e:
@@ -115,9 +124,8 @@ def bisect_issue(issue):
             print(first_bad)
             data["bisect"] = first_bad
     except Exception as e:
-        # data["bisect"] = "N/A"
+        data["bisect"] = "N/A"
         print(e)
-        return
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
 
