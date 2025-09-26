@@ -113,5 +113,5 @@
     "is_single_file_fix": true,
     "is_single_func_fix": false
   },
-  "bisect": "N/A"
+  "bisect": "b1822ef311b79d409be6f60ce86fccd967d623bc"
 }

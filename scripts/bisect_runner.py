@@ -19,7 +19,7 @@ import sys
 import json
 import subprocess
 import llvm_helper
-import resource
+# import resource
 
 GOOD = 0
 BAD = 1
@@ -38,8 +38,8 @@ def test(commit_sha: str, issue_path: str) -> int:
     bin_dir = os.path.join(llvm_helper.llvm_build_dir, "bin")
     os.makedirs(bin_dir, exist_ok=True)
     bug_type = data["bug_type"]
-    _, hard = resource.getrlimit(resource.RLIMIT_AS)
-    resource.setrlimit(resource.RLIMIT_AS, (min(hard, 8 * 1024**3), hard))
+    # _, hard = resource.getrlimit(resource.RLIMIT_AS)
+    # resource.setrlimit(resource.RLIMIT_AS, (min(hard, 8 * 1024**3), hard))
     try:
         for binary in required_binaries:
             target_file = os.path.join(bin_dir, binary)
@@ -71,5 +71,5 @@ def test(commit_sha: str, issue_path: str) -> int:
 
 if __name__ == "__main__":
     issue_path = sys.argv[1]
-    commit_sha = llvm_helper.git_execute(["rev-parse", "BISECT_HEAD"]).strip()
+    commit_sha = sys.argv[2] if len(sys.argv) == 3 else llvm_helper.git_execute(["rev-parse", "BISECT_HEAD"]).strip()
     exit(test(commit_sha, issue_path))

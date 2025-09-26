@@ -57,5 +57,5 @@
     "is_single_func_fix": true
   },
   "verified": true,
-  "bisect": "N/A"
+  "bisect": "Cannot find a good commit"
 }

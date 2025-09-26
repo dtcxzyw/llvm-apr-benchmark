@@ -18,7 +18,6 @@ import os
 import sys
 import llvm_helper
 import json
-import bisect_runner
 import subprocess
 
 bisect_runner_file = os.path.join(
@@ -46,6 +45,9 @@ def bisect_issue(issue):
     path = os.path.join(llvm_helper.dataset_dir, issue)
     with open(path) as f:
         data = json.load(f)
+    if data["bug_type"] == "hang":
+        # Not supported yet
+        return
     if "bisect" in data and data["bisect"] != "N/A":
         return
     print(data["issue"]["title"])
@@ -57,7 +59,7 @@ def bisect_issue(issue):
             commit_sha = llvm_helper.git_execute(
                 ["rev-parse", f"{base_commit}~{offset}"]
             ).strip()
-            if bisect_runner.test(commit_sha, path) == 0:
+            if subprocess.run([bisect_runner_file, path, commit_sha]).returncode == 0:
                 good_commit = commit_sha
                 break
             offset = int(offset * 1.6)
@@ -93,7 +95,7 @@ def bisect_issue(issue):
         print(first_bad)
         data["bisect"] = first_bad
     except subprocess.TimeoutExpired:
-        data["bisect"] = "N/A"
+        data["bisect"] = "Timeout"
         print("Timeout")
     except subprocess.CalledProcessError as e:
         out = e.stdout.decode()
@@ -109,13 +111,13 @@ def bisect_issue(issue):
             candidates = list(filter(is_llvm_functional_change, candidates))
         # TODO: filter by pass name (not component name!)
         if len(candidates) == 0:
-            data["bisect"] = "N/A"
+            data["bisect"] = "Unrelated"
         elif len(candidates) == 1:
             first_bad = candidates[0].strip()
             print(first_bad)
             data["bisect"] = first_bad
     except Exception as e:
-        data["bisect"] = "N/A"
+        data["bisect"] = str(e)
         print(e)
     with open(path, "w") as f:
         json.dump(data, f, indent=2)
@@ -128,7 +130,7 @@ else:
     for name in os.listdir(llvm_helper.dataset_dir):
         if name.endswith(".json"):
             task_list.append(name)
-task_list.sort()
+task_list.sort(reverse=True)
 
 for idx, task in enumerate(task_list):
     print("Bisecting", idx + 1, task.removesuffix(".json"))
