@@ -295,6 +295,9 @@ components = env.get_hint_components()
 files = env.get_hint_files()
 functions = env.get_hint_bug_functions()
 linenos = env.get_hint_line_level_bug_locations()
+# Bisection result (optional)
+# It is collected in a best-effort way and not always precise.
+bisect_commit = env.get_bisect_commit()
 # Issue description (optional)
 issue = env.get_hint_issue()
 # Collect instructions and intrinsics from the given LLVM IR.

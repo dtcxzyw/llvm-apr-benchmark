@@ -19,7 +19,8 @@ import dateparser
 import time
 import datetime
 import re
-from typing import Tuple, Sequence, Union
+import subprocess
+from typing import Tuple, Sequence, Union, Optional
 
 
 class TimeCompensationGuard:
@@ -225,3 +226,19 @@ class Environment:
     def is_single_file_fix(self):
         self.use_knowledge("is_single_file_fix", self.knowledge_cutoff)
         return self.data.get("properties").get("is_single_file_fix")
+
+    # NOTE: It is not a hint.
+    def get_bisect_commit(self) -> Optional[str]:
+        bisect_commit = self.data.get("bisect")
+        if not bisect_commit:
+            return None
+        run = subprocess.run(
+            ["git", "-C", llvm_helper.llvm_dir, "rev-parse", bisect_commit],
+            capture_output=True,
+        )
+        if run.returncode != 0:
+            return None
+        if run.stdout.decode().strip() != bisect_commit:
+            return None
+        self.use_knowledge("bisect", self.knowledge_cutoff)
+        return bisect_commit
