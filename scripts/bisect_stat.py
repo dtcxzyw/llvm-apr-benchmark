@@ -22,6 +22,7 @@ from datetime import timezone
 import math
 from unidiff import PatchSet
 import string
+import matplotlib.pyplot as plt
 
 total = 0
 available_count = 0
@@ -131,3 +132,22 @@ print(
 )
 print(f"Bisection precision (file level): {related_count_file_level}/{available_count} ({related_count_file_level/available_count*100:.2f}%)")
 print(f"Bisection precision (line level): {related_count_line_level}/{available_count} ({related_count_line_level/available_count*100:.2f}%)")
+
+fig = plt.figure(figsize=(9, 4), layout="constrained")
+axs = fig.subplots(1, 3)
+data_lists = {
+    "Report to fix": report_to_fix_record,
+    "Bug to fix": bug_to_fix_record,
+    "Bug to report": bug_to_report_record,
+}
+for ax, (title, data) in zip(axs, data_lists.items()):
+    ax2 = ax.twinx()
+    ax.hist(data, bins=30)
+    ax2.ecdf(data, color="orange")
+    ax.set_title(title)
+    ax.set_ylabel("Count")
+    ax2.set_ylabel("Probability of occurrence")
+    ax.set_xlabel("Duration (day)")
+    ax.grid(True)
+fig.savefig("work/bisect_stat.png", dpi=300)
+plt.close(fig)
