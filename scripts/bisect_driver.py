@@ -19,6 +19,8 @@ import sys
 import llvm_helper
 import json
 import subprocess
+import dateparser
+from datetime import timezone
 
 bisect_runner_file = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "bisect_runner.py"
@@ -53,6 +55,41 @@ def bisect_issue(issue):
     print(data["issue"]["title"])
     try:
         base_commit = data["base_commit"]  # bad
+        base_commit_time = dateparser.parse(
+            llvm_helper.git_execute(["show", "-s", "--format=%ci", base_commit]).strip()
+        ).astimezone(timezone.utc)
+        report_time = dateparser.parse(data["knowledge_cutoff"]).astimezone(
+            timezone.utc
+        )
+        print("Report time:", report_time)
+        print("Base commit time:", base_commit_time)
+        if report_time < base_commit_time:
+            commit_before_report = llvm_helper.git_execute(
+                [
+                    "log",
+                    "--before",
+                    report_time.isoformat(),
+                    "--oneline",
+                    "-n",
+                    "1",
+                    "--no-abbrev",
+                    "--format=%H",
+                ]
+            ).strip()
+            if (
+                base_commit != commit_before_report
+                and subprocess.run(
+                    [bisect_runner_file, path, commit_before_report]
+                ).returncode
+                == 1
+            ):
+                base_commit = commit_before_report
+                print("Adjusted base commit to", base_commit)
+            else:
+                print("Use original base commit (unavailable)")
+        else:
+            print("Use original base commit (newer)")
+
         good_commit = None
         offset = 100
         while offset <= 204800:  # ~5 years
