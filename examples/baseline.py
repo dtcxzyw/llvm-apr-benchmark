@@ -17,6 +17,8 @@ import sys
 import os
 import json
 import re
+import string
+from unidiff import PatchSet
 
 sys.path.append(os.path.join(os.path.dirname(os.environ["LAB_DATASET_DIR"]), "scripts"))
 import llvm_helper
@@ -35,7 +37,8 @@ enable_tooling = os.environ.get("LAB_LLM_ENABLE_TOOLING", "OFF") == "ON"
 enable_streaming = os.environ.get("LAB_LLM_ENABLE_STREAMING", "OFF") == "ON"
 max_log_size = int(os.environ.get("LAB_LLM_MAX_LOG_SIZE", 1000000000))
 max_sample_count = int(os.environ.get("LAB_LLM_MAX_SAMPLE_COUNT", 4))
-omit_issue_body = os.environ.get("LAB_LLM_OMIT_ISSUE_BODY", "OFF") == "ON"
+omit_issue_body = os.environ.get("LAB_LLM_OMIT_ISSUE_BODY", "ON") == "ON"
+use_bisection = os.environ.get("LAB_USE_BISECTION", "ON") == "ON"
 max_build_jobs = int(os.environ.get("LAB_MAX_BUILD_JOBS", os.cpu_count()))
 fix_dir = os.environ["LAB_FIX_DIR"]
 os.makedirs(fix_dir, exist_ok=True)
@@ -282,7 +285,10 @@ def chat_with_streaming(env, messages, full_messages):
         is_answering = False
         for chunk in completion:
             delta = chunk.choices[0].delta
-            if hasattr(delta, "reasoning_content") and delta.reasoning_content is not None:
+            if (
+                hasattr(delta, "reasoning_content")
+                and delta.reasoning_content is not None
+            ):
                 if not is_thinking:
                     print("Thinking:")
                     is_thinking = True
@@ -435,7 +441,7 @@ def fix_issue(issue_id):
     print(f"Fixing {issue_id}")
     env = Env(issue_id, basemodel_cutoff, max_build_jobs=max_build_jobs)
     bug_funcs = env.get_hint_bug_functions()
-    if len(bug_funcs) != 1 or len(next(iter(bug_funcs.values()))) != 1:
+    if not env.is_single_func_fix():
         print("Multi-func bug is not supported")
         return
     messages = []
@@ -477,6 +483,133 @@ def fix_issue(issue_id):
     with open(fix_log_path, "w") as f:
         f.write(json.dumps(cert, indent=2))
 
+def canonicalize_line(line: str) -> str:
+    special_chars = set(string.punctuation + string.whitespace)
+    canonicalized = line.strip()
+    canonicalized = "".join(
+        [" " if c in special_chars else c for c in canonicalized]
+    )
+    return canonicalized
+
+def get_hunk_from_patch(base_commit: str, patch: str):
+    patch_set = PatchSet(patch)
+    valid_file = None
+    for file in patch_set:
+        if not file.is_modified_file:
+            continue
+        if valid_file is None:
+            valid_file = file
+        else:
+            raise Exception("Multiple modified files in the patch")
+    if valid_file is None:
+        raise Exception("No modified file in the patch")
+    file_path = valid_file.path
+    lines = dict()
+    llvm_helper.git_execute(["checkout", base_commit, "--", file_path])
+    with open(os.path.join(llvm_helper.llvm_dir, file_path)) as f:
+        source_lines = f.readlines()
+        for lineno, line in enumerate(source_lines):
+            canonicalized = canonicalize_line(line)
+            if canonicalized in lines:
+                lines[canonicalized].append(lineno)
+            else:
+                lines[canonicalized] = [lineno]
+
+    min_pos = 1e9
+    max_pos = 0
+    mapping_hint = []
+    for hunk in valid_file:
+        for line in hunk:
+            if line.is_removed:
+                continue
+            pos = line.target_line_no
+            min_pos = min(min_pos, pos)
+            max_pos = max(max_pos, pos)
+            content = canonicalize_line(line.value)
+            if content in lines and len(lines[content]) == 1:
+                source_pos = lines[content][0]
+                mapping_hint.append((pos, source_pos))
+    if min_pos > max_pos:
+        raise Exception("No valid change")
+    if len(mapping_hint) == 0:
+        raise Exception("No valid line mapping found")
+    start_pos = 1e9
+    end_pos = 0
+    for src_pos, tgt_pos in mapping_hint:
+        start = tgt_pos - (src_pos - min_pos)
+        end = tgt_pos + (max_pos - src_pos)
+        start_pos = min(start_pos, start)
+        end_pos = max(end_pos, end)
+    if start_pos > end_pos:
+        raise Exception("Invalid line mapping")
+    if end_pos - start_pos > 100:
+        raise Exception("The hunk is too large")
+    margin = 30
+    start_pos = max(start_pos - margin, 0)
+    end_pos = min(end_pos + margin, len(source_lines) - 1)
+    hunk_lines = "".join(source_lines[start_pos : end_pos + 1])
+    return file_path, hunk_lines
+
+
+def fix_issue_without_hint(issue_id):
+    fix_log_path = os.path.join(fix_dir, f"{issue_id}.json")
+    if not override and os.path.exists(fix_log_path):
+        print(f"Skip {issue_id}")
+        return
+    print(f"Fixing {issue_id}")
+    env = Env(issue_id, basemodel_cutoff, max_build_jobs=max_build_jobs)
+    bisect_commit = env.get_bisect_commit()
+    if bisect_commit is None:
+        print("Bisection info is unavailable")
+        return
+    if not env.is_single_func_fix():
+        print("Multi-func bug is not supported")
+        return
+    buggy_patch = llvm_helper.git_execute(
+        ["show", bisect_commit, "--", "llvm/lib/*", "llvm/include/*"]
+    )
+    try:
+        file, hunk = get_hunk_from_patch(env.get_base_commit(), buggy_patch)
+    except Exception as e:
+        print(e)
+        return
+    env.reset()
+    messages = []
+    full_messages = []  # Log with COT tokens
+    append_message(
+        messages, full_messages, {"role": "system", "content": get_system_prompt()}
+    )
+    bug_type = env.get_bug_type()
+    desc = f"This is a {bug_type} bug.\n"
+    desc += "The bisection result shows that the bug is introduced in the following commit:\n"
+    desc += buggy_patch + "\n"
+    res, log = env.check_fast()
+    assert not res
+    desc += "Detailed information:\n"
+    desc += normalize_feedback(log) + "\n"
+    desc += f"Please modify the following code in {file} to fix the bug:\n```cpp\n{hunk}\n```\n"
+    prefix = "\n".join(hunk.splitlines()[:5])
+    suffix = "\n".join(hunk.splitlines()[-5:])
+    context_requirement = f"Please make sure the answer includes the prefix:\n```cpp\n{prefix}\n```\nand the suffix:\n```cpp\n{suffix}\n```\n"
+    desc += format_requirement + context_requirement
+    append_message(messages, full_messages, {"role": "user", "content": desc})
+    try:
+        for idx in range(max_sample_count):
+            print(f"Round {idx + 1}")
+            if issue_fixing_iter(
+                env, file, hunk, messages, full_messages, context_requirement
+            ):
+                cert = env.dump(normalize_messages(full_messages))
+                print(cert)
+                with open(fix_log_path, "w") as f:
+                    f.write(json.dumps(cert, indent=2))
+                return
+    except Exception:
+        pass
+    cert = env.dump(normalize_messages(full_messages))
+    with open(fix_log_path, "w") as f:
+        f.write(json.dumps(cert, indent=2))
+
 
 if len(sys.argv) == 1:
     task_list = sorted(
@@ -489,7 +622,10 @@ else:
 
 for task in task_list:
     try:
-        fix_issue(task)
+        if use_bisection:
+            fix_issue_without_hint(task)
+        else:
+            fix_issue(task)
     except Exception as e:
         print(e)
         exit(-1)
