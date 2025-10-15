@@ -34,6 +34,7 @@ temperature = float(os.environ.get("LAB_LLM_TEMP", "0.8"))
 max_log_size = int(os.environ.get("LAB_LLM_MAX_LOG_SIZE", 1000000000))
 max_chat_round = int(os.environ.get("LAB_LLM_MAX_CHAT_ROUND", 500))
 max_test_count = int(os.environ.get("LAB_LLM_MAX_TEST_COUNT", 4))
+max_other_tools_count = int(os.environ.get("LAB_LLM_MAX_OTHER_TOOLS_COUNT", 100))
 max_tokens = int(os.environ.get("LAB_LLM_MAX_TOKENS", 5_000_000))
 use_bisection = os.environ.get("LAB_USE_BISECTION", "ON") == "ON"
 max_build_jobs = int(os.environ.get("LAB_MAX_BUILD_JOBS", os.cpu_count()))
@@ -62,7 +63,7 @@ def chat(messages, full_messages, chat_stats):
             stream=True,
             response_format={"type": "json_object"},
             stream_options={"include_usage": True},
-            max_tokens=4000
+            max_tokens=4000,
         )
         is_thinking = False
         is_answering = False
@@ -285,7 +286,11 @@ def issue_fixing_iter(env: Env, file, messages, full_messages, chat_stats):
     file_full_path = os.path.join(llvm_helper.llvm_dir, file)
     try:
         action = json.loads(tgt)
-        if action["action"] == "read":
+        action_name = action["action"]
+        chat_stats[action_name + "_count"] = (
+            chat_stats.get(action_name + "_count", 0) + 1
+        )
+        if action_name == "read":
             start = int(action["start"])
             end = int(action["end"])
             if end - start + 1 > 250:
@@ -302,7 +307,7 @@ def issue_fixing_iter(env: Env, file, messages, full_messages, chat_stats):
                     full_messages,
                     {"role": "user", "content": snippet},
                 )
-        elif action["action"] == "edit":
+        elif action_name == "edit":
             start = int(action["start"])
             end = int(action["end"])
             with open(file_full_path, "r") as f:
@@ -326,7 +331,7 @@ def issue_fixing_iter(env: Env, file, messages, full_messages, chat_stats):
                     "content": "Success",
                 },
             )
-        elif action["action"] == "search":
+        elif action_name == "search":
             pattern = action["pattern"]
             try:
                 grep_res = subprocess.check_output(
@@ -351,7 +356,7 @@ def issue_fixing_iter(env: Env, file, messages, full_messages, chat_stats):
                         "content": "No matches found",
                     },
                 )
-        elif action["action"] == "preview":
+        elif action_name == "preview":
             diff = llvm_helper.git_execute(["diff", "--", file])
             append_message(
                 messages,
@@ -361,15 +366,14 @@ def issue_fixing_iter(env: Env, file, messages, full_messages, chat_stats):
                     "content": diff,
                 },
             )
-        elif action["action"] == "reset":
+        elif action_name == "reset":
             env.reset()
             append_message(
                 messages,
                 full_messages,
                 {"role": "user", "content": "Success"},
             )
-        elif action["action"] == "test":
-            chat_stats["test_count"] += 1
+        elif action_name == "test":
             res, log = env.check_full()
             if res:
                 return True
@@ -389,7 +393,7 @@ def issue_fixing_iter(env: Env, file, messages, full_messages, chat_stats):
                 full_messages,
                 {
                     "role": "user",
-                    "content": f"Unrecognized action {action['action']}",
+                    "content": f"Unrecognized action {action_name}",
                 },
             )
 
@@ -411,7 +415,9 @@ override = False
 
 def fix_issue(issue_id):
     fix_log_path = os.path.join(fix_dir, f"{issue_id}.json")
-    if not override and os.path.exists(fix_log_path):
+    if not override and (
+        os.path.exists(fix_log_path) or os.path.exists(fix_log_path + ".fail")
+    ):
         print(f"Skip {issue_id}")
         return
     print(f"Fixing {issue_id}")
@@ -436,6 +442,8 @@ def fix_issue(issue_id):
             file, info = get_bug_info_use_bisection(env)
         except Exception as e:
             print(str(e))
+            with open(fix_log_path + ".fail", "w") as f:
+                f.write(str(e))
             return
     else:
         file, info = get_bug_info(env)
@@ -463,6 +471,14 @@ def fix_issue(issue_id):
                 break
             if chat_stats["test_count"] >= max_test_count:
                 print("Exceed max test count")
+                break
+            excceed_other_tools_count = False
+            for key in chat_stats:
+                if key.endswith("_count") and chat_stats[key] >= max_other_tools_count:
+                    print(f"Exceed max {key}")
+                    excceed_other_tools_count = True
+                    break
+            if excceed_other_tools_count:
                 break
     except OpenAIError:
         pass

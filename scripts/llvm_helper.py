@@ -132,6 +132,7 @@ def build(max_build_jobs: int, additional_cmake_args=[]):
                 "-DLLVM_TARGETS_TO_BUILD='X86;RISCV;AArch64;SystemZ;Hexagon;PowerPC;'",
                 "-DLLVM_PARALLEL_LINK_JOBS=4",
                 "-DLLVM_INCLUDE_EXAMPLES=OFF",
+                "-DLLVM_ENABLE_ZSTD=OFF",
             ]
             + additional_cmake_args,
             stderr=subprocess.STDOUT,

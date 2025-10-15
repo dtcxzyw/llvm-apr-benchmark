@@ -29,6 +29,8 @@ with open(output_file, "w") as f:
     fixes = []
     with_hint = False
     for file in os.listdir(fix_dir):
+        if not file.endswith(".json"):
+            continue
         with open(os.path.join(llvm_helper.dataset_dir, file)) as info:
             info = json.load(info)
             if not info.get("verified", False):
