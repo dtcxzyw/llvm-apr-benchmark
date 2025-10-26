@@ -129,5 +129,5 @@
     "is_single_file_fix": true,
     "is_single_func_fix": true
   },
-  "bisect": "Cannot find a good commit"
+  "bisect": "0c23dc20bcfbe77b42fc3515c41432e4a2f5ce3f"
 }

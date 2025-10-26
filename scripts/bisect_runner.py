@@ -40,23 +40,28 @@ def test(commit_sha: str, issue_path: str) -> int:
     bug_type = data["bug_type"]
     # _, hard = resource.getrlimit(resource.RLIMIT_AS)
     # resource.setrlimit(resource.RLIMIT_AS, (min(hard, 8 * 1024**3), hard))
+    skip_reason = ""
     try:
         for binary in required_binaries:
             target_file = os.path.join(bin_dir, binary)
             if os.path.exists(target_file):
                 os.remove(target_file)
+            skip_reason = f"failed to build {binary}"
             subprocess.check_call(
                 [provider, commit_sha, binary, target_file],
                 stdout=subprocess.DEVNULL,
                 stderr=subprocess.DEVNULL,
             )
+            skip_reason = f"{binary} is not functional"
             subprocess.check_output([target_file, "--version"])
+        skip_reason = "test case cannot be reproduced"
         res, _ = llvm_helper.verify_test_group(
             repro=True, input=data["tests"], type=bug_type
         )
         if res:
             print(commit_sha, "BAD", file=sys.stderr)
             return BAD
+        skip_reason = "test case cannot be verified"
         res, _ = llvm_helper.verify_test_group(
             repro=False, input=data["tests"], type=bug_type
         )
@@ -65,7 +70,7 @@ def test(commit_sha: str, issue_path: str) -> int:
             return GOOD
     except Exception:
         pass
-    print(commit_sha, "SKIP", file=sys.stderr)
+    print(commit_sha, f"SKIP (reason={skip_reason})", file=sys.stderr)
     return SKIP
 
 

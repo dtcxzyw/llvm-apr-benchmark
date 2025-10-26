@@ -86,5 +86,5 @@
     "is_single_file_fix": false,
     "is_single_func_fix": false
   },
-  "bisect": "Invalid order"
+  "bisect": "911055e34f2b1530d9900e23873e300b77ea8d96"
 }

@@ -50,8 +50,15 @@ def bisect_issue(issue):
     if data["bug_type"] == "hang":
         # Not supported yet
         return
-    if "bisect" in data and data["bisect"] != "N/A":
-        return
+    if "bisect" in data:
+      commit = data["bisect"]
+      try:
+        commit_parsed = llvm_helper.git_execute(["rev-parse", commit]).strip()
+        if commit_parsed == commit:
+            return
+      except subprocess.CalledProcessError:
+        print(f"Previous bisect commit({commit}) is invalid. Redo bisect...")
+        pass
     print(data["issue"]["title"])
     try:
         base_commit = data["base_commit"]  # bad
