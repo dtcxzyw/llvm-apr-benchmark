@@ -1,0 +1,69 @@
+{
+  "bug_id": "161974",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/161974",
+  "bug_type": "crash",
+  "base_commit": "9fe1f29541109ac10e1399deb85da0507135f836",
+  "knowledge_cutoff": "2025-10-04T20:17:07Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "b4dbb1cdc46bfe41244f4313582ce3270f5fe845",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
+        [
+          2012,
+          2018
+        ],
+        [
+          2089,
+          2094
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp": [
+        "getOpcodeOrIntrinsicID",
+        "isEqual"
+      ]
+    }
+  },
+  "patch": "commit b4dbb1cdc46bfe41244f4313582ce3270f5fe845\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Mon Oct 20 11:53:47 2025 +0100\n\n    [VPlan] Be more careful with CSE in replicate regions. (#162110)\n    \n    Recipes in replicate regions implicitly depend on the region's\n    predicate. Limit CSE to recipes in the same block, when either recipe is\n    in a replicate region.\n    \n    This allows handling VPPredInstPHIRecipe during CSE. If we perform CSE\n    on recipes inside a replicate region, we may end up with 2\n    VPPredInstPHIRecipes sharing the same operand. This is incompatible with\n    current VPPredInstPHIRecipe codegen, which re-sets the current value of\n    its operand in VPTransformState. This can cause crashes in the added\n    test cases.\n    \n    Note that this patch only modifies ::isEqual to check for replicating\n    regions and not getHash, as CSE across replicating regions should be\n    uncommon.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/157314.\n    Fixes https://github.com/llvm/llvm-project/issues/161974.\n    \n    PR: https://github.com/llvm/llvm-project/pull/162110\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp b/llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp\nindex 64bbe630e317..e060e7081042 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlanTransforms.cpp\n@@ -2012,7 +2012,7 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {\n         .Case<VPWidenIntrinsicRecipe>([](auto *I) {\n           return std::make_pair(true, I->getVectorIntrinsicID());\n         })\n-        .Case<VPVectorPointerRecipe>([](auto *I) {\n+        .Case<VPVectorPointerRecipe, VPPredInstPHIRecipe>([](auto *I) {\n           // For recipes that do not directly map to LLVM IR instructions,\n           // assign opcodes after the last VPInstruction opcode (which is also\n           // after the last IR Instruction opcode), based on the VPDefID.\n@@ -2089,6 +2089,15 @@ struct VPCSEDenseMapInfo : public DenseMapInfo<VPSingleDefRecipe *> {\n           LFlags->getPredicate() !=\n               cast<VPRecipeWithIRFlags>(R)->getPredicate())\n         return false;\n+    // Recipes in replicate regions implicitly depend on predicate. If either\n+    // recipe is in a replicate region, only consider them equal if both have\n+    // the same parent.\n+    const VPRegionBlock *RegionL = L->getParent()->getParent();\n+    const VPRegionBlock *RegionR = R->getParent()->getParent();\n+    if (((RegionL && RegionL->isReplicator()) ||\n+         (RegionR && RegionR->isReplicator())) &&\n+        L->getParent() != R->getParent())\n+      return false;\n     const VPlan *Plan = L->getParent()->getPlan();\n     VPTypeAnalysis TypeInfo(*Plan);\n     return TypeInfo.inferScalarType(L) == TypeInfo.inferScalarType(R);\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/cse-replicate-regions.ll",
+      "commands": [
+        "opt -p loop-vectorize -force-vector-width=2 -force-widen-divrem-via-safe-divisor=false -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine void @multiple_vppredinstphi_with_same_predicate(ptr %A, i32 %d) {\n;\nentry:\n  br label %loop.header\n\nloop.header:\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %gep.A = getelementptr inbounds i32, ptr %A, i32 %iv\n  %l = load i32, ptr %gep.A\n  %c = icmp sgt i32 %l, 0\n  br i1 %c, label %then, label %loop.latch\n\nthen:\n  %div.0 = sdiv i32 -10, %d\n  %div.1 = sdiv i32 -10, %d\n  %add  = add i32 %div.1, %div.0\n  br label %loop.latch\n\nloop.latch:\n  %merge = phi i32 [ %add, %then ], [ 0, %loop.header ]\n  store i32 %merge, ptr %gep.A\n  %iv.next = add i32 %iv, 1\n  %ec = icmp eq i32 %iv.next, 100\n  br i1 %ec, label %exit, label %loop.header\n\nexit:\n  ret void\n}\n\ndefine void @multiple_vppredinstphi_with_different_predicate(ptr %A, i32 %d) {\n;\nentry:\n  br label %loop.header\n\nloop.header:\n  %iv = phi i32 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %gep.A = getelementptr inbounds i32, ptr %A, i32 %iv\n  %l = load i32, ptr %gep.A\n  %c.0 = icmp sgt i32 %l, 0\n  br i1 %c.0, label %then.0, label %continue\n\nthen.0:\n  %div.0 = sdiv i32 -10, %d\n  br label %continue\n\ncontinue:\n  %merge.0 = phi i32 [ %div.0, %then.0 ], [ 0, %loop.header ]\n  %c.1 = icmp sgt i32 %l, 20\n  br i1 %c.1, label %then.1, label %loop.latch\n\nthen.1:\n  %div.1 = sdiv i32 -10, %d\n  br label %loop.latch\n\nloop.latch:\n  %merge.1 = phi i32 [ %div.1, %then.1 ], [ 0, %continue ]\n  %add = add i32 %merge.0, %merge.1\n  store i32 %add, ptr %gep.A\n  %iv.next = add i32 %iv, 1\n  %ec = icmp eq i32 %iv.next, 100\n  br i1 %ec, label %exit, label %loop.header\n\nexit:\n  ret void\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LoopVectorize] Assertion `(isa<InsertElementInst, InsertValueInst>(VecI)) && \"Packed operands must generate an insertelement or insertvalue\"' failed.",
+    "body": "Reproducer: https://godbolt.org/z/EqnoTTjrz\n```\n; bin/opt -passes=loop-vectorize test.ll -S\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine i8 @main() {\nentry:\n  %div.i.rhs.trunc.peel.i.i = sub i32 7, 0\n  br label %safe_div_func_uint8_t_u_u.exit.i.i\n\nsafe_div_func_uint8_t_u_u.exit.i.i:               ; preds = %for.inc143.2.i.i, %entry\n  %storemerge227.i.i = phi i32 [ 0, %entry ], [ %inc153.i.i, %for.inc143.2.i.i ]\n  %conv56200.lcssa211.lcssa223224.i.i = phi i8 [ 0, %entry ], [ %conv56.2.i.i, %for.inc143.2.i.i ]\n  br i1 false, label %for.inc143.2.i.i, label %cond.false.i183.2.i.i\n\ncond.false.i183.2.i.i:                            ; preds = %safe_div_func_uint8_t_u_u.exit.i.i\n  %div.i196.i.i = sdiv i32 -10, %div.i.rhs.trunc.peel.i.i\n  %div.i196.1.i.i = sdiv i32 -10, %div.i.rhs.trunc.peel.i.i\n  %0 = and i32 %div.i196.1.i.i, %div.i196.i.i\n  %1 = trunc i32 %0 to i8\n  br label %for.inc143.2.i.i\n\nfor.inc143.2.i.i:                                 ; preds = %cond.false.i183.2.i.i, %safe_div_func_uint8_t_u_u.exit.i.i\n  %.pn248.i.i = phi i8 [ %1, %cond.false.i183.2.i.i ], [ 0, %safe_div_func_uint8_t_u_u.exit.i.i ]\n  %conv56.2.i.i = and i8 %.pn248.i.i, 1\n  %inc153.i.i = add i32 %storemerge227.i.i, 1\n  %cmp.not.i.i = icmp eq i32 %storemerge227.i.i, 56\n  br i1 %cmp.not.i.i, label %func_225.exit.i, label %safe_div_func_uint8_t_u_u.exit.i.i\n\nfunc_225.exit.i:                                  ; preds = %for.inc143.2.i.i\n  ret i8 0\n}\n```\n```\nopt: /root/llvm-project/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp:3407: virtual void llvm::VPPredInstPHIRecipe::execute(llvm::VPTransformState&): Assertion `(isa<InsertElementInst, InsertValueInst>(VecI)) && \"Packed operands must generate an insertelement or insertvalue\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=loop-vectorize <source>\n1.\tRunning pass \"function(loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>)\" on module \"<source>\"\n2.\tRunning pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"main\"\n #0 0x0000000005907b38 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5907b38)\n #1 0x00000000059049e4 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007efb9ea42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007efb9ea969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007efb9ea42476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007efb9ea287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007efb9ea2871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007efb9ea39e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000003824a80 llvm::VPPredInstPHIRecipe::execute(llvm::VPTransformState&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3824a80)\n #9 0x00000000037c77d3 llvm::VPBasicBlock::executeRecipes(llvm::VPTransformState*, llvm::BasicBlock*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x37c77d3)\n#10 0x00000000037dda7e llvm::VPBasicBlock::execute(llvm::VPTransformState*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x37dda7e)\n#11 0x00000000037d1921 llvm::VPRegionBlock::execute(llvm::VPTransformState*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x37d1921)\n#12 0x00000000037e3852 llvm::VPlan::execute(llvm::VPTransformState*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x37e3852)\n#13 0x00000000036583d7 llvm::LoopVectorizationPlanner::executePlan(llvm::ElementCount, unsigned int, llvm::VPlan&, llvm::InnerLoopVectorizer&, llvm::DominatorTree*, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x36583d7)\n#14 0x0000000003676252 llvm::LoopVectorizePass::processLoop(llvm::Loop*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3676252)\n#15 0x0000000003677f30 llvm::LoopVectorizePass::runImpl(llvm::Function&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3677f30)\n#16 0x0000000003678615 llvm::LoopVectorizePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3678615)\n#17 0x0000000002f6899e llvm::detail::PassModel<llvm::Function, llvm::LoopVectorizePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x2f6899e)\n#18 0x00000000056ee1c1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x56ee1c1)\n#19 0x0000000000ef020e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xef020e)\n#20 0x00000000056ec72a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x56ec72a)\n#21 0x0000000000973f5e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x973f5e)\n#22 0x00000000056ec0e1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x56ec0e1)\n#23 0x000000000097e06a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97e06a)\n#24 0x00000000009722b7 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9722b7)\n#25 0x00007efb9ea29d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#26 0x00007efb9ea29e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#27 0x00000000009693c5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9693c5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```\ncc @fhahn @lukel97 ",
+    "author": "dtcxzyw",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid",
+      "generated by fuzzer"
+    ],
+    "comments": [
+      {
+        "author": "fhahn",
+        "body": "Same underlying issue as https://github.com/llvm/llvm-project/issues/157314"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": false
+  }
+}
