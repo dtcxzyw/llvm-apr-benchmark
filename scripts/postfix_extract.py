@@ -162,9 +162,14 @@ fix_commit_map = {
     "149679": None,  # Duplicate of #147869
     "151456": None,  # Cannot reproduce the crash
     "152683": None,  # Cannot reproduce the crash
+    "152998": None,  # Duplicate of #117157
     "153754": None,  # Duplicate of #153676
     "153946": None,  # Unsupported intrinsic llvm.experimental.cttz.elts
+    "155161": None,  # Duplicate of #117157
     "155162": None,  # Missing reproducer
+    "155184": None,  # Duplicate of #117157
+    "157332": None,  # Duplicate of #131488
+    "161974": None,  # Duplicate of #157314
 }
 
 if issue_id in fix_commit_map:
