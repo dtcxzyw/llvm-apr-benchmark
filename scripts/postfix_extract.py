@@ -173,7 +173,10 @@ fix_commit_map = {
     "155184": None,  # Duplicate of #117157
     "156190": None,  # Cannot verify the fix
     "157332": None,  # Duplicate of #131488
+    "158197": None,  # Cannot reproduce with Alive2
     "161974": None,  # Duplicate of #157314
+    "160112": None,  # Non-middle-end bug
+    "162498": None,  # Cannot reproduce with Alive2
 }
 
 if issue_id in fix_commit_map:
