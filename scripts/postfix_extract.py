@@ -154,7 +154,9 @@ fix_commit_map = {
     "139729": None,  # Non-deterministic bug
     "140215": None,  # Cannot reproduce with Alive2
     "140238": None,  # Cannot reproduce with Alive2
+    "140362": None,  # DWARF bug
     "140992": None,  # Meta issue
+    "141568": None,  # Invalid reproducer
     "142091": None,  # Duplicate of #141968
     "148228": None,  # Alive2 cannot unroll nested loops
     "148431": None,  # Cannot reproduce the crash
@@ -169,6 +171,7 @@ fix_commit_map = {
     "155161": None,  # Duplicate of #117157
     "155162": None,  # Missing reproducer
     "155184": None,  # Duplicate of #117157
+    "156190": None,  # Cannot verify the fix
     "157332": None,  # Duplicate of #131488
     "161974": None,  # Duplicate of #157314
 }
