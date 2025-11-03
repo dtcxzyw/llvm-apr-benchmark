@@ -46,48 +46,8 @@
       ],
       "tests": [
         {
-          "test_name": "f",
-          "test_body": "define hidden i32 @f(ptr %m) {\n  %v = load i32, ptr %m, align 4\n  ret i32 %v\n}\n"
-        },
-        {
-          "test_name": "g",
-          "test_body": "define hidden x86_thiscallcc i32 @g(ptr %m) {\n  %v = load i32, ptr %m, align 4\n  ret i32 %v\n}\n"
-        },
-        {
-          "test_name": "constexpr_self_user",
-          "test_body": "define hidden i32 @constexpr_self_user() addrspace(1) {\n  %objsize = call i32 @llvm.objectsize.i32.p0(ptr addrspacecast (ptr addrspace(1) @constexpr_self_user to ptr), i1 false, i1 false, i1 false)\n  ret i32 %objsize\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.objectsize.i32.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
-        },
-        {
-          "test_name": "inalloca",
-          "test_body": "define hidden i32 @inalloca(ptr inalloca(i32) %p) {\n  %rv = load i32, ptr %p, align 4\n  ret i32 %rv\n}\n"
-        },
-        {
-          "test_name": "h",
-          "test_body": "define hidden coldcc i32 @h(ptr %m) {\n  %v = load i32, ptr %m, align 4\n  ret i32 %v\n}\n"
-        },
-        {
-          "test_name": "inalloca2_caller",
-          "test_body": "define i32 @inalloca2_caller(ptr inalloca(i32) %p) {\n  %rv = musttail call i32 @inalloca2(ptr inalloca(i32) %p)\n  ret i32 %rv\n}\n\ndeclare hidden i32 @inalloca2(ptr inalloca(i32))\n"
-        },
-        {
-          "test_name": "preallocated",
-          "test_body": "define hidden i32 @preallocated(ptr preallocated(i32) %p) {\n  %rv = load i32, ptr %p, align 4\n  ret i32 %rv\n}\n"
-        },
-        {
-          "test_name": "assume_fastcc",
-          "test_body": "define hidden i32 @assume_fastcc() {\n  %objsize = call i32 @llvm.objectsize.i32.p0(ptr @assume_fastcc, i1 false, i1 false, i1 false)\n  ret i32 %objsize\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.objectsize.i32.p0(ptr, i1 immarg, i1 immarg, i1 immarg) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
-        },
-        {
-          "test_name": "j",
-          "test_body": "define hidden i32 @j(ptr %m) {\n  %v = load i32, ptr %m, align 4\n  ret i32 %v\n}\n"
-        },
-        {
-          "test_name": "inalloca2",
-          "test_body": "define hidden i32 @inalloca2(ptr inalloca(i32) %p) {\n  %rv = load i32, ptr %p, align 4\n  ret i32 %rv\n}\n"
-        },
-        {
-          "test_name": "call_things",
-          "test_body": "; Function Attrs: nocallback nofree nosync nounwind willreturn\ndeclare token @llvm.call.preallocated.setup(i32 immarg) #0\n\n; Function Attrs: nocallback nofree nosync nounwind willreturn\ndeclare ptr @llvm.call.preallocated.arg(token, i32 immarg) #0\n\ndeclare hidden i32 @f(ptr)\n\ndeclare hidden x86_thiscallcc i32 @g(ptr)\n\ndeclare hidden coldcc i32 @h(ptr)\n\ndeclare hidden i32 @j(ptr)\n\ndeclare hidden i32 @inalloca(ptr inalloca(i32))\n\ndeclare hidden i32 @preallocated(ptr preallocated(i32))\n\ndefine void @call_things() {\n  %m = alloca i32, align 4\n  %1 = call i32 @f(ptr %m)\n  %2 = call x86_thiscallcc i32 @g(ptr %m)\n  %3 = call coldcc i32 @h(ptr %m)\n  %4 = call i32 @j(ptr %m)\n  %args = alloca inalloca i32, align 4\n  %5 = call i32 @inalloca(ptr inalloca(i32) %args)\n  %c = call token @llvm.call.preallocated.setup(i32 1)\n  %N = call ptr @llvm.call.preallocated.arg(token %c, i32 0) #1\n  %6 = call i32 @preallocated(ptr preallocated(i32) %N) [ \"preallocated\"(token %c) ]\n  ret void\n}\n\nattributes #0 = { nocallback nofree nosync nounwind willreturn }\nattributes #1 = { preallocated(i32) }\n"
+          "test_name": "<module>",
+          "test_body": "\ndeclare token @llvm.call.preallocated.setup(i32)\ndeclare ptr @llvm.call.preallocated.arg(token, i32)\n\ndefine internal i32 @f(ptr %m) {\n;\n  %v = load i32, ptr %m\n  ret i32 %v\n}\n\ndefine internal x86_thiscallcc i32 @g(ptr %m) {\n;\n  %v = load i32, ptr %m\n  ret i32 %v\n}\n\n; Leave this one alone, because the user went out of their way to request this\n; convention.\ndefine internal coldcc i32 @h(ptr %m) {\n;\n  %v = load i32, ptr %m\n  ret i32 %v\n}\n\ndefine internal i32 @j(ptr %m) {\n;\n  %v = load i32, ptr %m\n  ret i32 %v\n}\n\ndefine internal i32 @inalloca(ptr inalloca(i32) %p) {\n;\n  %rv = load i32, ptr %p\n  ret i32 %rv\n}\n\ndefine i32 @inalloca2_caller(ptr inalloca(i32) %p) {\n;\n  %rv = musttail call i32 @inalloca2(ptr inalloca(i32) %p)\n  ret i32 %rv\n}\ndefine internal i32 @inalloca2(ptr inalloca(i32) %p) {\n; Because of the musttail caller, this inalloca cannot be dropped.\n;\n  %rv = load i32, ptr %p\n  ret i32 %rv\n}\n\ndefine internal i32 @preallocated(ptr preallocated(i32) %p) {\n;\n  %rv = load i32, ptr %p\n  ret i32 %rv\n}\n\ndefine void @call_things() {\n;\n  %m = alloca i32\n  call i32 @f(ptr %m)\n  call x86_thiscallcc i32 @g(ptr %m)\n  call coldcc i32 @h(ptr %m)\n  call i32 @j(ptr %m)\n  %args = alloca inalloca i32\n  call i32 @inalloca(ptr inalloca(i32) %args)\n  %c = call token @llvm.call.preallocated.setup(i32 1)\n  %N = call ptr @llvm.call.preallocated.arg(token %c, i32 0) preallocated(i32)\n  call i32 @preallocated(ptr preallocated(i32) %N) [\"preallocated\"(token %c)]\n  ret void\n}\n\n@llvm.used = appending global [1 x ptr] [\n  ptr @j\n], section \"llvm.metadata\"\n\ndefine internal i32 @assume_fastcc() {\n;\n  %objsize = call i32 @llvm.objectsize.i32.p0(ptr @assume_fastcc, i1 false, i1 false, i1 false)\n  ret i32 %objsize\n}\n\ndefine internal i32 @constexpr_self_user() addrspace(1) {\n;\n  %objsize = call i32 @llvm.objectsize.i32.p0(ptr addrspacecast (ptr addrspace(1) @constexpr_self_user to ptr), i1 false, i1 false, i1 false)\n  ret i32 %objsize\n}"
         }
       ]
     }
