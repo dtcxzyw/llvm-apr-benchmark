@@ -123,6 +123,7 @@ fix_commit_map = {
     "124213": None,  # Multi-commit fix
     "124578": None,  # OpenMP support bug
     "125259": None,  # Reproducer is too large
+    "125278": None,  # Drop assertion
     "125369": None,  # Reverted
     "125374": None,  # Duplicate of #119173
     "125400": None,  # Reverted
