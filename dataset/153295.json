@@ -96,5 +96,5 @@
     "is_single_func_fix": false
   },
   "verified": true,
-  "bisect": "22138720020dd8dfd30dbd220c49d6585126d2f7"
+  "bisect": "06664fdc7680f7f9fa9b0a414a8fb8df2f913d48"
 }

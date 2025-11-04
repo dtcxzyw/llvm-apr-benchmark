@@ -65,5 +65,5 @@
     "is_single_func_fix": true
   },
   "verified": true,
-  "bisect": "cc5e8967ab1ae04ccbb6a8678dcd4ef0d5c5ccdf"
+  "bisect": "Invalid order"
 }

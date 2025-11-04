@@ -48,7 +48,7 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/AArch64/invalid-costs.ll",
       "commands": [
-        "opt -passes=\"loop-vectorize\" -pass-remarks-output=%t.yaml -S %s"
+        "opt -passes=\"loop-vectorize\" -pass-remarks-output=/dev/null -S %s"
       ],
       "tests": [
         {
@@ -60,7 +60,7 @@
     {
       "file": "llvm/test/Transforms/LoopVectorize/invalid-costs.ll",
       "commands": [
-        "opt -passes=\"loop-vectorize\" -pass-remarks-output=%t.yaml -S %s"
+        "opt -passes=\"loop-vectorize\" -pass-remarks-output=/dev/null -S %s"
       ],
       "tests": [
         {
@@ -84,5 +84,6 @@
     "is_single_file_fix": false,
     "is_single_func_fix": false
   },
-  "verified": true
+  "verified": true,
+  "bisect": "de7e3a589525179f3b02b84b194aac6cf581425c"
 }

@@ -51,6 +51,7 @@ def bisect_issue(issue):
         # Not supported yet
         return
     if "bisect" in data:
+      return
       commit = data["bisect"]
       try:
         commit_parsed = llvm_helper.git_execute(["rev-parse", commit]).strip()
