@@ -2,7 +2,7 @@
   "bug_id": "100298",
   "issue_url": "https://github.com/llvm/llvm-project/issues/100298",
   "bug_type": "miscompilation",
-  "base_commit": "75642a00e15b722bdfb90726be31f1c8adaeb0c5",
+  "base_commit": "559be8e2b55afbf6736fed646542fb25793f0f7e",
   "knowledge_cutoff": "2024-07-24T04:19:53Z",
   "lit_test_dir": [
     "llvm/test/Transforms/InstCombine"

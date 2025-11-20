@@ -73,6 +73,8 @@ def verify_issue(issue):
 
     if not llvm_helper.is_valid_fix(fix_commit):
         print(f"{issue} Warning: fix_commit is invalid")
+    if "main\n" not in llvm_helper.git_execute(["branch", "--contains", base_commit]):
+        print(f"{issue} Warning: base_commit is not in main branch")
     if fix_commit in fix_commit_set:
         print(f"{issue} Warning: duplicated fix_commit")
     fix_commit_set.add(fix_commit)
