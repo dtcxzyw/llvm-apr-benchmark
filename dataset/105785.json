@@ -2,7 +2,7 @@
   "bug_id": "105785",
   "issue_url": "https://github.com/llvm/llvm-project/issues/105785",
   "bug_type": "miscompilation",
-  "base_commit": "1241c762c165972690c4edfb82ec7421c1e64658",
+  "base_commit": "39986f0b4d797e4ad3c12607f2b4abe2322b82bb",
   "knowledge_cutoff": "2024-08-23T05:45:52Z",
   "lit_test_dir": [
     "llvm/test/Transforms/ConstraintElimination"
