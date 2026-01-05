@@ -34,7 +34,7 @@ session.headers.update(
 )
 
 issue_id_begin = 76663  # Since 2024-01-01
-issue_id_end = 165977
+issue_id_end = 174328
 
 
 def wait(progress):
@@ -71,7 +71,7 @@ def fetch(issue_id):
         label_name = label["name"]
         if label_name == "miscompilation":
             has_valid_label = True
-        if "crash" in label_name:
+        if "crash" in label_name and label_name != "crash-on-invalid":
             has_valid_label = True
         if "hang" in label_name:
             has_valid_label = True
