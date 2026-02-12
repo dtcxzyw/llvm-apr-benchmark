@@ -1,0 +1,63 @@
+{
+  "bug_id": "178917",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/178917",
+  "bug_type": "crash",
+  "base_commit": "c2082a65b7fc8e7587ed07170e250820d6bbda1d",
+  "knowledge_cutoff": "2026-01-30T16:51:03Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/VectorCombine"
+  ],
+  "hints": {
+    "fix_commit": "07a6a23f6c5387fc1e7df174b5921f6004db64e0",
+    "components": [
+      "VectorCombine"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VectorCombine.cpp": [
+        [
+          5453,
+          5458
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VectorCombine.cpp": [
+        "VectorCombine::shrinkLoadForShuffles"
+      ]
+    }
+  },
+  "patch": "commit 07a6a23f6c5387fc1e7df174b5921f6004db64e0\nAuthor: puneeth_aditya_5656 <myakampuneeth@gmail.com>\nDate:   Sat Jan 31 00:52:39 2026 +0530\n\n    [VectorCombine] Fix crash with poison mask elements in shrinkLoadForShuffles (#178920)\n    \n    ## Summary\n    Fixes assertion failure when `shrinkLoadForShuffles` processes shuffle\n    masks containing poison elements.\n    \n    The bug was introduced in #149093 , when adjusting mask indices for load\n    trimming, poison indices (-1) were modified to invalid values (e.g.,\n    -2), causing `isSingleSourceMaskImpl` to assert.\n    \n    The fix preserves poison indices without modification.\n    \n    Fixes #178917\n    \n    ## Test plan\n    - Added regression test `@shuffle_with_poison_mask`\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VectorCombine.cpp b/llvm/lib/Transforms/Vectorize/VectorCombine.cpp\nindex d173afd24e54..c1cca6e28a8e 100644\n--- a/llvm/lib/Transforms/Vectorize/VectorCombine.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VectorCombine.cpp\n@@ -5453,6 +5453,11 @@ bool VectorCombine::shrinkLoadForShuffles(Instruction &I) {\n         NewUses.push_back({Shuffle, {}});\n         std::vector<int> &NewMask = NewUses.back().second;\n         for (int Index : OldMask) {\n+          // Preserve poison indices without modification.\n+          if (Index == PoisonMaskElem) {\n+            NewMask.push_back(Index);\n+            continue;\n+          }\n           int NewIndex = Index >= static_cast<int>(OldNumElements)\n                              ? Index - LowOffset - HighOffset\n                              : Index - LowOffset;\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/VectorCombine/load-shufflevector.ll",
+      "commands": [
+        "opt -passes=vector-combine -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "shuffle_with_poison_mask",
+          "test_body": "define <8 x i16> @shuffle_with_poison_mask(ptr %p) {\n  %pre = load <8 x i16>, ptr %p, align 1\n  %shuf = shufflevector <8 x i16> %pre, <8 x i16> poison, <8 x i32> <i32 1, i32 3, i32 poison, i32 poison, i32 poison, i32 5, i32 poison, i32 7>\n  ret <8 x i16> %shuf\n}\n"
+        },
+        {
+          "test_name": "shuffle_v16_v16i8_r0_31",
+          "test_body": "define <16 x i8> @shuffle_v16_v16i8_r0_31(ptr %arg) {\n  %load = load <16 x i8>, ptr %arg, align 1\n  %shuf = shufflevector <16 x i8> %load, <16 x i8> poison, <16 x i32> <i32 0, i32 1, i32 2, i32 3, i32 4, i32 5, i32 6, i32 7, i32 24, i32 25, i32 26, i32 27, i32 28, i32 29, i32 30, i32 31>\n  ret <16 x i8> %shuf\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[VectorCombine] Assertion `I >= 0 && I < (NumOpElts * 2) && \"Out-of-bounds shuffle mask element\"' failed.",
+    "body": "Reproducer (reduced from ncnn):\n```llvm\n; bin/opt -passes=vector-combine test.ll -S\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-pc-linux-gnu\"\n\ndefine <8 x i16> @_ZN4ncnnL21cast_fp32_to_bf16_sseERKNS_3MatERS0_RKNS_6OptionE.omp_outlined(ptr %p) {\n.noexc.lr.ph:\n  %.pre = load <8 x i16>, ptr %p, align 1\n  %0 = shufflevector <8 x i16> %.pre, <8 x i16> poison, <8 x i32> <i32 1, i32 3, i32 poison, i32 poison, i32 poison, i32 5, i32 poison, i32 7>\n  ret <8 x i16> %0\n}\n```\n```\nopt: /data/zyw/dev/llvm-project/llvm/lib/IR/Instructions.cpp:1919: bool isSingleSourceMaskImpl(llvm::ArrayRef<int>, int): Assertion `I >= 0 && I < (NumOpElts * 2) && \"Out-of-bounds shuffle mask element\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.      Program arguments: bin/opt -passes=vector-combine reduced.ll -S\n1.      Running pass \"function(vector-combine)\" on module \"reduced.ll\"\n2.      Running pass \"vector-combine\" on function \"_ZN4ncnnL21cast_fp32_to_bf16_sseERKNS_3MatERS0_RKNS_6OptionE.omp_outlined\"\n #0 0x00007ffff7dfd4c2 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) /data/zyw/dev/llvm-project/llvm/lib/Support/Unix/Signals.inc:846:3\n #1 0x00007ffff7dfa3fc llvm::sys::RunSignalHandlers() /data/zyw/dev/llvm-project/llvm/lib/Support/Signals.cpp:108:20\n #2 0x00007ffff7dfac21 SignalHandler(int, siginfo_t*, void*) /data/zyw/dev/llvm-project/llvm/lib/Support/Unix/Signals.inc:429:14\n #3 0x00007ffff7845330 (/lib/x86_64-linux-gnu/libc.so.6+0x45330)\n #4 0x00007ffff789eb2c __pthread_kill_implementation ./nptl/pthread_kill.c:44:76\n #5 0x00007ffff789eb2c __pthread_kill_internal ./nptl/pthread_kill.c:78:10\n #6 0x00007ffff789eb2c pthread_kill ./nptl/pthread_kill.c:89:10\n #7 0x00007ffff784527e raise ./signal/../sysdeps/posix/raise.c:27:6\n #8 0x00007ffff78288ff abort ./stdlib/abort.c:81:7\n #9 0x00007ffff782881b _nl_load_domain ./intl/loadmsgcat.c:1177:9\n#10 0x00007ffff783b517 (/lib/x86_64-linux-gnu/libc.so.6+0x3b517)\n#11 0x00007fffee83fb66 isSingleSourceMaskImpl(llvm::ArrayRef<int>, int) /data/zyw/dev/llvm-project/llvm/lib/IR/Instructions.cpp:1913:3\n#12 0x00007fffee84a6de llvm::ShuffleVectorInst::isExtractSubvectorMask(llvm::ArrayRef<int>, int, int&) /data/zyw/dev/llvm-project/llvm/lib/IR/Instructions.cpp:2078:30\n#13 0x00007ffff6c170f3 llvm::BasicTTIImplBase<llvm::X86TTIImpl>::improveShuffleKindFromMask(llvm::TargetTransformInfo::ShuffleKind, llvm::ArrayRef<int>, llvm::VectorType*, int&, llvm::VectorType*&) const (.isra.0) /data/zyw/dev/llvm-project/llvm/include/llvm/CodeGen/BasicTTIImpl.h:1134:0\n#14 0x00007ffff6c193eb llvm::X86TTIImpl::getShuffleCost(llvm::TargetTransformInfo::ShuffleKind, llvm::VectorType*, llvm::VectorType*, llvm::ArrayRef<int>, llvm::TargetTransformInfo::TargetCostKind, int, llvm::VectorType*, llvm::ArrayRef<llvm::Value const*>, llvm::Instruction const*) const /data/zyw/dev/llvm-project/llvm/lib/Target/X86/X86TargetTransformInfo.cpp:1554:0\n#15 0x00007fffef27af8f llvm::TargetTransformInfo::getShuffleCost(llvm::TargetTransformInfo::ShuffleKind, llvm::VectorType*, llvm::VectorType*, llvm::ArrayRef<int>, llvm::TargetTransformInfo::TargetCostKind, int, llvm::VectorType*, llvm::ArrayRef<llvm::Value const*>, llvm::Instruction const*) const /data/zyw/dev/llvm-project/llvm/lib/Analysis/TargetTransformInfo.cpp:1039:49\n#16 0x00007ffff107f407 llvm::InstructionCost::propagateState(llvm::InstructionCost const&) /data/zyw/dev/llvm-project/llvm/include/llvm/Support/InstructionCost.h:58:5\n#17 0x00007ffff107f407 llvm::InstructionCost::operator+=(llvm::InstructionCost const&) /data/zyw/dev/llvm-project/llvm/include/llvm/Support/InstructionCost.h:100:19\n#18 0x00007ffff107f407 (anonymous namespace)::VectorCombine::shrinkLoadForShuffles(llvm::Instruction&) /data/zyw/dev/llvm-project/llvm/lib/Transforms/Vectorize/VectorCombine.cpp:5470:60\n#19 0x00007ffff108a844 run /data/zyw/dev/llvm-project/llvm/lib/Transforms/Vectorize/VectorCombine.cpp:5789:9\n#20 0x00007ffff108a844 llvm::VectorCombinePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) /data/zyw/dev/llvm-project/llvm/lib/Transforms/Vectorize/VectorCombine.cpp:5820:20\n#21 0x00007ffff1aef5b5 llvm::detail::PassModel<llvm::Function, llvm::VectorCombinePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) /data/zyw/dev/llvm-project/llvm/include/llvm/IR/PassManagerInternal.h:92:3\n#22 0x00007fffee8d2c0d llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) /data/zyw/dev/llvm-project/llvm/include/llvm/IR/PassManagerImpl.h:80:18\n#23 0x00007ffff68ca775 llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) /data/zyw/dev/llvm-project/llvm/include/llvm/IR/PassManagerInternal.h:92:3\n#24 0x00007fffee8d3047 llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) /data/zyw/dev/llvm-project/llvm/lib/IR/PassManager.cpp:132:41\n#25 0x00007ffff7f8bf75 llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) /data/zyw/dev/llvm-project/llvm/include/llvm/IR/PassManagerInternal.h:92:3\n#26 0x00007fffee8d42c6 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) /data/zyw/dev/llvm-project/llvm/include/llvm/IR/PassManagerImpl.h:80:18\n#27 0x00007ffff7f97cdc llvm::SmallPtrSetImplBase::~SmallPtrSetImplBase() /data/zyw/dev/llvm-project/llvm/include/llvm/ADT/SmallPtrSet.h:89:5\n#28 0x00007ffff7f97cdc llvm::SmallPtrSetImpl<llvm::AnalysisKey*>::~SmallPtrSetImpl() /data/zyw/dev/llvm-project/llvm/include/llvm/ADT/SmallPtrSet.h:368:35\n#29 0x00007ffff7f97cdc llvm::SmallPtrSet<llvm::AnalysisKey*, 2u>::~SmallPtrSet() /data/zyw/dev/llvm-project/llvm/include/llvm/ADT/SmallPtrSet.h:527:7\n#30 0x00007ffff7f97cdc llvm::PreservedAnalyses::~PreservedAnalyses() /data/zyw/dev/llvm-project/llvm/include/llvm/IR/Analysis.h:112:7\n#31 0x00007ffff7f97cdc llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) /data/zyw/dev/llvm-project/llvm/tools/opt/NewPMDriver.cpp:574:10\n#32 0x00007ffff7fa37c4 optMain /data/zyw/dev/llvm-project/llvm/tools/opt/optdriver.cpp:758:5\n#33 0x00007ffff782a1ca __libc_start_call_main ./csu/../sysdeps/nptl/libc_start_call_main.h:74:3\n#34 0x00007ffff782a28b call_init ./csu/../csu/libc-start.c:128:20\n#35 0x00007ffff782a28b __libc_start_main ./csu/../csu/libc-start.c:347:5\n#36 0x0000555555555095 _start (bin/opt+0x1095)\nAborted (core dumped)\n```\nThis is originally reported by https://github.com/dtcxzyw/llvm-opt-benchmark/issues/3405.\nIt should be caused by https://github.com/llvm/llvm-project/pull/149093. Reverting this patch addresses the issue.\ncc @PeddleSpam @arsenm @RKSimon \n",
+    "author": "dtcxzyw",
+    "labels": [
+      "crash-on-valid",
+      "llvm::vectorcombine"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

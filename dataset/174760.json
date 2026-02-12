@@ -1,0 +1,68 @@
+{
+  "bug_id": "174760",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/174760",
+  "bug_type": "crash",
+  "base_commit": "985d75a57abaabbd4de3aafd42145068d6bedd13",
+  "knowledge_cutoff": "2026-01-07T12:31:55Z",
+  "lit_test_dir": [
+    "llvm/test/Analysis/LoopAccessAnalysis"
+  ],
+  "hints": {
+    "fix_commit": "9aadbb716d1173d3a50d85e2fb17483604ab689a",
+    "components": [
+      "LoopAccessAnalysis"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Analysis/LoopAccessAnalysis.cpp": [
+        [
+          1042,
+          1047
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Analysis/LoopAccessAnalysis.cpp": [
+        "isNoWrap"
+      ]
+    }
+  },
+  "patch": "commit 9aadbb716d1173d3a50d85e2fb17483604ab689a\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Mon Jan 19 11:15:20 2026 +0000\n\n    [LAA] Check if access is part of loop in isNoWrap.\n    \n    blockNeedsPredication does not support blocks outside of the loop. Bail\n    out for users outside the loop.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/174760.\n\ndiff --git a/llvm/lib/Analysis/LoopAccessAnalysis.cpp b/llvm/lib/Analysis/LoopAccessAnalysis.cpp\nindex a5f47d88430e..2fc724970747 100644\n--- a/llvm/lib/Analysis/LoopAccessAnalysis.cpp\n+++ b/llvm/lib/Analysis/LoopAccessAnalysis.cpp\n@@ -1042,6 +1042,8 @@ static bool isNoWrap(PredicatedScalarEvolution &PSE, const SCEVAddRecExpr *AR,\n           if (getLoadStorePointerOperand(U) != GEP)\n             return false;\n           BasicBlock *UserBB = cast<Instruction>(U)->getParent();\n+          if (!L->contains(UserBB))\n+            return false;\n           return !LoopAccessInfo::blockNeedsPredication(UserBB, L, &DT);\n         }))\n       return true;\n",
+  "tests": [
+    {
+      "file": "llvm/test/Analysis/LoopAccessAnalysis/inbounds-gep-in-predicated-blocks.ll",
+      "commands": [
+        "opt -passes='print<access-info>' -disable-output %s 2>&1"
+      ],
+      "tests": [
+        {
+          "test_name": "test_nusw_gep_with_load_user_outside_loop",
+          "test_body": "define i32 @test_nusw_gep_with_load_user_outside_loop(ptr %A) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 1, %entry ], [ %iv.next, %loop.latch ]\n  %and = and i64 %iv, 1\n  %cond = icmp eq i64 %and, 0\n  br i1 %cond, label %if.then, label %loop.latch\n\nif.then:                                          ; preds = %loop.header\n  store i32 0, ptr %A, align 4\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %if.then, %loop.header\n  %gep = getelementptr nusw i32, ptr %A, i64 %and\n  store i32 0, ptr %gep, align 4\n  %iv.next = add i64 %iv, 1\n  %cmp = icmp ult i64 %iv, 100\n  br i1 %cmp, label %loop.header, label %exit\n\nexit:                                             ; preds = %loop.latch\n  %l = load i32, ptr %gep, align 4\n  ret i32 %l\n}\n"
+        },
+        {
+          "test_name": "test_header_existing",
+          "test_body": "define void @test_header_existing(ptr %src, ptr %dst, i64 %start) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ %start, %entry ], [ %iv.next, %loop.latch ]\n  %ec = icmp eq i64 %iv, 100\n  br i1 %ec, label %exit, label %loop.latch\n\nloop.latch:                                       ; preds = %loop.header\n  %iv.next = add i64 %iv, 1\n  %gep.src = getelementptr nusw { i8, i8, i32 }, ptr %src, i64 %iv.next\n  %l = load i8, ptr %gep.src, align 1\n  store i8 %l, ptr %dst, align 1\n  br label %loop.header\n\nexit:                                             ; preds = %loop.header\n  ret void\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Assertion `TheLoop->contains(BB) && \"Unknown block used\"' failed.",
+    "body": "To reproduce run opt with the test below (-passes=loop-load-elim)\n```\n; ModuleID = './reduced.ll'\nsource_filename = \"./reduced.ll\"\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine i32 @wombat() gc \"statepoint-example\" {\nbb:\n  br label %bb1\n\nbb1:                                              ; preds = %bb2, %bb\n  %phi = phi i64 [ 1, %bb ], [ %add, %bb2 ]\n  br label %bb2\n\nbb2:                                              ; preds = %bb1\n  %and = and i64 %phi, 1\n  %getelementptr = getelementptr nusw i32, ptr addrspace(1) null, i64 %and\n  store i32 0, ptr addrspace(1) %getelementptr, align 4\n  store i32 0, ptr addrspace(1) null, align 4\n  %add = add i64 %phi, 1\n  %icmp = icmp ult i64 %phi, 1\n  br i1 %icmp, label %bb3, label %bb1\n\nbb3:                                              ; preds = %bb2\n  %load = load i32, ptr addrspace(1) %getelementptr, align 4\n  ret i32 0\n}\n```\nReproducer:  https://godbolt.org/z/dfa7ar8dx\nStack dump:\n```\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=loop-load-elim <source>\n1.\tRunning pass \"function(loop-load-elim)\" on module \"<source>\"\n2.\tRunning pass \"loop-load-elim\" on function \"wombat\"\n #0 0x0000000005a7f2e8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a7f2e8)\n #1 0x0000000005a7c194 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000074b4a6642520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000074b4a66969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000074b4a6642476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000074b4a66287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000074b4a662871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x000074b4a6639e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000004f74f5f llvm::LoopAccessInfo::blockNeedsPredication(llvm::BasicBlock const*, llvm::Loop const*, llvm::DominatorTree const*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f74f5f)\n #9 0x0000000004f7522a isNoWrap(llvm::PredicatedScalarEvolution&, llvm::SCEVAddRecExpr const*, llvm::Value*, llvm::Type*, llvm::Loop const*, bool, llvm::DominatorTree const&, std::optional<long>) LoopAccessAnalysis.cpp:0:0\n#10 0x0000000004f7dd6b (anonymous namespace)::AccessAnalysis::createCheckForAccess(llvm::RuntimePointerChecking&, llvm::PointerIntPair<llvm::Value*, 1u, bool, llvm::PointerLikeTypeTraits<llvm::Value*>, llvm::PointerIntPairInfo<llvm::Value*, 1u, llvm::PointerLikeTypeTraits<llvm::Value*>>>, llvm::Type*, llvm::DenseMap<llvm::Value*, llvm::SCEV const*, llvm::DenseMapInfo<llvm::Value*, void>, llvm::detail::DenseMapPair<llvm::Value*, llvm::SCEV const*>> const&, llvm::DenseMap<llvm::Value*, unsigned int, llvm::DenseMapInfo<llvm::Value*, void>, llvm::detail::DenseMapPair<llvm::Value*, unsigned int>>&, llvm::Loop*, unsigned int&, unsigned int, bool) LoopAccessAnalysis.cpp:0:0\n#11 0x0000000004f85566 (anonymous namespace)::AccessAnalysis::canCheckPtrAtRT(llvm::RuntimePointerChecking&, llvm::Loop*, llvm::DenseMap<llvm::Value*, llvm::SCEV const*, llvm::DenseMapInfo<llvm::Value*, void>, llvm::detail::DenseMapPair<llvm::Value*, llvm::SCEV const*>> const&, llvm::Value*&, bool) (.part.0) LoopAccessAnalysis.cpp:0:0\n#12 0x0000000004f8a01e llvm::LoopAccessInfo::analyzeLoop(llvm::AAResults*, llvm::LoopInfo const*, llvm::TargetLibraryInfo const*, llvm::DominatorTree*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f8a01e)\n#13 0x0000000004f8ab82 llvm::LoopAccessInfo::LoopAccessInfo(llvm::Loop*, llvm::ScalarEvolution*, llvm::TargetTransformInfo const*, llvm::TargetLibraryInfo const*, llvm::AAResults*, llvm::DominatorTree*, llvm::LoopInfo*, llvm::AssumptionCache*, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f8ab82)\n#14 0x0000000004f8aeba llvm::LoopAccessInfoManager::getInfo(llvm::Loop&, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f8aeba)\n#15 0x00000000047bcc79 llvm::LoopLoadEliminationPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x47bcc79)\n#16 0x0000000003043cae llvm::detail::PassModel<llvm::Function, llvm::LoopLoadEliminationPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3043cae)\n#17 0x0000000005859c61 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5859c61)\n#18 0x0000000000f1ba3e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf1ba3e)\n#19 0x000000000585821a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x585821a)\n#20 0x000000000097ee5e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97ee5e)\n#21 0x0000000005857bd1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5857bd1)\n#22 0x0000000000989110 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x989110)\n#23 0x000000000097d038 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97d038)\n#24 0x000074b4a6629d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#25 0x000074b4a6629e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#26 0x0000000000973a35 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x973a35)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "loopoptim",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "TatyanaDoubts",
+        "body": "Hi Florian @fhahn \nIt looks like the fault commit for this crash is\ncommit af9a4263a1a209953a1d339ef781a954e31268ff\n\nAuthor: Florian Hahn <[flo@fhahn.com](mailto:flo@fhahn.com)>\n\nDate:   Tue Nov 4 17:08:12 2025 +0000\n\n \n\n    [LAA] Only use inbounds/nusw in isNoWrap if the GEP is dereferenced. (#161445)\n\n \n\n    Update isNoWrap to only use the inbounds/nusw flags from GEPs that are\n\n    guaranteed to be dereferenced on every iteration. This fixes a case\n\n    where we incorrectly determine no dependence.\n\n \n\n    I think the issue is isolated to code that evaluates the resulting\n\n    AddRec at BTC, just using it to compute the distance between accesses\n\n    should still be fine; if the access does not execute in a given\n\n    iteration, there's no dependence in that iteration. But isolating the\n\n    code is not straight-forward, so be conservative for now. The practical\n\n    impact should be very minor (only one loop changed across a corpus with\n\n    27k modules from large C/C++ workloads.\n\n \n\n    Fixes [[LAA] Missing dependence due to AddRec wrap \u00b7 Issue #160912 \u00b7 llvm/llvm-project](https://github.com/llvm/llvm-project/issues/160912) .\n\n \n\n    PR: [[LAA] Only use inbounds/nusw in isNoWrap if the GEP is dereferenced. by fhahn \u00b7 Pull Request #161445 \u00b7 llvm/llvm-project](https://github.com/llvm/llvm-project/pull/161445)"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

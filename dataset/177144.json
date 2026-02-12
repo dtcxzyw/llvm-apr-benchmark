@@ -1,0 +1,74 @@
+{
+  "bug_id": "177144",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/177144",
+  "bug_type": "crash",
+  "base_commit": "8e362e10c79a73438a8678dbb1f9be29b3c01cae",
+  "knowledge_cutoff": "2026-01-21T11:27:54Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/VectorCombine"
+  ],
+  "hints": {
+    "fix_commit": "4ec35a0b0e13f15ad38a2fa668004c892a365795",
+    "components": [
+      "VectorCombine"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VectorCombine.cpp": [
+        [
+          1655,
+          1661
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VectorCombine.cpp": [
+        "VectorCombine::foldSelectsFromBitcast"
+      ]
+    }
+  },
+  "patch": "commit 4ec35a0b0e13f15ad38a2fa668004c892a365795\nAuthor: Mitch Briles <mitchbriles@gmail.com>\nDate:   Wed Jan 28 08:13:50 2026 -0700\n\n    [VectorCombine] Fix crash when folding select of bitcast (#177183)\n    \n    Fixes #177144. Nits appreciated.\n    \n    The fold in question does the following transformation:\n    Before\n    ```\n    %bc = bitcast <4 x i32> %src to <16 x i8>\n    %e0 = extractelement <16 x i8> %bc, i32 0\n    %s0 = select i1 %cond, i8 %e0, i8 0\n    %e1 = extractelement <16 x i8> %bc, i32 1\n    %s1 = select i1 %cond, i8 %e1, i8 0\n    ...\n    ```\n    \n    After\n    ```\n    %sel = select i1 %cond, <4 x i32> %src, <4 x i32> zeroinitializer\n    %bc = bitcast <4 x i32> %sel to <16 x i8>\n    %e0 = extractelement <16 x i8> %bc, i32 0\n    %e1 = extractelement <16 x i8> %bc, i32 1\n    ...\n    ```\n    If every select shares the condition and has 0 in the false branch, the\n    bitcast can be replaced with a select between the original vector and\n    `zeroinitializer`, followed by a bitcast. Then each `select(cond,\n    extelt(...), 0)` can be replaced with `extelt(...)`.\n    The crash happens when the condition is defined after the original\n    bitcast, because the bitcast is replaced with the select + bitcast, and\n    now the select references a condition not yet defined.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VectorCombine.cpp b/llvm/lib/Transforms/Vectorize/VectorCombine.cpp\nindex fbb3b820c4f0..fb6fa247038a 100644\n--- a/llvm/lib/Transforms/Vectorize/VectorCombine.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VectorCombine.cpp\n@@ -1655,7 +1655,13 @@ bool VectorCombine::foldSelectsFromBitcast(Instruction &I) {\n     }\n \n     // Create the vector select and bitcast once for this condition.\n-    Builder.SetInsertPoint(BC->getNextNode());\n+    auto InsertPt = std::next(BC->getIterator());\n+\n+    if (auto *CondInst = dyn_cast<Instruction>(Cond))\n+      if (DT.dominates(BC, CondInst))\n+        InsertPt = std::next(CondInst->getIterator());\n+\n+    Builder.SetInsertPoint(InsertPt);\n     Value *VecSel =\n         Builder.CreateSelect(Cond, SrcVec, Constant::getNullValue(SrcVecTy));\n     Value *NewBC = Builder.CreateBitCast(VecSel, DstVecTy);\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/VectorCombine/AMDGPU/combine-scalar-selects.ll",
+      "commands": [
+        "opt -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -passes=vector-combine -S %s",
+        "opt -mtriple=amdgcn-amd-amdhsa -mcpu=gfx942 -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "fold_selects_from_bitcast_dominance_multiblock2",
+          "test_body": "define i8 @fold_selects_from_bitcast_dominance_multiblock2(<4 x i64> %v, i8 %a, i1 %flag) {\nentry:\n  %0 = bitcast <4 x i64> %v to <32 x i8>\n  br label %first\n\nfirst:                                            ; preds = %entry\n  %vecext1 = extractelement <32 x i8> %0, i64 0\n  %vecext2 = extractelement <32 x i8> %0, i64 7\n  %vecext3 = extractelement <32 x i8> %0, i64 1\n  %vecext4 = extractelement <32 x i8> %0, i64 8\n  %vecext5 = extractelement <32 x i8> %0, i64 9\n  br label %second\n\nsecond:                                           ; preds = %first\n  %cond = icmp eq i8 %a, 0\n  br i1 %flag, label %then, label %else\n\nthen:                                             ; preds = %second\n  %s1 = select i1 %cond, i8 %vecext1, i8 0\n  br label %combine\n\nelse:                                             ; preds = %second\n  %s2 = select i1 %cond, i8 %vecext2, i8 0\n  br label %combine\n\ncombine:                                          ; preds = %else, %then\n  %r1 = phi i8 [ %s1, %then ], [ %s2, %else ]\n  %s3 = select i1 %cond, i8 %vecext3, i8 0\n  %s4 = select i1 %cond, i8 %vecext4, i8 0\n  %s5 = select i1 %cond, i8 %vecext5, i8 0\n  %r2 = add i8 %r1, %s3\n  %r3 = add i8 %r2, %s4\n  %r4 = add i8 %r3, %s5\n  ret i8 %r4\n}\n"
+        },
+        {
+          "test_name": "fold_selects_from_bitcast_dominance_multiblock3",
+          "test_body": "define i8 @fold_selects_from_bitcast_dominance_multiblock3(<4 x i64> %v1, <4 x i64> %v2, i8 %a, i1 %flag1, i1 %flag2, i1 %flag3, i1 %flag4, i1 %cond2) {\nentry:\n  %0 = bitcast <4 x i64> %v1 to <32 x i8>\n  %1 = bitcast <4 x i64> %v2 to <32 x i8>\n  br label %first\n\nfirst:                                            ; preds = %entry\n  %vecext00 = extractelement <32 x i8> %0, i64 0\n  %vecext02 = extractelement <32 x i8> %0, i64 2\n  %vecext04 = extractelement <32 x i8> %0, i64 4\n  %vecext06 = extractelement <32 x i8> %0, i64 6\n  %vecext08 = extractelement <32 x i8> %0, i64 8\n  %vecext11 = extractelement <32 x i8> %1, i64 1\n  %vecext13 = extractelement <32 x i8> %1, i64 3\n  %vecext15 = extractelement <32 x i8> %1, i64 5\n  %vecext17 = extractelement <32 x i8> %1, i64 7\n  %vecext19 = extractelement <32 x i8> %1, i64 9\n  br label %t0\n\nt0:                                               ; preds = %first\n  %cond1 = icmp eq i8 %a, 0\n  br i1 %flag1, label %r0, label %t1\n\nt1:                                               ; preds = %t0\n  br i1 %flag2, label %r1, label %t2\n\nt2:                                               ; preds = %t1\n  br i1 %flag3, label %r2, label %t3\n\nt3:                                               ; preds = %t2\n  br i1 %flag4, label %r3, label %r4\n\nr0:                                               ; preds = %t0\n  %res0 = select i1 %cond1, i8 %vecext00, i8 0\n  %res1 = select i1 %cond2, i8 %vecext11, i8 0\n  %res01 = add i8 %res0, %res1\n  ret i8 %res01\n\nr1:                                               ; preds = %t1\n  %res2 = select i1 %cond1, i8 %vecext02, i8 0\n  %res3 = select i1 %cond2, i8 %vecext13, i8 0\n  %res23 = add i8 %res2, %res3\n  ret i8 %res23\n\nr2:                                               ; preds = %t2\n  %res4 = select i1 %cond1, i8 %vecext04, i8 0\n  %res5 = select i1 %cond2, i8 %vecext15, i8 0\n  %res45 = add i8 %res4, %res5\n  ret i8 %res45\n\nr3:                                               ; preds = %t3\n  %res6 = select i1 %cond1, i8 %vecext06, i8 0\n  %res7 = select i1 %cond2, i8 %vecext17, i8 0\n  %res67 = add i8 %res6, %res7\n  ret i8 %res67\n\nr4:                                               ; preds = %t3\n  %res8 = select i1 %cond1, i8 %vecext08, i8 0\n  %res9 = select i1 %cond2, i8 %vecext19, i8 0\n  %res89 = add i8 %res8, %res9\n  ret i8 %res89\n}\n"
+        },
+        {
+          "test_name": "fold_selects_from_bitcast_dominance_multiblock1",
+          "test_body": "define i8 @fold_selects_from_bitcast_dominance_multiblock1(<4 x i32> %src, i8 %a, i1 %flag1, i1 %flag2) {\n  %bc = bitcast <4 x i32> %src to <16 x i8>\n  %cond = icmp eq i8 %a, 0\n  br i1 %flag1, label %first, label %trampoline\n\ntrampoline:                                       ; preds = %0\n  br i1 %flag2, label %second, label %third\n\nfirst:                                            ; preds = %0\n  %e00 = extractelement <16 x i8> %bc, i32 0\n  %s00 = select i1 %cond, i8 %e00, i8 0\n  %e01 = extractelement <16 x i8> %bc, i32 2\n  %s01 = select i1 %cond, i8 %e01, i8 0\n  %s0 = add i8 %s00, %s01\n  br label %end\n\nsecond:                                           ; preds = %trampoline\n  %e10 = extractelement <16 x i8> %bc, i32 3\n  %s10 = select i1 %cond, i8 %e10, i8 0\n  %e11 = extractelement <16 x i8> %bc, i32 4\n  %s11 = select i1 %cond, i8 %e11, i8 0\n  %s1 = add i8 %s10, %s11\n  br label %end\n\nthird:                                            ; preds = %trampoline\n  %e20 = extractelement <16 x i8> %bc, i32 5\n  %s20 = select i1 %cond, i8 %e20, i8 0\n  %e21 = extractelement <16 x i8> %bc, i32 6\n  %s21 = select i1 %cond, i8 %e21, i8 0\n  %s2 = add i8 %s20, %s21\n  br label %end\n\nend:                                              ; preds = %third, %second, %first\n  %res = phi i8 [ %s0, %first ], [ %s1, %second ], [ %s2, %third ]\n  ret i8 %res\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[VectorCombine] LLVM ERROR: Broken module found, compilation aborted!",
+    "body": "Reproducer: https://godbolt.org/z/nWG51fEc1\nTestcase:\n```llvm\ndefine i8 @backsmith_pure_0() {\nentry:\n  %0 = bitcast <4 x i64> splat (i64 1) to <32 x i8>\n  %vecext56 = extractelement <32 x i8> %0, i64 0\n  %tobool.not = icmp eq i8 0, 0\n  %vecext36 = extractelement <32 x i8> %0, i64 0\n  %narrow = select i1 %tobool.not, i8 %vecext36, i8 0\n  %narrow8 = select i1 %tobool.not, i8 %vecext56, i8 0\n  ret i8 %narrow8\n}\n```\n\nDump:\n```\nInstruction does not dominate all uses!\n  %tobool.not = icmp eq i8 0, 0\n  %0 = select i1 %tobool.not, <4 x i64> splat (i64 1), <4 x i64> zeroinitializer\nLLVM ERROR: Broken module found, compilation aborted!\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S --passes=vector-combine <source>\n1.\tRunning pass \"verify\" on module \"<source>\"\n #0 0x0000000005a91978 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a91978)\n #1 0x0000000005a8e854 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000074e865242520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000074e8652969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000074e865242476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000074e8652287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000000000082b993 llvm::json::operator==(llvm::json::Value const&, llvm::json::Value const&) (.cold) JSON.cpp:0:0\n #7 0x00000000059c3d61 (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x59c3d61)\n #8 0x0000000005847298 (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5847298)\n #9 0x0000000000962fde llvm::detail::PassModel<llvm::Module, llvm::VerifierPass, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x962fde)\n#10 0x00000000058035e1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58035e1)\n#11 0x000000000096d1ca llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96d1ca)\n#12 0x0000000000961278 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x961278)\n#13 0x000074e865229d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#14 0x000074e865229e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#15 0x0000000000957ef5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x957ef5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "XChy",
+    "labels": [
+      "crash-on-valid",
+      "generated by fuzzer",
+      "llvm::vectorcombine"
+    ],
+    "comments": [
+      {
+        "author": "RKSimon",
+        "body": "```\nVECTORCOMBINE on backsmith_pure_0\nVC: Visiting:   %0 = bitcast <4 x i64> splat (i64 1) to <32 x i8>\nVC: Replacing:   %narrow = select i1 %tobool.not, i8 %vecext36, i8 0\n         With:   %3 = extractelement <32 x i8> %2, i64 0\nADD:   %narrow = extractelement <32 x i8> %2, i64 0\nVC: Erasing:   %3 = select i1 %tobool.not, i8 %vecext36, i8 0\nADD:   %1 = select i1 %tobool.not, <4 x i64> splat (i64 1), <4 x i64> zeroinitializer\nADD:   %narrow8 = select i1 %tobool.not, i8 %vecext56, i8 0\nADD:   %tobool.not = icmp eq i8 0, 0\nVC: Erased:   %vecext36 = extractelement <32 x i8> %0, i64 0\nVC: Replacing:   %narrow8 = select i1 %tobool.not, i8 %vecext56, i8 0\n         With:   %3 = extractelement <32 x i8> %2, i64 0\nADD:   ret i8 %narrow8\nADD:   %narrow8 = extractelement <32 x i8> %2, i64 0\nVC: Erasing:   %3 = select i1 %tobool.not, i8 %vecext56, i8 0\nVC: Erased:   %vecext56 = extractelement <32 x i8> %0, i64 0\nVC: Erased:   %0 = bitcast <4 x i64> splat (i64 1) to <32 x i8>\nVectorCombine: folded 2 selects into vector select\nVC: Visiting:   %tobool.not = icmp eq i8 0, 0\nVC: Visiting:   %narrow = extractelement <32 x i8> %1, i64 0\nVC: Visiting:   %narrow8 = extractelement <32 x i8> %1, i64 0\nVC: Visiting:   ret i8 %narrow8\nVC: Visiting:   %narrow8 = extractelement <32 x i8> %1, i64 0\nVC: Visiting:   ret i8 %narrow8\nVC: Visiting:   %tobool.not = icmp eq i8 0, 0\nVC: Visiting:   %0 = select i1 %tobool.not, <4 x i64> splat (i64 1), <4 x i64> zeroinitializer\nVC: Erasing:   %narrow = extractelement <32 x i8> %1, i64 0\nADD:   %narrow8 = extractelement <32 x i8> %1, i64 0\nADD:   %1 = bitcast <4 x i64> %0 to <32 x i8>\nVC: Visiting:   %1 = bitcast <4 x i64> %0 to <32 x i8>\nVC: Visiting:   %narrow8 = extractelement <32 x i8> %1, i64 0\nInstruction does not dominate all uses!\n  %tobool.not = icmp eq i8 0, 0\n  %0 = select i1 %tobool.not, <4 x i64> splat (i64 1), <4 x i64> zeroinitializer\n```"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

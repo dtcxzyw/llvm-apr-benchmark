@@ -1,0 +1,59 @@
+{
+  "bug_id": "165014",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/165014",
+  "bug_type": "crash",
+  "base_commit": "90489adf7a9944f53e7be411bab92174d9e069d1",
+  "knowledge_cutoff": "2025-10-24T17:04:27Z",
+  "lit_test_dir": [
+    "llvm/test/Analysis/DependenceAnalysis"
+  ],
+  "hints": {
+    "fix_commit": "616f3b5aa118e95089679fd2a2b79fe769bbaf9a",
+    "components": [
+      "DependenceAnalysis"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Analysis/DependenceAnalysis.cpp": [
+        [
+          1131,
+          1139
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Analysis/DependenceAnalysis.cpp": [
+        "DependenceInfo::haveSameSD"
+      ]
+    }
+  },
+  "patch": "commit 616f3b5aa118e95089679fd2a2b79fe769bbaf9a\nAuthor: Shimin Cui <scui@ca.ibm.com>\nDate:   Mon Oct 27 15:17:51 2025 -0400\n\n    [DA] Fix crash when two loops have different type sizes of becount  (#165021)\n    \n    The type sizes of backedge taken counts for two loops can be different\n    and this is to fix the crash in haveSameSD\n    (https://github.com/llvm/llvm-project/issues/165014).\n    \n    ---------\n    \n    Co-authored-by: Shimin Cui <scui@xlperflep9.rtp.raleigh.ibm.com>\n\ndiff --git a/llvm/lib/Analysis/DependenceAnalysis.cpp b/llvm/lib/Analysis/DependenceAnalysis.cpp\nindex a572eefddd20..84ee8c0bf3e1 100644\n--- a/llvm/lib/Analysis/DependenceAnalysis.cpp\n+++ b/llvm/lib/Analysis/DependenceAnalysis.cpp\n@@ -1131,9 +1131,14 @@ bool DependenceInfo::haveSameSD(const Loop *SrcLoop,\n   if (SE->hasLoopInvariantBackedgeTakenCount(DstLoop))\n     DstUP = SE->getBackedgeTakenCount(DstLoop);\n \n-  if (SrcUB != nullptr && DstUP != nullptr &&\n-      SE->isKnownPredicate(ICmpInst::ICMP_EQ, SrcUB, DstUP))\n-    return true;\n+  if (SrcUB != nullptr && DstUP != nullptr) {\n+    Type *WiderType = SE->getWiderType(SrcUB->getType(), DstUP->getType());\n+    SrcUB = SE->getNoopOrZeroExtend(SrcUB, WiderType);\n+    DstUP = SE->getNoopOrZeroExtend(DstUP, WiderType);\n+\n+    if (SE->isKnownPredicate(ICmpInst::ICMP_EQ, SrcUB, DstUP))\n+      return true;\n+  }\n \n   return false;\n }\n",
+  "tests": [
+    {
+      "file": "llvm/test/Analysis/DependenceAnalysis/same-sd-for-diff-becount-type-loops.ll",
+      "commands": [
+        "opt < %s -disable-output \"-passes=print<da>\" -aa-pipeline=basic-aa 2>&1"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine void @f1() {\n;\nentry:\n  br label %for.1.header\n\nfor.1.header:                                     ; preds = %for.2.end, %entry\n  br label %for.1.body\n\nfor.1.body:                                       ; preds = %for.1.body, %whiledo\n  %0 = phi i32 [ 0, %for.1.header ], [ 1, %for.1.body ]\n  store i32 0, ptr null, align 4\n  %1 = icmp ult i32 %0, 1\n  br i1 %1, label %for.1.body, label %for.1.end\n\nfor.1.end:                                        ; preds = %for.1.body\n  br label %for.2.body\n\nfor.2.body:                                       ; preds = %for.2.body, %for.1.end\n  %2 = load i32, ptr null, align 4\n  br i1 false, label %for.2.body, label %exit\n\nexit:                                             ; preds = %for.2.body\n  ret void\n}\n\ndefine void @f2() {\n;\nentry:\n  br label %for.1.header\n\nfor.1.header:                                     ; preds = %for.2.end, %entry\n  br label %for.1.body\n\nfor.1.body:                                       ; preds = %for.1.body, %whiledo\n  %0 = phi i32 [ 0, %for.1.header ], [ 1, %for.1.body ]\n  store i32 0, ptr null, align 4\n  %1 = icmp ult i32 %0, 1\n  br i1 %1, label %for.1.body, label %for.1.end\n\nfor.1.end:                                        ; preds = %for.1.body\n  br label %for.2.body\n\nfor.2.body:                                       ; preds = %for.2.body, %for.1.end\n  %2 = phi i64 [ 0, %for.1.end ], [ %4, %for.2.body ]\n  %3 = load i32, ptr null, align 4\n  %4 = add nuw nsw i64 %2, 1\n  %5 = icmp ult i64 %4, 2\n  br i1 %5, label %for.2.body, label %exit\n\nexit:                                             ; preds = %for.2.body\n  ret void\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[DA] Assertion `BitWidth == RHS.BitWidth && \"Comparison requires equal bit widths\"'",
+    "body": "test case:\n\n```\ndefine void @f1() {\nentry:\n  br label %for.1.header\n\nfor.1.header:                                     ; preds = %for.2.end, %entry\n  br label %for.1.body\n\nfor.1.body:                                       ; preds = %for.1.body, %whiledo\n  %0 = phi i32 [ 0, %for.1.header ], [ 1, %for.1.body ]\n  store i32 0, ptr null, align 4\n  %1 = icmp ult i32 %0, 1\n  br i1 %1, label %for.1.body, label %for.1.end\n\nfor.1.end:                                        ; preds = %for.1.body\n  br label %for.2.body\n\nfor.2.body:                                       ; preds = %for.2.body, %for.1.end\n  %2 = load i32, ptr null, align 4\n  br i1 false, label %for.2.body, label %exit\n\nexit:                                             ; preds = %for.2.body\n  ret void\n}\n```\n\nCompiled with:\n\n`opt -disable-output \"-passes=print<da>\" -aa-pipeline=basic-aa`\n\nassertion:\n\n```\nopt: /home/scui/llvm/dev/llvm-project/llvm/include/llvm/ADT/APInt.h:1057: bool llvm::APInt::operator==(const APInt &) const: Assertion `BitWidth == RHS.BitWidth && \"Comparison requires equal bit widths\"' failed.\nPLEASE submit a bug report to https://ibm.biz/openxlcpp-support and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: opt -disable-output -passes=print<da> -aa-pipeline=basic-aa t.ll\n1.\tRunning pass \"function(print<da>)\" on module \"t.ll\"\n2.\tRunning pass \"print<da>\" on function \"f1\"\nStack dump without symbol names (ensure you have llvm-symbolizer in your PATH or set the environment var `LLVM_SYMBOLIZER_PATH` to point to it):\n0  opt               0x000015d26eb9268c llvm::sys::PrintStackTrace(llvm::raw_ostream&, int, void*) + 124\n1  opt               0x000015d26eb92e34\n2  opt               0x000015d26eb8efbc llvm::sys::RunSignalHandlers() + 284\n3  opt               0x000015d26eb93b4c\n4  linux-vdso64.so.1 0x00007afbe77b0444 __kernel_sigtramp_rt64 + 0\n5  libc.so.6         0x00007afbe6f455fc pthread_kill + 396\n6  libc.so.6         0x00007afbe6edbd5c gsignal + 44\n7  libc.so.6         0x00007afbe6eb645c abort + 340\n8  libc.so.6         0x00007afbe6ecd824\n9  libc.so.6         0x00007afbe6ecd8c4 __assert_fail + 100\n10 opt               0x000015d26edf0ed8 llvm::ICmpInst::compare(llvm::APInt const&, llvm::APInt const&, llvm::CmpInst::Predicate) + 424\n11 opt               0x000015d26f59f858 llvm::ScalarEvolution::SimplifyICmpOperands(llvm::CmpPredicate&, llvm::SCEV const*&, llvm::SCEV const*&, unsigned int) + 1240\n12 opt               0x000015d26f5a8c00 llvm::ScalarEvolution::isKnownPredicate(llvm::CmpPredicate, llvm::SCEV const*, llvm::SCEV const*) + 80\n13 opt               0x000015d26fbdb8d0 llvm::DependenceInfo::haveSameSD(llvm::Loop const*, llvm::Loop const*) const + 336\n14 opt               0x000015d26fbdbbf0 llvm::DependenceInfo::establishNestingLevels(llvm::Instruction const*, llvm::Instruction const*) + 688\n15 opt               0x000015d26fbf4184 llvm::DependenceInfo::depends(llvm::Instruction*, llvm::Instruction*, bool) + 3236\n16 opt               0x000015d26fbd7130\n17 opt               0x000015d26fbd7940 llvm::DependenceAnalysisPrinterPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) + 576\n18 opt               0x000015d2711803cc\n19 opt               0x000015d26eebb360 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) + 480\n20 opt               0x000015d270653d7c\n21 opt               0x000015d26eec1084 llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) + 580\n22 opt               0x000015d2705d79ac\n23 opt               0x000015d26eeb9b20 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) + 480\n24 opt               0x000015d2705cb81c llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) + 16892\n25 opt               0x000015d26eb52fc8 optMain + 8776\n26 opt               0x000015d26eb4b2c0 main + 32\n27 libc.so.6         0x00007afbe6eb6ca4\n28 libc.so.6         0x00007afbe6eb6eec __libc_start_main + 428\n```",
+    "author": "scui-ibm",
+    "labels": [
+      "crash",
+      "llvm:analysis"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

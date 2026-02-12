@@ -1,0 +1,73 @@
+{
+  "bug_id": "174622",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/174622",
+  "bug_type": "crash",
+  "base_commit": "c6db8f4229d70169949430185e156fb2e6e4150e",
+  "knowledge_cutoff": "2026-01-06T16:57:34Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "2f7e218017db69454ea84e1849fcb9a11b1f7fef",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VPlanUtils.cpp": [
+        [
+          82,
+          87
+        ],
+        [
+          140,
+          145
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VPlanUtils.cpp": [
+        "vputils::getSCEVExprForVPValue",
+        "vputils::isHeaderMask"
+      ]
+    }
+  },
+  "patch": "commit 2f7e218017db69454ea84e1849fcb9a11b1f7fef\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Sun Jan 11 20:51:12 2026 +0000\n\n    [VPlan] Add missing sext(sub) SCEV fold to getSCEVExprForVPValue.\n    \n    SCEV has a manual fold when doing SCEV construction from IR, that is not\n    integrated in the regular SCEV construction functions. Mirror the\n    behavior in getSCEVExprForVPValue, to match results when constructing\n    SCEVs from IR.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/174622.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanUtils.cpp b/llvm/lib/Transforms/Vectorize/VPlanUtils.cpp\nindex ae36df06bb81..09b77297a151 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanUtils.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlanUtils.cpp\n@@ -82,6 +82,61 @@ bool vputils::isHeaderMask(const VPValue *V, const VPlan &Plan) {\n          B == Plan.getBackedgeTakenCount();\n }\n \n+/// Returns true if \\p R propagates poison from any operand to its result.\n+static bool propagatesPoisonFromRecipeOp(const VPRecipeBase *R) {\n+  return TypeSwitch<const VPRecipeBase *, bool>(R)\n+      .Case<VPWidenGEPRecipe, VPWidenCastRecipe>(\n+          [](const VPRecipeBase *) { return true; })\n+      .Case<VPReplicateRecipe>([](const VPReplicateRecipe *Rep) {\n+        // GEP and casts propagate poison from all operands.\n+        unsigned Opcode = Rep->getOpcode();\n+        return Opcode == Instruction::GetElementPtr ||\n+               Instruction::isCast(Opcode);\n+      })\n+      .Default([](const VPRecipeBase *) { return false; });\n+}\n+\n+/// Returns true if \\p V being poison is guaranteed to trigger UB because it\n+/// propagates to the address of a memory recipe.\n+static bool poisonGuaranteesUB(const VPValue *V) {\n+  SmallPtrSet<const VPValue *, 8> Visited;\n+  SmallVector<const VPValue *, 16> Worklist;\n+\n+  Worklist.push_back(V);\n+\n+  while (!Worklist.empty()) {\n+    const VPValue *Current = Worklist.pop_back_val();\n+    if (!Visited.insert(Current).second)\n+      continue;\n+\n+    for (VPUser *U : Current->users()) {\n+      // Check if Current is used as an address operand for load/store.\n+      if (auto *MemR = dyn_cast<VPWidenMemoryRecipe>(U)) {\n+        if (MemR->getAddr() == Current)\n+          return true;\n+        continue;\n+      }\n+      if (auto *Rep = dyn_cast<VPReplicateRecipe>(U)) {\n+        unsigned Opcode = Rep->getOpcode();\n+        if ((Opcode == Instruction::Load && Rep->getOperand(0) == Current) ||\n+            (Opcode == Instruction::Store && Rep->getOperand(1) == Current))\n+          return true;\n+      }\n+\n+      // Check if poison propagates through this recipe to any of its users.\n+      auto *R = cast<VPRecipeBase>(U);\n+      for (const VPValue *Op : R->operands()) {\n+        if (Op == Current && propagatesPoisonFromRecipeOp(R)) {\n+          Worklist.push_back(R->getVPSingleValue());\n+          break;\n+        }\n+      }\n+    }\n+  }\n+\n+  return false;\n+}\n+\n const SCEV *vputils::getSCEVExprForVPValue(const VPValue *V,\n                                            PredicatedScalarEvolution &PSE,\n                                            const Loop *L) {\n@@ -140,6 +195,20 @@ const SCEV *vputils::getSCEVExprForVPValue(const VPValue *V,\n   if (match(V, m_SExt(m_VPValue(LHSVal)))) {\n     const VPlan *Plan = V->getDefiningRecipe()->getParent()->getPlan();\n     Type *DestTy = VPTypeAnalysis(*Plan).inferScalarType(V);\n+\n+    // Mirror SCEV's createSCEV handling for sext(sub nsw): push sign extension\n+    // onto the operands before computing the subtraction.\n+    VPValue *SubLHS, *SubRHS;\n+    auto *SubR = dyn_cast<VPRecipeWithIRFlags>(LHSVal);\n+    if (match(LHSVal, m_Sub(m_VPValue(SubLHS), m_VPValue(SubRHS))) && SubR &&\n+        SubR->hasNoSignedWrap() && poisonGuaranteesUB(LHSVal)) {\n+      const SCEV *V1 = getSCEVExprForVPValue(SubLHS, PSE, L);\n+      const SCEV *V2 = getSCEVExprForVPValue(SubRHS, PSE, L);\n+      if (!isa<SCEVCouldNotCompute>(V1) && !isa<SCEVCouldNotCompute>(V2))\n+        return SE.getMinusSCEV(SE.getSignExtendExpr(V1, DestTy),\n+                               SE.getSignExtendExpr(V2, DestTy), SCEV::FlagNSW);\n+    }\n+\n     return CreateSCEV({LHSVal}, [&](ArrayRef<const SCEV *> Ops) {\n       return SE.getSignExtendExpr(Ops[0], DestTy);\n     });\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/AArch64/induction-costs.ll",
+      "commands": [
+        "opt -p loop-vectorize -mtriple=arm64-apple-macosx -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "sext_sub_nsw_for_address",
+          "test_body": "target datalayout = \"e-m:o-i64:64-i128:128-n32:64-S128\"\n\ndefine void @sext_sub_nsw_for_address(ptr %base, i64 %n, ptr %src) #0 {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %count = phi i64 [ %n, %entry ], [ %count.next, %loop ]\n  %iv.i32 = phi i32 [ 0, %entry ], [ %iv.i32.next, %loop ]\n  %gep.1 = getelementptr double, ptr %src, i64 %iv\n  %gep.2 = getelementptr i8, ptr %gep.1, i64 -8\n  store double 0.000000e+00, ptr %gep.2, align 8\n  %neg = sub nsw i32 0, %iv.i32\n  %neg.ext = sext i32 %neg to i64\n  %gep.3 = getelementptr double, ptr %base, i64 %neg.ext\n  %l = load double, ptr %gep.3, align 8\n  store double %l, ptr %gep.1, align 8\n  %iv.i32.next = add i32 %iv.i32, 2\n  %iv.next = add i64 %iv, 2\n  %count.next = add i64 %count, -1\n  %ec = icmp sgt i64 %count, 0\n  br i1 %ec, label %loop, label %exit\n\nexit:                                             ; preds = %loop\n  ret void\n}\n\nattributes #0 = { \"target-cpu\"=\"neoverse-v2\" }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LV]VPlan cost model and legacy cost model disagreed",
+    "body": "https://godbolt.org/z/Gr8nEMWK9\n\nLooks like it started crashing after `Fri Dec 26 13:38:14 2025  | LLVM   | 60e5b86052ca1103499e87ee32c8228c71b6c753 | [VPlan] Support extends and truncs in getSCEVExprForVPValue. (NFCI)`\n@fhahn ",
+    "author": "alexey-bataev",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid"
+    ],
+    "comments": [
+      {
+        "author": "alexey-bataev",
+        "body": "Ping"
+      },
+      {
+        "author": "fhahn",
+        "body": "Thanks will take a look"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": false
+  },
+  "verified": true
+}

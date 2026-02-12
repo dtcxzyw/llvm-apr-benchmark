@@ -1,0 +1,64 @@
+{
+  "bug_id": "175229",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/175229",
+  "bug_type": "crash",
+  "base_commit": "12cccb96de36bdef7bbdd7b77543a9063f7c0ecc",
+  "knowledge_cutoff": "2026-01-09T19:45:23Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "d620ea7657814943748e2368004fad2be44c7272",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        [
+          7286,
+          7292
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        "findRecipe"
+      ]
+    }
+  },
+  "patch": "commit d620ea7657814943748e2368004fad2be44c7272\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Sun Jan 11 11:19:30 2026 +0000\n\n    [LV] Handle live-ins in findRecipe.\n    \n    Skip live-ins in findRecipe to prevent a crash for cases with degenerate\n    reductions (where the backedge value is a live-in). Such reductions\n    should be removed, but this requires further changes.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/175229.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\nindex 95fbfddffb29..cdc6ecfa21bc 100644\n--- a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n+++ b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n@@ -7286,7 +7286,9 @@ static VPRecipeBase *findRecipe(VPValue *Start, PredT Pred) {\n   for (unsigned I = 0; I != Worklist.size(); ++I) {\n     VPValue *Cur = Worklist[I];\n     auto *R = Cur->getDefiningRecipe();\n-    if (Pred(R))\n+    // TODO: Skip live-ins once no degenerate reductions (ones with constant\n+    // backedge values) are generated.\n+    if (R && Pred(R))\n       return R;\n     for (VPUser *U : Cur->users()) {\n       for (VPValue *V : cast<VPRecipeBase>(U)->definedValues())\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/epilog-vectorization-reductions.ll",
+      "commands": [
+        "opt -passes=loop-vectorize -force-vector-width=4 -enable-epilogue-vectorization -epilogue-vectorization-force-VF=4 -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "reduction_with_const_or",
+          "test_body": "define i1 @reduction_with_const_or(ptr %A, i8 %n) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %or.red = phi i1 [ false, %entry ], [ %or.next, %loop ]\n  %iv = phi i8 [ 0, %entry ], [ %iv.next, %loop ]\n  %iv.ext = zext i8 %iv to i64\n  %gep = getelementptr inbounds i64, ptr %A, i64 %iv.ext\n  store i64 %iv.ext, ptr %gep, align 8\n  %or.next = or i1 %or.red, true\n  %iv.next = add i8 %iv, 1\n  %exitcond = icmp eq i8 %iv, %n\n  br i1 %exitcond, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  ret i1 %or.next\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LoopVectorizePass] Assertion `detail::isPresent(Val) && \"dyn_cast on a non-existent value\"' failed.",
+    "body": "Very recent regression. Not bisected yet.\n\nhttps://godbolt.org/z/eMaroco7z\n\n```\ntarget triple = \"x86_64-unknown-unknown\"\n\ndefine i1 @_Z1nv(i8 %0) {\nentry:\n  br label %for.body4\n\nfor.cond.cleanup.loopexit:                        ; preds = %for.body4\n  ret i1 %tobool8\n\nfor.body4:                                        ; preds = %for.body4, %entry\n  %h.028 = phi i1 [ %tobool8, %for.body4 ], [ false, %entry ]\n  %i.027 = phi i8 [ %inc, %for.body4 ], [ 0, %entry ]\n  %tobool8 = or i1 %h.028, true\n  %inc = add i8 %i.027, 1\n  %exitcond.not = icmp eq i8 %i.027, %0\n  br i1 %exitcond.not, label %for.cond.cleanup.loopexit, label %for.body4\n\n; uselistorder directives\n  uselistorder i1 %tobool8, { 1, 0 }\n}\n```\n\n```\nopt: /root/llvm-project/llvm/include/llvm/Support/Casting.h:656: decltype(auto) llvm::dyn_cast(From*) [with To = llvm::VPInstruction; From = llvm::VPRecipeBase]: Assertion `detail::isPresent(Val) && \"dyn_cast on a non-existent value\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S --passes=loop-vectorize <source>\n1.\tRunning pass \"function(loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>)\" on module \"<source>\"\n2.\tRunning pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"_Z1nv\"\n #0 0x0000000005a74d58 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a74d58)\n #1 0x0000000005a71c04 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007def0e042520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007def0e0969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007def0e042476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007def0e0287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007def0e02871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007def0e039e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x00000000037526f4 preparePlanForEpilogueVectorLoop(llvm::VPlan&, llvm::Loop*, llvm::DenseMap<llvm::SCEV const*, llvm::Value*, llvm::DenseMapInfo<llvm::SCEV const*, void>, llvm::detail::DenseMapPair<llvm::SCEV const*, llvm::Value*>> const&, llvm::EpilogueLoopVectorizationInfo&, llvm::LoopVectorizationCostModel&, llvm::ScalarEvolution&) LoopVectorize.cpp:0:0\n #9 0x000000000375aefa llvm::LoopVectorizePass::processLoop(llvm::Loop*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x375aefa)\n#10 0x000000000375bd20 llvm::LoopVectorizePass::runImpl(llvm::Function&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x375bd20)\n#11 0x000000000375c4ad llvm::LoopVectorizePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x375c4ad)\n#12 0x000000000303396e llvm::detail::PassModel<llvm::Function, llvm::LoopVectorizePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x303396e)\n#13 0x000000000584ee81 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x584ee81)\n#14 0x0000000000f1e11e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf1e11e)\n#15 0x000000000584d43a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x584d43a)\n#16 0x000000000097f47e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97f47e)\n#17 0x000000000584cdf1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x584cdf1)\n#18 0x0000000000989730 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x989730)\n#19 0x000000000097d658 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97d658)\n#20 0x00007def0e029d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#21 0x00007def0e029e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#22 0x0000000000974055 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x974055)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```\n",
+    "author": "gregbedwell",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid"
+    ],
+    "comments": [
+      {
+        "author": "gregbedwell",
+        "body": "Bisects to 4998280c3f112facece8a7ce10f2788c800b7cba"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

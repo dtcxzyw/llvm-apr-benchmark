@@ -1,0 +1,59 @@
+{
+  "bug_id": "174599",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/174599",
+  "bug_type": "crash",
+  "base_commit": "d64ecd163f731c98f3c3e0c29b2c9173f58060b8",
+  "knowledge_cutoff": "2026-01-06T14:42:55Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "39456e4226f41213a603f75a363b6bad9f7caf39",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          21808,
+          21815
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "BoUpSLP::BlockScheduling::tryScheduleBundle"
+      ]
+    }
+  },
+  "patch": "commit 39456e4226f41213a603f75a363b6bad9f7caf39\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Wed Jan 7 08:57:02 2026 -0800\n\n    [SLP]Do not increment dep count for non-schedulable nodes with non-schedulable parents\n    \n    If the node is non-scedulable, all instructions are used outside only\n    and parent is non-schedulable non-phi node, the dependency count should be\n    increased for such nodes\n    \n    Fixes #174599\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex 5bd274a27549..cc78d0189066 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -21808,8 +21808,15 @@ BoUpSLP::BlockScheduling::tryScheduleBundle(ArrayRef<Value *> VL, BoUpSLP *SLP,\n     }\n     if (!ControlDependentMembers.empty()) {\n       ScheduleBundle Invalid = ScheduleBundle::invalid();\n+      bool IsNonSchedulableWithParentPhiNode =\n+          EI.UserTE->hasState() &&\n+          EI.UserTE->State != TreeEntry::SplitVectorize &&\n+          EI.UserTE->getOpcode() == Instruction::PHI;\n       calculateDependencies(Invalid, /*InsertInReadyList=*/true, SLP,\n-                            ControlDependentMembers, /*NonSchedulable=*/true);\n+                            ControlDependentMembers,\n+                            /*NonSchedulable=*/HasCopyables ||\n+                                IsNonSchedulableWithParentPhiNode ||\n+                                !all_of(VL, isUsedOutsideBlock));\n     }\n     return nullptr;\n   }\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/non-schedulable-node-with-non-schedulable-parent.ll",
+      "commands": [
+        "opt -passes=slp-vectorizer -S -mtriple=x86_64 < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine float @test() {\n;\nbb:\n  %fadd = fadd float 0.000000e+00, 0.000000e+00\n  %load = load float, ptr null, align 4\n  %fadd1 = fadd float %fadd, %load\n  %fadd2 = fadd float 0.000000e+00, 0.000000e+00\n  %fmul = fmul float 0.000000e+00, 0.000000e+00\n  %fmul3 = fmul float 0.000000e+00, 0.000000e+00\n  %fadd4 = fadd float %fmul3, 0.000000e+00\n  br i1 false, label %bb5, label %bb6\n\nbb5:\n  br label %bb8\n\nbb6:\n  %fdiv = fdiv float %fadd1, 0.000000e+00\n  %fdiv7 = fdiv float %fadd2, 0.000000e+00\n  br label %bb8\n\nbb8:\n  %phi = phi float [ 0.000000e+00, %bb5 ], [ %fdiv7, %bb6 ]\n  %phi9 = phi float [ %fmul, %bb5 ], [ 0.000000e+00, %bb6 ]\n  %phi10 = phi float [ %fadd4, %bb5 ], [ %load, %bb6 ]\n  %phi11 = phi float [ %fadd1, %bb5 ], [ %fdiv, %bb6 ]\n  ret float %phi11\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Assertion `all_of(Bundles, [](const ScheduleBundle *Bundle) { return Bundle->isScheduled(); }) && \"must be scheduled at this point\"' failed.",
+    "body": "Not bisected yet, but a recent regression (at least in terms of the full C++ level test-case that the following is reduced from):\n\nhttps://godbolt.org/z/qcMY4W9PP\n\n```\ndefine float @widget() {\nbb:\n  %fadd = fadd float 0.000000e+00, 0.000000e+00\n  %load = load float, ptr null, align 4\n  %fadd1 = fadd float %fadd, %load\n  %fadd2 = fadd float 0.000000e+00, 0.000000e+00\n  %fmul = fmul float 0.000000e+00, 0.000000e+00\n  %fmul3 = fmul float 0.000000e+00, 0.000000e+00\n  %fadd4 = fadd float %fmul3, 0.000000e+00\n  br i1 false, label %bb5, label %bb6\n\nbb5:                                              ; preds = %bb\n  br label %bb8\n\nbb6:                                              ; preds = %bb\n  %fdiv = fdiv float %fadd1, 0.000000e+00\n  %fdiv7 = fdiv float %fadd2, 0.000000e+00\n  br label %bb8\n\nbb8:                                              ; preds = %bb6, %bb5\n  %phi = phi float [ 0.000000e+00, %bb5 ], [ %fdiv7, %bb6 ]\n  %phi9 = phi float [ %fmul, %bb5 ], [ 0.000000e+00, %bb6 ]\n  %phi10 = phi float [ %fadd4, %bb5 ], [ %load, %bb6 ]\n  %phi11 = phi float [ %fadd1, %bb5 ], [ %fdiv, %bb6 ]\n  ret float %phi11\n}\n```\n\n\n```\nopt: /root/llvm-project/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp:22650: void llvm::slpvectorizer::BoUpSLP::scheduleBlock(const llvm::slpvectorizer::BoUpSLP&, llvm::slpvectorizer::BoUpSLP::BlockScheduling*): Assertion `all_of(Bundles, [](const ScheduleBundle *Bundle) { return Bundle->isScheduled(); }) && \"must be scheduled at this point\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S --passes=slp-vectorizer <source>\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"<source>\"\n2.\tRunning pass \"slp-vectorizer\" on function \"widget\"\n #0 0x0000000005a7a2e8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a7a2e8)\n #1 0x0000000005a77194 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000070bc0b842520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000070bc0b8969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000070bc0b842476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000070bc0b8287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000070bc0b82871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x000070bc0b839e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x000000000380c32a llvm::slpvectorizer::BoUpSLP::scheduleBlock(llvm::slpvectorizer::BoUpSLP const&, llvm::slpvectorizer::BoUpSLP::BlockScheduling*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x380c32a)\n #9 0x000000000386090a llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::SmallDenseSet<llvm::Value*, 4u, llvm::DenseMapInfo<llvm::Value*, void>> const&, llvm::Instruction*, llvm::ArrayRef<std::tuple<llvm::Value*, unsigned int, bool>>) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x386090a)\n#10 0x0000000003864e34 llvm::slpvectorizer::BoUpSLP::vectorizeTree() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3864e34)\n#11 0x0000000003885b24 llvm::SLPVectorizerPass::tryToVectorizeList(llvm::ArrayRef<llvm::Value*>, llvm::slpvectorizer::BoUpSLP&, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3885b24)\n#12 0x000000000388a41c bool tryToVectorizeSequence<llvm::Value>(llvm::SmallVectorImpl<llvm::Value*>&, llvm::function_ref<bool (llvm::Value*, llvm::Value*)>, llvm::function_ref<bool (llvm::ArrayRef<llvm::Value*>, llvm::Value*)>, llvm::function_ref<bool (llvm::ArrayRef<llvm::Value*>, bool)>, bool, llvm::slpvectorizer::BoUpSLP&) (.constprop.0) SLPVectorizer.cpp:0:0\n#13 0x000000000388b6ac llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x388b6ac)\n#14 0x00000000038935b6 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\n#15 0x00000000038941cb llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x38941cb)\n#16 0x000000000304051e llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x304051e)\n#17 0x0000000005854c81 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5854c81)\n#18 0x0000000000f1b1de llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf1b1de)\n#19 0x000000000585323a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x585323a)\n#20 0x000000000097edfe llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97edfe)\n#21 0x0000000005852bf1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5852bf1)\n#22 0x00000000009890b0 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9890b0)\n#23 0x000000000097cfd8 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97cfd8)\n#24 0x000070bc0b829d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#25 0x000070bc0b829e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#26 0x00000000009739d5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9739d5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "gregbedwell",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash-on-valid"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

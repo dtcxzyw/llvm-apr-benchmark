@@ -1,0 +1,72 @@
+{
+  "bug_id": "174773",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/174773",
+  "bug_type": "crash",
+  "base_commit": "79fd11c9bbeb423b8d2eb5b2fb832f25ef9e080b",
+  "knowledge_cutoff": "2026-01-07T14:15:09Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "9fb45c5959fdbf1f63babd1f32ad298cab9e27af",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          13445,
+          13450
+        ],
+        [
+          13457,
+          13463
+        ],
+        [
+          13543,
+          13548
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "BoUpSLP::transformNodes"
+      ]
+    }
+  },
+  "patch": "commit 9fb45c5959fdbf1f63babd1f32ad298cab9e27af\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Thu Jan 8 06:13:44 2026 -0800\n\n    [SLP]Do not generate extractelement subnodes with the same indeces\n    \n    The compiler should not generate subvectors with the same extractelement\n    instructions, it may cause a crash and leads to inefficient\n    vectorization.\n    \n    Fixes #174773\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex cc78d0189066..a5117f09a778 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -13445,6 +13445,7 @@ void BoUpSLP::transformNodes() {\n       // insertvector instructions.\n       unsigned StartIdx = 0;\n       unsigned End = VL.size();\n+      SmallBitVector Processed(End);\n       for (unsigned VF = getFloorFullVectorNumberOfElements(\n                *TTI, VL.front()->getType(), VL.size() - 1);\n            VF >= MinVF; VF = getFloorFullVectorNumberOfElements(\n@@ -13457,7 +13458,7 @@ void BoUpSLP::transformNodes() {\n           ArrayRef<Value *> Slice = VL.slice(Cnt, VF);\n           // If any instruction is vectorized already - do not try again.\n           // Reuse the existing node, if it fully matches the slice.\n-          if (isVectorized(Slice.front()) &&\n+          if ((Processed.test(Cnt) || isVectorized(Slice.front())) &&\n               !getSameValuesTreeEntry(Slice.front(), Slice, /*SameVF=*/true))\n             continue;\n           // Constant already handled effectively - skip.\n@@ -13543,6 +13544,7 @@ void BoUpSLP::transformNodes() {\n           continue;\n         auto AddCombinedNode = [&](unsigned Idx, unsigned Cnt, unsigned Sz) {\n           E.CombinedEntriesWithIndices.emplace_back(Idx, Cnt);\n+          Processed.set(Cnt, Cnt + Sz);\n           if (StartIdx == Cnt)\n             StartIdx = Cnt + Sz;\n           if (End == Cnt + Sz)\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/extractelements-subnodes-same-index.ll",
+      "commands": [
+        "opt -S --passes=slp-vectorizer -mtriple=x86_64-unknown-linux-gnu -slp-threshold=-99999 -mattr=+avx < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine i32 @test() {\n;\nbb:\n  %call = call i32 @llvm.ctpop.i32(i32 0)\n  %call1 = call i32 @llvm.ctpop.i32(i32 0)\n  %load = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 32), align 4\n  store i32 %load, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 32), align 4\n  %or = or i32 %call, %call1\n  %call2 = call i32 @llvm.ctpop.i32(i32 0)\n  %or3 = or i32 %or, %call2\n  %call4 = call i32 @llvm.ctpop.i32(i32 0)\n  %load9 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 28), align 4\n  store i32 %load9, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 28), align 4\n  %or5 = or i32 %or3, %call4\n  %call6 = call i32 @llvm.ctpop.i32(i32 0)\n  %or7 = or i32 %or5, %call6\n  %call8 = call i32 @llvm.ctpop.i32(i32 0)\n  %load14 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 28), align 4\n  store i32 %load14, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 28), align 4\n  %load15 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 24), align 4\n  store i32 %load15, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 24), align 4\n  %or10 = or i32 %or7, %call8\n  %call11 = call i32 @llvm.ctpop.i32(i32 %load)\n  %or12 = or i32 %or10, %call11\n  %call13 = call i32 @llvm.ctpop.i32(i32 0)\n  %load20 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 24), align 4\n  store i32 %load20, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 24), align 4\n  %load21 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 20), align 4\n  store i32 %load21, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 20), align 4\n  %or16 = or i32 %or12, %call13\n  %call17 = call i32 @llvm.ctpop.i32(i32 %load9)\n  %or18 = or i32 %or16, %call17\n  %call19 = call i32 @llvm.ctpop.i32(i32 %load14)\n  %load26 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 20), align 4\n  store i32 %load26, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 20), align 4\n  %load27 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 16), align 4\n  store i32 %load27, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 16), align 4\n  %or22 = or i32 %or18, %call19\n  %call23 = call i32 @llvm.ctpop.i32(i32 %load15)\n  %or24 = or i32 %or22, %call23\n  %call25 = call i32 @llvm.ctpop.i32(i32 %load20)\n  %load32 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 16), align 4\n  store i32 %load32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 16), align 4\n  %load33 = load i32, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 12), align 4\n  store i32 %load33, ptr addrspace(1) getelementptr inbounds nuw (i8, ptr addrspace(1) null, i64 12), align 4\n  %or28 = or i32 %or24, %call25\n  %call29 = call i32 @llvm.ctpop.i32(i32 %load21)\n  %or30 = or i32 %or28, %call29\n  %call31 = call i32 @llvm.ctpop.i32(i32 %load26)\n  %or34 = or i32 %or30, %call31\n  %call35 = call i32 @llvm.ctpop.i32(i32 %load27)\n  %or36 = or i32 %or34, %call35\n  %call37 = call i32 @llvm.ctpop.i32(i32 %load32)\n  %or38 = or i32 %or36, %call37\n  %call39 = call i32 @llvm.ctpop.i32(i32 %load33)\n  %or40 = or i32 %or38, %call39\n  %call41 = call i32 @llvm.ctpop.i32(i32 0)\n  %or42 = or i32 %or40, %call41\n  %call43 = call i32 @llvm.ctpop.i32(i32 0)\n  %or44 = or i32 %or42, %call43\n  %call45 = call i32 @llvm.ctpop.i32(i32 0)\n  %or46 = or i32 %or44, %call45\n  %call47 = call i32 @llvm.ctpop.i32(i32 0)\n  %or48 = or i32 %or46, %call47\n  %call49 = call i32 @llvm.ctpop.i32(i32 0)\n  %or50 = or i32 %or48, %call49\n  %call51 = call i32 @llvm.ctpop.i32(i32 0)\n  %or52 = or i32 %or50, %call51\n  %call53 = call i32 @llvm.ctpop.i32(i32 0)\n  %or54 = or i32 %or52, %call53\n  ret i32 %or54\n}\n\ndeclare i32 @llvm.ctpop.i32(i32)"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Assertion `I->use_empty() && \"trying to erase instruction with users.\"' failed.",
+    "body": "To reproduce run opt with the test below (-passes=slp-vectorizer -slp-threshold=-99999)\n\n[reduced-stripped.ll.zip](https://github.com/user-attachments/files/24473473/reduced-stripped.ll.zip)\n\nReproducer: https://godbolt.org/z/c8rcjzPdr\n\nStack dump:\n```\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=slp-vectorizer -slp-threshold=-99999 <source>\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"<source>\"\n2.\tRunning pass \"slp-vectorizer\" on function \"wombat\"\n #0 0x0000000005a7f2e8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a7f2e8)\n #1 0x0000000005a7c194 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000072441c042520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000072441c0969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000072441c042476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000072441c0287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000072441c02871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x000072441c039e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x000000000379becf llvm::slpvectorizer::BoUpSLP::~BoUpSLP() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x379becf)\n #9 0x0000000003896946 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\n#10 0x00000000038973cb llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x38973cb)\n#11 0x000000000304364e llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x304364e)\n#12 0x0000000005859c61 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5859c61)\n#13 0x0000000000f1ba3e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf1ba3e)\n#14 0x000000000585821a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x585821a)\n#15 0x000000000097ee5e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97ee5e)\n#16 0x0000000005857bd1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5857bd1)\n#17 0x0000000000989110 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x989110)\n#18 0x000000000097d038 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97d038)\n#19 0x000072441c029d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#20 0x000072441c029e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#21 0x0000000000973a35 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x973a35)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "EugeneZelenko",
+        "body": "@TatyanaDoubts: If you plan to file more issues in future, it'll be good idea to request triage role ([examples](https://github.com/llvm/llvm-project/issues/?q=is%3Aissue%20label%3Ainfra%3Acommit-access-request%20Triage)), so you'll be able to label issues yourself, preferably at creation.\n"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

@@ -1,0 +1,68 @@
+{
+  "bug_id": "180780",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/180780",
+  "bug_type": "crash",
+  "base_commit": "0215f6b6cf810d9ab6d02fc7bbec5c26ad4701ff",
+  "knowledge_cutoff": "2026-02-10T17:09:08Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "d3afa171ee236dfef4b7cd4b4dd0b0fb165a48cc",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        [
+          5883,
+          5891
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        "LoopVectorizationCostModel::setCostBasedWideningDecision"
+      ]
+    }
+  },
+  "patch": "commit d3afa171ee236dfef4b7cd4b4dd0b0fb165a48cc\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Wed Feb 11 20:52:07 2026 +0000\n\n    [LV] Don't scalarize loads that need predication in legacy CM.\n    \n    The legacy cost model tries to scalarize loads that are used as\n    pointers. Skip if the load would need predicating when scalarized,\n    because that would incur very high costs, see useEmulatedMaskMemRefHack.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/180780.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\nindex 164d74f1a440..9b2641c2b9bb 100644\n--- a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n+++ b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n@@ -5883,9 +5883,9 @@ void LoopVectorizationCostModel::setCostBasedWideningDecision(ElementCount VF) {\n       // if the loaded register is involved in an address computation, it is\n       // instead changed here when we know this is the case.\n       InstWidening Decision = getWideningDecision(I, VF);\n-      if (Decision == CM_Widen || Decision == CM_Widen_Reverse ||\n-          (!isPredicatedInst(I) && !Legal->isUniformMemOp(*I, VF) &&\n-           Decision == CM_Scalarize)) {\n+      if (!isPredicatedInst(I) &&\n+          (Decision == CM_Widen || Decision == CM_Widen_Reverse ||\n+           (!Legal->isUniformMemOp(*I, VF) && Decision == CM_Scalarize))) {\n         // Scalarize a widened load of address or update the cost of a scalar\n         // load of an address.\n         setWideningDecision(\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/X86/cost-model.ll",
+      "commands": [
+        "opt < %s -passes=loop-vectorize -mtriple=x86_64-apple-macosx10.8.0 -mcpu=corei7-avx -S"
+      ],
+      "tests": [
+        {
+          "test_name": "known_deref_load_tail_folding",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-apple-macosx10.8.0\"\n\n@src.arr = external global [15 x double]\n@dst.arr.a = external global [10 x double]\n@dst.arr.b = external global [15 x double]\n\ndefine void @known_deref_load_tail_folding() #0 {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i64 [ 1, %entry ], [ %iv.next, %loop ]\n  %gep.src = getelementptr double, ptr @src.arr, i64 %iv\n  %val = load double, ptr %gep.src, align 8\n  %cmp = fcmp oeq double %val, 0.000000e+00\n  %dst.select = select i1 %cmp, ptr @dst.arr.a, ptr @dst.arr.b\n  store double 0.000000e+00, ptr %dst.select, align 8\n  %iv.next = add i64 %iv, 1\n  %ec = icmp eq i64 %iv.next, 12\n  br i1 %ec, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n}\n\nattributes #0 = { \"target-cpu\"=\"haswell\" }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LV]VPlan cost model and legacy cost model disagreed",
+    "body": "https://godbolt.org/z/o9sPfa35r\n@fhahn \nMaybe related to https://github.com/llvm/llvm-project/commit/7defb0a4a35817ee7accb310d99912152a542ec2",
+    "author": "alexey-bataev",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid"
+    ],
+    "comments": [
+      {
+        "author": "alexey-bataev",
+        "body": "Ping!"
+      },
+      {
+        "author": "fhahn",
+        "body": "It's not related to https://github.com/llvm/llvm-project/commit/7defb0a4a35817ee7accb310d99912152a542ec2, but will fix soon"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

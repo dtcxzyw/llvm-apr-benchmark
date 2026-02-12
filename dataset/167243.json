@@ -1,0 +1,77 @@
+{
+  "bug_id": "167243",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/167243",
+  "bug_type": "crash",
+  "base_commit": "b725bdba1faf256c725f5fd12c581acb381bf0d3",
+  "knowledge_cutoff": "2025-11-09T20:06:36Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "67e35bbebbed5e33a173751d019c22e4effa65fd",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        [
+          7992,
+          8004
+        ],
+        [
+          8006,
+          8013
+        ],
+        [
+          8018,
+          8048
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        "VPRecipeBuilder::collectScaledReductions",
+        "VPRecipeBuilder::getScaledReductions"
+      ]
+    }
+  },
+  "patch": "commit 67e35bbebbed5e33a173751d019c22e4effa65fd\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Thu Nov 20 15:54:57 2025 +0000\n\n    [LV] Check full partial reduction chains in order. (#168036)\n    \n    https://github.com/llvm/llvm-project/pull/162822 added another\n    validation step to check if entries in a partial reduction chain have\n    the same scale factor. But the validation was still dependent on the\n    order of entries in PartialReductionChains, and would fail to reject\n    some cases (e.g. if the first first link matched the scale of the second\n    link, but the second link is invalidated later).\n    \n    To fix that, group chains by their starting phi nodes, then perform the\n    validation for each chain, and if it fails, invalidate the whole chain\n    for the phi.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/167243.\n    Fixes https://github.com/llvm/llvm-project/issues/167867.\n    \n    PR: https://github.com/llvm/llvm-project/pull/168036\n\ndiff --git a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\nindex 8013c47f53db..741caab1fe58 100644\n--- a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n+++ b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n@@ -7992,13 +7992,15 @@ VPReplicateRecipe *VPRecipeBuilder::handleReplication(VPInstruction *VPI,\n /// Find all possible partial reductions in the loop and track all of those that\n /// are valid so recipes can be formed later.\n void VPRecipeBuilder::collectScaledReductions(VFRange &Range) {\n-  // Find all possible partial reductions.\n-  SmallVector<std::pair<PartialReductionChain, unsigned>>\n-      PartialReductionChains;\n-  for (const auto &[Phi, RdxDesc] : Legal->getReductionVars()) {\n+  // Find all possible partial reductions, grouping chains by their PHI. This\n+  // grouping allows invalidating the whole chain, if any link is not a valid\n+  // partial reduction.\n+  MapVector<Instruction *,\n+            SmallVector<std::pair<PartialReductionChain, unsigned>>>\n+      ChainsByPhi;\n+  for (const auto &[Phi, RdxDesc] : Legal->getReductionVars())\n     getScaledReductions(Phi, RdxDesc.getLoopExitInstr(), Range,\n-                        PartialReductionChains);\n-  }\n+                        ChainsByPhi[Phi]);\n \n   // A partial reduction is invalid if any of its extends are used by\n   // something that isn't another partial reduction. This is because the\n@@ -8006,8 +8008,9 @@ void VPRecipeBuilder::collectScaledReductions(VFRange &Range) {\n \n   // Build up a set of partial reduction ops for efficient use checking.\n   SmallPtrSet<User *, 4> PartialReductionOps;\n-  for (const auto &[PartialRdx, _] : PartialReductionChains)\n-    PartialReductionOps.insert(PartialRdx.ExtendUser);\n+  for (const auto &[_, Chains] : ChainsByPhi)\n+    for (const auto &[PartialRdx, _] : Chains)\n+      PartialReductionOps.insert(PartialRdx.ExtendUser);\n \n   auto ExtendIsOnlyUsedByPartialReductions =\n       [&PartialReductionOps](Instruction *Extend) {\n@@ -8018,31 +8021,38 @@ void VPRecipeBuilder::collectScaledReductions(VFRange &Range) {\n \n   // Check if each use of a chain's two extends is a partial reduction\n   // and only add those that don't have non-partial reduction users.\n-  for (auto Pair : PartialReductionChains) {\n-    PartialReductionChain Chain = Pair.first;\n-    if (ExtendIsOnlyUsedByPartialReductions(Chain.ExtendA) &&\n-        (!Chain.ExtendB || ExtendIsOnlyUsedByPartialReductions(Chain.ExtendB)))\n-      ScaledReductionMap.try_emplace(Chain.Reduction, Pair.second);\n+  for (const auto &[_, Chains] : ChainsByPhi) {\n+    for (const auto &[Chain, Scale] : Chains) {\n+      if (ExtendIsOnlyUsedByPartialReductions(Chain.ExtendA) &&\n+          (!Chain.ExtendB ||\n+           ExtendIsOnlyUsedByPartialReductions(Chain.ExtendB)))\n+        ScaledReductionMap.try_emplace(Chain.Reduction, Scale);\n+    }\n   }\n \n   // Check that all partial reductions in a chain are only used by other\n   // partial reductions with the same scale factor. Otherwise we end up creating\n   // users of scaled reductions where the types of the other operands don't\n   // match.\n-  for (const auto &[Chain, Scale] : PartialReductionChains) {\n-    auto AllUsersPartialRdx = [ScaleVal = Scale, this](const User *U) {\n-      auto *UI = cast<Instruction>(U);\n-      if (isa<PHINode>(UI) && UI->getParent() == OrigLoop->getHeader()) {\n-        return all_of(UI->users(), [ScaleVal, this](const User *U) {\n-          auto *UI = cast<Instruction>(U);\n-          return ScaledReductionMap.lookup_or(UI, 0) == ScaleVal;\n-        });\n+  for (const auto &[Phi, Chains] : ChainsByPhi) {\n+    for (const auto &[Chain, Scale] : Chains) {\n+      auto AllUsersPartialRdx = [ScaleVal = Scale, RdxPhi = Phi,\n+                                 this](const User *U) {\n+        auto *UI = cast<Instruction>(U);\n+        if (isa<PHINode>(UI) && UI->getParent() == OrigLoop->getHeader())\n+          return UI == RdxPhi;\n+        return ScaledReductionMap.lookup_or(UI, 0) == ScaleVal ||\n+               !OrigLoop->contains(UI->getParent());\n+      };\n+\n+      // If any partial reduction entry for the phi is invalid, invalidate the\n+      // whole chain.\n+      if (!all_of(Chain.Reduction->users(), AllUsersPartialRdx)) {\n+        for (const auto &[Chain, _] : Chains)\n+          ScaledReductionMap.erase(Chain.Reduction);\n+        break;\n       }\n-      return ScaledReductionMap.lookup_or(UI, 0) == ScaleVal ||\n-             !OrigLoop->contains(UI->getParent());\n-    };\n-    if (!all_of(Chain.Reduction->users(), AllUsersPartialRdx))\n-      ScaledReductionMap.erase(Chain.Reduction);\n+    }\n   }\n }\n \n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/AArch64/partial-reduce-incomplete-chains.ll",
+      "commands": [
+        "opt --mattr=+neon,+dotprod -passes=loop-vectorize -force-vector-interleave=1 -enable-epilogue-vectorization=false -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "chained_sext_adds",
+          "test_body": "target triple = \"arm64-apple-macosx\"\n\ndefine void @chained_sext_adds(ptr noalias %src, ptr noalias %dst) #0 {\nentry:\n  br label %loop\n\nexit:                                             ; preds = %loop\n  ret void\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %red = phi i32 [ 0, %entry ], [ %add.1, %loop ]\n  %gep.src = getelementptr i8, ptr %src, i64 %iv\n  %l = load i8, ptr %gep.src, align 1\n  %conv8 = sext i8 %l to i32\n  %add = add i32 %red, %conv8\n  %conv8.1 = sext i8 %l to i32\n  %add.1 = add i32 %add, %conv8.1\n  %gep.dst = getelementptr i8, ptr %dst, i64 %iv\n  store i32 %add.1, ptr %dst, align 4\n  %iv.next = add i64 %iv, 1\n  %exitcond = icmp eq i64 %iv.next, 1000\n  br i1 %exitcond, label %exit, label %loop\n}\n\nattributes #0 = { \"target-cpu\"=\"grace\" }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LV] Assert \"all accumulators in chain must have same scale factor\"",
+    "body": "This IR:\n\n```\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32\"\ntarget triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @_Z1fv() #0 {\nentry:\n  br label %for.body\n\nfor.cond.loopexit.loopexit:                       ; preds = %for.body\n  ret void\n\nfor.body:                                         ; preds = %for.body, %entry\n  %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]\n  %add15.lcssa1921 = phi i32 [ 0, %entry ], [ %add.1, %for.body ]\n  %conv8 = sext i16 0 to i32\n  %add = add i32 %add15.lcssa1921, %conv8\n  %conv8.1 = sext i16 0 to i32\n  %add.1 = add i32 %add, %conv8.1\n  store i32 %add.1, ptr null, align 4\n  %indvars.iv.next = add i64 %indvars.iv, 1\n  %0 = and i64 %indvars.iv.next, 255\n  %exitcond.not = icmp eq i64 %0, 0\n  br i1 %exitcond.not, label %for.cond.loopexit.loopexit, label %for.body\n}\n\nattributes #0 = { \"target-cpu\"=\"grace\" }\n```\n\nTriggers this assert:\n\n```\nopt: /root/llvm-project/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp:8181: llvm::VPRecipeBase* llvm::VPRecipeBuilder::tryToCreatePartialReduction(llvm::VPInstruction*, unsigned int): Assertion `ScaleFactor == vputils::getVFScaleFactor(Accumulator->getDefiningRecipe()) && \"all accumulators in chain must have same scale factor\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -S -passes=loop-vectorize <source>\n1.\tRunning pass \"function(loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>)\" on module \"<source>\"\n2.\tRunning pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"_Z1fv\"\n #0 0x00000000059ad0e8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x59ad0e8)\n #1 0x00000000059a9f94 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007efe89442520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007efe894969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007efe89442476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007efe894287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007efe8942871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007efe89439e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x00000000036b2f1b llvm::VPRecipeBuilder::tryToCreatePartialReduction(llvm::VPInstruction*, unsigned int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x36b2f1b)\n #9 0x00000000036b599f llvm::VPRecipeBuilder::tryToCreateWidenRecipe(llvm::VPSingleDefRecipe*, llvm::VFRange&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x36b599f)\n#10 0x00000000036d4e5e llvm::LoopVectorizationPlanner::tryToBuildVPlanWithVPRecipes(std::unique_ptr<llvm::VPlan, std::default_delete<llvm::VPlan>>, llvm::VFRange&, llvm::LoopVersioning*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x36d4e5e)\n#11 0x00000000036d63a8 llvm::LoopVectorizationPlanner::buildVPlansWithVPRecipes(llvm::ElementCount, llvm::ElementCount) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x36d63a8)\n```\n\nCompile with: `opt -S -passes=loop-vectorize`, see also: https://godbolt.org/z/7oedf34Pq\n\nReproduced from this C reproducer:\n\n```\nint a, b;\nextern char e;\nint *c;\nshort *d;\nvoid f() {\n  for (int g;;)\n    for (char h; h < 20; h++) {\n      a = c[h];\n      for (int i = 0; i < 22; i += 3) {\n        e = 0;\n        b += d[g];\n      }\n    }\n}\n```",
+    "author": "sjoerdmeijer",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid"
+    ],
+    "comments": [
+      {
+        "author": "sjoerdmeijer",
+        "body": "CC: @sdesmalen-arm , @SamTebbs33\n\nWas wondering if this is more fall out from the partial reductions work? "
+      },
+      {
+        "author": "sjoerdmeijer",
+        "body": "This assert was introduced in 3ad5765e2341b by @fhahn "
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": false
+  },
+  "verified": true
+}

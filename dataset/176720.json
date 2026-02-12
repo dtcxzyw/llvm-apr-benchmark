@@ -1,0 +1,59 @@
+{
+  "bug_id": "176720",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/176720",
+  "bug_type": "crash",
+  "base_commit": "ca51c973b5feb0b7e9c798316b03d66d9ab338cf",
+  "knowledge_cutoff": "2026-01-19T10:04:55Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "69fbab2b72b1c9d5678ba6a6ad234e689ed9bce9",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
+        [
+          3420,
+          3425
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
+        "VPReplicateRecipe::computeCost"
+      ]
+    }
+  },
+  "patch": "commit 69fbab2b72b1c9d5678ba6a6ad234e689ed9bce9\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Mon Jan 19 21:25:52 2026 +0000\n\n    [VPlan] Fall back to legacy cost if operands may be force-scalarized.\n    \n    If any of the operands of a VPReplicateRecipe have been\n    force-scalarized, then the legacy cost model skips the scalarization\n    overhead, but we cannot match this in the VPlan cost model.\n    \n    Bail out for now in those very rare cases.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/176720.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp b/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp\nindex 5ef0c0d195eb..64890ac9e9b9 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp\n@@ -3420,6 +3420,20 @@ InstructionCost VPReplicateRecipe::computeCost(ElementCount VF,\n     if (isSingleScalar())\n       return ScalarCost;\n \n+    // If any of the operands is from a different replicate region and has its\n+    // cost skipped, it may have been forced to scalar. Fall back to legacy cost\n+    // model to avoid cost mis-match.\n+    if (any_of(operands(), [&Ctx, VF](VPValue *Op) {\n+          auto *PredR = dyn_cast<VPPredInstPHIRecipe>(Op);\n+          if (!PredR)\n+            return false;\n+          return Ctx.skipCostComputation(\n+              dyn_cast_or_null<Instruction>(\n+                  PredR->getOperand(0)->getUnderlyingValue()),\n+              VF.isVector());\n+        }))\n+      break;\n+\n     ScalarCost = ScalarCost * VF.getFixedValue() +\n                  Ctx.getScalarizationOverhead(Ctx.Types.inferScalarType(this),\n                                               to_vector(operands()), VF);\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/X86/cost-model.ll",
+      "commands": [
+        "opt < %s -passes=loop-vectorize -mtriple=x86_64-apple-macosx10.8.0 -mcpu=corei7-avx -S"
+      ],
+      "tests": [
+        {
+          "test_name": "replicating_sdiv_operand_profitable_to_scalarize",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-apple-macosx10.8.0\"\n\ndefine void @replicating_sdiv_operand_profitable_to_scalarize(i32 %x) #0 {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %loop, %entry\n  %iv = phi i32 [ 0, %entry ], [ %div1, %loop ]\n  %accum = phi i32 [ 0, %entry ], [ %next, %loop ]\n  %div1 = sdiv i32 2, %x\n  %sub = sub i32 %x, %div1\n  %or1 = or i32 %sub, %iv\n  %or2 = or i32 %div1, 3\n  %div2 = sdiv i32 %div1, %or2\n  %or3 = or i32 %or1, %div2\n  %next = add i32 %accum, 3\n  %cond = icmp ugt i32 %accum, 35\n  br i1 %cond, label %exit, label %loop\n\nexit:                                             ; preds = %loop\n  %result = phi i32 [ %or3, %loop ]\n  ret void\n}\n\nattributes #0 = { \"target-cpu\"=\"skylake-avx512\" }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Assertion `(BestFactor.Width == LegacyVF.Width || BestPlan.hasEarlyExit() || ... || planContainsAdditionalSimplifications( getPlanFor(LegacyVF.Width), CostCtx, OrigLoop, LegacyVF.Width)) && \" VPlan cost model and legacy cost model disagreed\"' failed.",
+    "body": "```\nopt: /root/llvm-project/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp:7269: llvm::VectorizationFactor llvm::LoopVectorizationPlanner::computeBestVF(): Assertion `(BestFactor.Width == LegacyVF.Width || BestPlan.hasEarlyExit() || !Legal->getLAI()->getSymbolicStrides().empty() || UsesEVLGatherScatter || planContainsAdditionalSimplifications( getPlanFor(BestFactor.Width), CostCtx, OrigLoop, BestFactor.Width) || planContainsAdditionalSimplifications( getPlanFor(LegacyVF.Width), CostCtx, OrigLoop, LegacyVF.Width)) && \" VPlan cost model and legacy cost model disagreed\"' failed.\n```\n\nTo reproduce run opt with the test below (-passes=loop-vectorize).\n```\n; ModuleID = './reduced.ll'\nsource_filename = \"./reduced.ll\"\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine void @wombat() #0 gc \"statepoint-example\" {\nbb:\n  br label %bb2\n\nbb1:                                              ; preds = %bb2\n  %phi = phi i32 [ %or8, %bb2 ]\n  ret void\n\nbb2:                                              ; preds = %bb2, %bb\n  %phi3 = phi i32 [ 0, %bb ], [ %sdiv, %bb2 ]\n  %phi4 = phi i32 [ 0, %bb ], [ %add, %bb2 ]\n  %or = or i32 0, 0\n  %sdiv = sdiv i32 0, %or\n  %sub = sub i32 0, %sdiv\n  %or5 = or i32 %sub, %phi3\n  %or6 = or i32 %sdiv, 1\n  %sdiv7 = sdiv i32 %sdiv, %or6\n  %or8 = or i32 %or5, %sdiv7\n  %add = add i32 %phi4, 3\n  %icmp = icmp ugt i32 %phi4, 35\n  br i1 %icmp, label %bb1, label %bb2\n}\n\nattributes #0 = { \"target-cpu\"=\"skylake-avx512\" }\n```\nReproducer: https://godbolt.org/z/rzsds3acz\n\nStack dump:\n```\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=loop-vectorize <source>\n1.\tRunning pass \"function(loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>)\" on module \"<source>\"\n2.\tRunning pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"wombat\"\n #0 0x0000000005a80c68 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a80c68)\n #1 0x0000000005a7db44 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007d0067042520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007d00670969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007d0067042476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007d00670287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007d006702871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007d0067039e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000003749648 llvm::LoopVectorizationPlanner::computeBestVF() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3749648)\n #9 0x000000000374b5d2 llvm::LoopVectorizePass::processLoop(llvm::Loop*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x374b5d2)\n#10 0x000000000374e770 llvm::LoopVectorizePass::runImpl(llvm::Function&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x374e770)\n#11 0x000000000374eefd llvm::LoopVectorizePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x374eefd)\n#12 0x000000000302291e llvm::detail::PassModel<llvm::Function, llvm::LoopVectorizePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x302291e)\n#13 0x00000000057f51c1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57f51c1)\n#14 0x0000000000f07e1e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf07e1e)\n#15 0x00000000057f377a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57f377a)\n#16 0x000000000096470e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96470e)\n#17 0x00000000057f3131 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57f3131)\n#18 0x000000000096e8ca llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96e8ca)\n#19 0x0000000000962978 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x962978)\n#20 0x00007d0067029d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#21 0x00007d0067029e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#22 0x00000000009595f5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9595f5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

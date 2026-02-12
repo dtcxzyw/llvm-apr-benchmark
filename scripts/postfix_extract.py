@@ -172,6 +172,7 @@ fix_commit_map = {
     "155162": None,  # Missing reproducer
     "155184": None,  # Duplicate of #117157
     "156190": None,  # Cannot verify the fix
+    "157217": None,  # Invalid reproducer
     "157332": None,  # Duplicate of #131488
     "158197": None,  # Cannot reproduce with Alive2
     "161974": None,  # Duplicate of #157314
@@ -179,13 +180,21 @@ fix_commit_map = {
     "160912": None,  # Unsupported intrinsic llvm.stepvector.nxv2i64
     "162498": None,  # Cannot reproduce with Alive2
     "162512": None,  # Unterminated loop in the reproducer
+    "166535": None,  # Duplicate of #165031
+    "167813": None,  # Still crashes on the regression testsuite
     "168576": None,  # Duplicate of #168512
     "168263": None,  # Missing reproducer
     "168902": None,  # Cannot reproduce with Alive2
     "170211": None,  # Reverted
     "172609": None,  # Depends on additional code changes
     "172647": None,  # Crash on invalid input
-    "172817": None,  # Crash on invalid input 
+    "172817": None,  # Crash on invalid input
+    "175295": None,  # Cannot verify the fix
+    "176674": None,  # Crash on invalid input
+    "177772": None,  # Cannot reproduce the crash
+    "177780": None,  # Duplicate of #177772
+    "178275": None,  # Crash on invalid input
+    "180846": None,  # Cannot reproduce the hang (missing timeout)
 }
 
 if issue_id in fix_commit_map:

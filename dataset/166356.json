@@ -1,0 +1,85 @@
+{
+  "bug_id": "166356",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/166356",
+  "bug_type": "crash",
+  "base_commit": "5cf92086b78c6797647aaf351f4dd26fbf2244c4",
+  "knowledge_cutoff": "2025-11-04T11:54:33Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopFusion"
+  ],
+  "hints": {
+    "fix_commit": "5ab966aacbd8bbe95bf858110569a8205b7f8c79",
+    "components": [
+      "LoopFuse"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
+        [
+          1399,
+          1408
+        ],
+        [
+          1410,
+          1416
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
+        "isStrictlyAdjacent"
+      ]
+    }
+  },
+  "patch": "commit 5ab966aacbd8bbe95bf858110569a8205b7f8c79\nAuthor: Alireza Torabian <alireza.torabian@huawei.com>\nDate:   Thu Jan 8 17:07:15 2026 -0500\n\n    [LoopFusion] Non-loop block must be the immediate successor of exit (#175034)\n    \n    Loop fusion assumes the non-loop block of a guarded adjacent loop is the\n    immediate successor of its exit block. This patch ensures this condition\n    is hold and fixes the crash #166356.\n\ndiff --git a/llvm/lib/Transforms/Scalar/LoopFuse.cpp b/llvm/lib/Transforms/Scalar/LoopFuse.cpp\nindex 3a06c3f00fa0..d7284c98b48c 100644\n--- a/llvm/lib/Transforms/Scalar/LoopFuse.cpp\n+++ b/llvm/lib/Transforms/Scalar/LoopFuse.cpp\n@@ -1399,10 +1399,11 @@ private:\n   /// This method will determine if there are additional basic blocks in the CFG\n   /// between the exit of \\p FC0 and the entry of \\p FC1.\n   /// If the two candidates are guarded loops, then it checks whether the\n-  /// non-loop successor of the \\p FC0 guard branch is the entry block of \\p\n-  /// FC1. If not, then the loops are not adjacent. If the two candidates are\n-  /// not guarded loops, then it checks whether the exit block of \\p FC0 is the\n-  /// preheader of \\p FC1.\n+  /// exit block of the \\p FC0 is the predecessor of the \\p FC1 preheader. This\n+  /// implicitly ensures that the non-loop successor of the \\p FC0 guard branch\n+  /// is the entry block of \\p FC1. If not, then the loops are not adjacent. If\n+  /// the two candidates are not guarded loops, then it checks whether the exit\n+  /// block of \\p FC0 is the preheader of \\p FC1.\n   /// Strictly means there is no predecessor for FC1 unless it is from FC0,\n   /// i.e., FC0 dominates FC1.\n   bool isStrictlyAdjacent(const FusionCandidate &FC0,\n@@ -1410,7 +1411,7 @@ private:\n     // If the successor of the guard branch is FC1, then the loops are adjacent\n     if (FC0.GuardBranch)\n       return DT.dominates(FC0.getEntryBlock(), FC1.getEntryBlock()) &&\n-             FC0.getNonLoopBlock() == FC1.getEntryBlock();\n+             FC0.ExitBlock->getSingleSuccessor() == FC1.getEntryBlock();\n     else\n       return FC0.ExitBlock == FC1.getEntryBlock();\n   }\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopFusion/pr166356.ll",
+      "commands": [
+        "opt -passes=loop-fusion -S < %s 2>&1"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\n; The non-loop block of loop for.cond.cleanup13 is not the immediate successor\n; of its exit block, then it should not be eligible for fusion.\n\ndefine void @non_immediate_exit() {\n;\nentry:\n  br i1 false, label %if.else.1, label %for.cond.cleanup13\n\nfor.cond.cleanup13:                               ; preds = %for.cond.cleanup13, %entry\n  br i1 true, label %for.inc21, label %for.cond.cleanup13\n\nfor.inc21:                                        ; preds = %for.cond.cleanup13\n  br label %if.then.1\n\nif.then.1:                                        ; preds = %for.inc21\n  br label %if.else.1\n\nif.else.1:                                        ; preds = %if.then.1, %entry\n  br i1 false, label %if.else.2, label %for.cond.cleanup13.1\n\nfor.cond.cleanup13.1:                             ; preds = %for.cond.cleanup13.1, %if.else.1\n  br i1 true, label %if.else.2, label %for.cond.cleanup13.1\n\nif.else.2:                                        ; preds = %for.cond.cleanup13.1, %if.else.1\n  ret void\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LoopFusion] Assert \"Expecting guard block to have no predecessors\"",
+    "body": "This IR:\n\n```\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i8:8:32-i16:16:32-i64:64-i128:128-n32:64-S128-Fn32\"\ntarget triple = \"aarch64-unknown-linux-gnu\"\n\ndefine void @_Z1gb() {\nentry:\n  br i1 false, label %if.else.1, label %for.cond.cleanup13\n\nfor.cond.cleanup13:                               ; preds = %for.cond.cleanup13, %entry\n  br i1 true, label %for.inc21, label %for.cond.cleanup13\n\nfor.inc21:                                        ; preds = %for.cond.cleanup13\n  br label %if.then.1\n\nif.then.1:                                        ; preds = %for.inc21\n  br label %if.else.1\n\nif.else.1:                                        ; preds = %if.then.1, %entry\n  br i1 false, label %if.else.2, label %for.cond.cleanup13.1\n\nfor.cond.cleanup13.1:                             ; preds = %for.cond.cleanup13.1, %if.else.1\n  br i1 true, label %if.else.2, label %for.cond.cleanup13.1\n\nif.else.2:                                        ; preds = %for.cond.cleanup13.1, %if.else.1\n  ret void\n}\n```\n\ntriggers this assert:\n\n```\nopt: /root/llvm-project/llvm/lib/Transforms/Scalar/LoopFuse.cpp:1945: llvm::Loop* {anonymous}::LoopFuser::fuseGuardedLoops(const {anonymous}::FusionCandidate&, const {anonymous}::FusionCandidate&): Assertion `pred_empty(FC1GuardBlock) && \"Expecting guard block to have no predecessors\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -S -passes=loop-fusion <source>\n1.\tRunning pass \"function(loop-fusion)\" on module \"<source>\"\n2.\tRunning pass \"loop-fusion\" on function \"_Z1gb\"\n #0 0x0000000005989ef8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5989ef8)\n #1 0x0000000005986da4 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007f6389e42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007f6389e969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007f6389e42476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007f6389e287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007f6389e2871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007f6389e39e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x00000000046a310b (anonymous namespace)::LoopFuser::fuseGuardedLoops((anonymous namespace)::FusionCandidate const&, (anonymous namespace)::FusionCandidate const&) LoopFuse.cpp:0:0\n #9 0x00000000046a329a (anonymous namespace)::LoopFuser::performFusion((anonymous namespace)::FusionCandidate const&, (anonymous namespace)::FusionCandidate const&) LoopFuse.cpp:0:0\n#10 0x00000000046a938e (anonymous namespace)::LoopFuser::fuseCandidates() LoopFuse.cpp:0:0\n#11 0x00000000046aaef1 llvm::LoopFusePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x46aaef1)\n```\n\nwhen compiled with `-S -passes=loop-fusion`, see also: https://godbolt.org/z/v9ddvW1T6\n\n\nThe IR reproducer comes from this C reproducer:\n\n```\nint a;\nshort b;\nchar c, e, f;\nlong d;\nvoid g(bool h) {\n  for (int i; i < 20ULL; i += 4ULL)\n    if (h)\n      if (c)\n        a = f;\n      else if (e)\n        for (int j(d); j; j++)\n          for (int k(f); k; k += 4073709530269)\n            b = 0;\n}\n```",
+    "author": "sjoerdmeijer",
+    "labels": [
+      "loopoptim",
+      "crash-on-valid",
+      "loop-fusion"
+    ],
+    "comments": [
+      {
+        "author": "amehsan",
+        "body": "@1997alireza could you look into this issue?"
+      },
+      {
+        "author": "1997alireza",
+        "body": "> [@1997alireza](https://github.com/1997alireza) could you look into this issue?\n\nYes. On it."
+      },
+      {
+        "author": "madhur13490",
+        "body": "Hi @1997alireza, since you're looking at it, I have assigned it to you. I am using the filter below to manage all loop-fusion crashes. \nhttps://github.com/llvm/llvm-project/issues?q=state%3Aopen%20label%3A%22loop-fusion%22"
+      },
+      {
+        "author": "amehsan",
+        "body": "The issue is the following: LoopFusion implicitly expects that if `FC0` is not peeled then the successor of exit block of `FC0` is the same as entry block of `FC1`. This is not true for the test case above, \n\n```\nfor.inc21:                           <------------- EXIT BLOCK OF FC0\n  br label %if.then.1\n\nif.then.1:                                    <---------- INTERVENING BLOCK THAT LOOP FUSION IS UNAWARE OF  \n  br label %if.else.1\n\nif.else.1:                                        <------------- ENTRY BLOCK OF FC1\n  br i1 false, label %if.else.2, label %for.cond.cleanup13.1\n```\n\n\nThe testcase passes `isAdjacent` because loop guard of `FC0` branches to entry block of `FC1` \n\n```\nentry:   <------------------ LOOP GUARD OF FC0\n  br i1 false, label %if.else.1, label %for.cond.cleanup13\n```\n\nThis is the relevant code in `isAdjacent`\n\n```\n    if (FC0.GuardBranch)\n      return FC0.getNonLoopBlock() == FC1.getEntryBlock();\n```\n\n\nHowever later we have this code:\n```\n    BasicBlock *BBToUpdate = FC0.Peeled ? FC0ExitBlockSuccessor : FC0.ExitBlock;\n    BBToUpdate->getTerminator()->replaceUsesOfWith(FC1GuardBlock, FC1.Header);\n```\n\nSo if `FC0` is not peeled we replace all uses of `FC1GuardBlock`  with `FC1.Header` in `FC0.ExitBlock`. In our case terminator of `FC0.ExitBlock` has no use of `FC1GuardBlock` . So our expectation that one of the predecessors of `FC1GuardBlock`  will be removed at this point is not satisfied and at the time of assertion the block has an unexpected predecessor.\n\nLooks like we have a missing test in legality check (possibly in `isAdjacent`). But a little more investigation is needed to figure out how this interacts with peeling\n\n"
+      },
+      {
+        "author": "1997alireza",
+        "body": "The issue is fixed by PR #175034. I close the issue."
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

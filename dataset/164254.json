@@ -1,0 +1,103 @@
+{
+  "bug_id": "164254",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/164254",
+  "bug_type": "crash",
+  "base_commit": "02c9e8987a22753417c721eba5e5848f3fe33a24",
+  "knowledge_cutoff": "2025-10-20T13:33:43Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize",
+    "llvm/test/Verifier"
+  ],
+  "hints": {
+    "fix_commit": "b8ef25aa643761233dc5b74d9fb7c38a2064d9c7",
+    "components": [
+      "LoopUtils"
+    ],
+    "bug_location_lineno": {
+      "llvm/include/llvm/Transforms/Utils/LoopUtils.h": [
+        [
+          326,
+          332
+        ],
+        [
+          353,
+          362
+        ]
+      ],
+      "llvm/lib/Transforms/Utils/LoopUtils.cpp": [
+        [
+          913,
+          923
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Utils/LoopUtils.cpp": [
+        "llvm::getLoopEstimatedTripCount"
+      ]
+    }
+  },
+  "patch": "commit b8ef25aa643761233dc5b74d9fb7c38a2064d9c7\nAuthor: Joel E. Denny <jdenny.ornl@gmail.com>\nDate:   Tue Nov 25 11:05:13 2025 -0500\n\n    [PGO] Fix zeroed estimated trip count (#167792)\n    \n    Before PR #152775, `llvm::getLoopEstimatedTripCount` never returned 0.\n    If `llvm::setLoopEstimatedTripCount` were called with 0, it would zero\n    branch weights, causing `llvm::getLoopEstimatedTripCount` to return\n    `std::nullopt`.\n    \n    PR #152775 changed that behavior: if `llvm::setLoopEstimatedTripCount`\n    is called with 0, it sets `llvm.loop.estimated_trip_count` to 0, causing\n    `llvm::getLoopEstimatedTripCount` to return 0. However, it kept\n    documentation saying `llvm::getLoopEstimatedTripCount` returns a\n    positive count.\n    \n    Some passes continue to assume `llvm::getLoopEstimatedTripCount` never\n    returns 0 and crash if it does, as reported in issue #164254. To restore\n    the behavior they expect, this patch changes\n    `llvm::getLoopEstimatedTripCount` to return `std::nullopt` when\n    `llvm.loop.estimated_trip_count` is 0.\n\ndiff --git a/llvm/include/llvm/Transforms/Utils/LoopUtils.h b/llvm/include/llvm/Transforms/Utils/LoopUtils.h\nindex 86eb21389756..0afba21dfaf8 100644\n--- a/llvm/include/llvm/Transforms/Utils/LoopUtils.h\n+++ b/llvm/include/llvm/Transforms/Utils/LoopUtils.h\n@@ -326,7 +326,10 @@ LLVM_ABI void addStringMetadataToLoop(Loop *TheLoop, const char *MDString,\n /// - \\c std::nullopt, if the implementation is unable to handle the loop form\n ///   of \\p L (e.g., \\p L must have a latch block that controls the loop exit).\n /// - The value of \\c llvm.loop.estimated_trip_count from the loop metadata of\n-///   \\p L, if that metadata is present.\n+///   \\p L, if that metadata is present.  In the special case that the value is\n+///   zero, return \\c std::nullopt instead as that is historically what callers\n+///   expect when a loop is estimated to execute no iterations (i.e., its header\n+///   is not reached).\n /// - Else, a new estimate of the trip count from the latch branch weights of\n ///   \\p L.\n ///\n@@ -353,10 +356,11 @@ getLoopEstimatedTripCount(Loop *L,\n /// to handle the loop form of \\p L (e.g., \\p L must have a latch block that\n /// controls the loop exit).  Otherwise, return true.\n ///\n-/// In addition, if \\p EstimatedLoopInvocationWeight, set the branch weight\n-/// metadata of \\p L to reflect that \\p L has an estimated\n-/// \\p EstimatedTripCount iterations and has \\c *EstimatedLoopInvocationWeight\n-/// exit weight through the loop's latch.\n+/// In addition, if \\p EstimatedLoopInvocationWeight:\n+/// - Set the branch weight metadata of \\p L to reflect that \\p L has an\n+///   estimated \\p EstimatedTripCount iterations and has\n+///   \\c *EstimatedLoopInvocationWeight exit weight through the loop's latch.\n+/// - If \\p EstimatedTripCount is zero, zero the branch weights.\n ///\n /// TODO: Eventually, once all passes have migrated away from setting branch\n /// weights to indicate estimated trip counts, this function will drop the\ndiff --git a/llvm/lib/Transforms/Utils/LoopUtils.cpp b/llvm/lib/Transforms/Utils/LoopUtils.cpp\nindex 6e60b94be78e..8e2a4f80fce1 100644\n--- a/llvm/lib/Transforms/Utils/LoopUtils.cpp\n+++ b/llvm/lib/Transforms/Utils/LoopUtils.cpp\n@@ -913,11 +913,26 @@ llvm::getLoopEstimatedTripCount(Loop *L,\n \n   // Return the estimated trip count from metadata unless the metadata is\n   // missing or has no value.\n+  //\n+  // Some passes set llvm.loop.estimated_trip_count to 0.  For example, after\n+  // peeling 10 or more iterations from a loop with an estimated trip count of\n+  // 10, llvm.loop.estimated_trip_count becomes 0 on the remaining loop.  It\n+  // indicates that, each time execution reaches the peeled iterations,\n+  // execution is estimated to exit them without reaching the remaining loop's\n+  // header.\n+  //\n+  // Even if the probability of reaching a loop's header is low, if it is\n+  // reached, it is the start of an iteration.  Consequently, some passes\n+  // historically assume that llvm::getLoopEstimatedTripCount always returns a\n+  // positive count or std::nullopt.  Thus, return std::nullopt when\n+  // llvm.loop.estimated_trip_count is 0.\n   if (auto TC = getOptionalIntLoopAttribute(L, LLVMLoopEstimatedTripCount)) {\n     LLVM_DEBUG(dbgs() << \"getLoopEstimatedTripCount: \"\n                       << LLVMLoopEstimatedTripCount << \" metadata has trip \"\n-                      << \"count of \" << *TC << \" for \" << DbgLoop(L) << \"\\n\");\n-    return TC;\n+                      << \"count of \" << *TC\n+                      << (*TC == 0 ? \" (returning std::nullopt)\" : \"\")\n+                      << \" for \" << DbgLoop(L) << \"\\n\");\n+    return *TC == 0 ? std::nullopt : std::optional(*TC);\n   }\n \n   // Estimate the trip count from latch branch weights.\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/vectorize-zero-estimated-trip-count.ll",
+      "commands": [
+        "opt -passes=loop-vectorize -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "; Check that an estimated trip count of zero does not crash or otherwise break\n; LoopVectorize behavior while it tries to create runtime memory checks inside\n; an outer loop.\n\n\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Look for basic signs that vectorization ran and produced memory checks.\n\ndefine void @test(ptr addrspace(1) %p, i32 %n) {\nentry:\n  br label %outer\nouter:\n  br label %inner\ninner:\n  %i = phi i32 [ %inc, %inner ], [ 0, %outer ]\n  store i32 0, ptr addrspace(1) %p\n  %load = load i32, ptr addrspace(1) null\n  %inc = add i32 %i, 1\n  %cmp = icmp slt i32 %i, %n\n  br i1 %cmp, label %inner, label %outer.latch\nouter.latch:\n  br i1 %cmp, label %outer, label %exit, !llvm.loop !0\nexit:\n  ret void\n}\n\n!0 = distinct !{!0, !1}\n!1 = !{!\"llvm.loop.estimated_trip_count\", i32 0}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Crash at libc.so: (anonymous namespace)::GeneratedRTChecks::getCost() LoopVectorize.cpp:0:0",
+    "body": "To reproduce run opt using -passes=loop-vectorize with the test below:\n```\n; ModuleID = './reduced.ll'\nsource_filename = \"./reduced.ll\"\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine void @wombat(ptr addrspace(1) %arg, i64 %arg1) gc \"statepoint-example\" {\nbb:\n  br label %bb3\n\nbb2:                                              ; preds = %bb7\n  ret void\n\nbb3:                                              ; preds = %bb7, %bb\n  br label %bb4\n\nbb4:                                              ; preds = %bb4, %bb3\n  %phi = phi i64 [ %add6, %bb4 ], [ %arg1, %bb3 ]\n  %phi5 = phi i64 [ %add, %bb4 ], [ 0, %bb3 ]\n  %add = add i64 0, 0\n  store i64 0, ptr addrspace(1) %arg, align 8\n  %load = load i64, ptr addrspace(1) null, align 8\n  %add6 = add i64 %phi, -3\n  %icmp = icmp slt i64 0, %phi\n  br i1 %icmp, label %bb4, label %bb7\n\nbb7:                                              ; preds = %bb4\n  br i1 %icmp, label %bb3, label %bb2, !llvm.loop !0\n}\n\n!0 = distinct !{!0, !1, !2, !3}\n!1 = !{!\"llvm.loop.peeled.count\", i32 1}\n!2 = !{!\"llvm.loop.estimated_trip_count\", i32 0}\n!3 = !{!\"llvm.loop.unroll.disable\"}\n```\nReproducer: https://godbolt.org/z/W5W91TEhM\n\nStack dump:\n```\n\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=loop-vectorize <source>\n1.\tRunning pass \"function(loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>)\" on module \"<source>\"\n2.\tRunning pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"wombat\"\n #0 0x0000000005945ce8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5945ce8)\n #1 0x0000000005942b94 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007cec2dc42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x0000000003670b82 (anonymous namespace)::GeneratedRTChecks::getCost() LoopVectorize.cpp:0:0\n #4 0x000000000369a7c0 llvm::LoopVectorizePass::processLoop(llvm::Loop*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x369a7c0)\n #5 0x000000000369d130 llvm::LoopVectorizePass::runImpl(llvm::Function&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x369d130)\n #6 0x000000000369d85b llvm::LoopVectorizePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x369d85b)\n #7 0x0000000002f8868e llvm::detail::PassModel<llvm::Function, llvm::LoopVectorizePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x2f8868e)\n #8 0x00000000057202b1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57202b1)\n #9 0x0000000000ef5fce llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xef5fce)\n#10 0x000000000571e81a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x571e81a)\n#11 0x000000000097887e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97887e)\n#12 0x000000000571e1d1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x571e1d1)\n#13 0x000000000098298a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x98298a)\n#14 0x0000000000976c0e optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x976c0e)\n#15 0x00007cec2dc29d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#16 0x00007cec2dc29e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#17 0x000000000096df65 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96df65)\nProgram terminated with signal: SIGFPE\nCompiler returned: 136\n```",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "crash",
+      "llvm:transforms"
+    ],
+    "comments": [
+      {
+        "author": "TatyanaDoubts",
+        "body": "Fault commit for this bug is commit afb262855e755b499a733c2b84b6a1cb789b3b1f\n\nAuthor: Joel E. Denny <[jdenny.ornl@gmail.com](mailto:jdenny.ornl@gmail.com)>\n@jdenny-ornl \n\nDate:   Thu Oct 2 12:07:55 2025 -0400\n\n \n\n    [LoopPeel] Fix branch weights' effect on block frequencies (#128785)\n\n \n\n    [LoopPeel] Fix branch weights' effect on block frequencies\n\n \n\n    This patch implements the LoopPeel changes discussed in [[RFC] Fix Loop\n\n    Transformations to Preserve Block\n\n    Frequencies]([[RFC] Fix Loop Transformations to Preserve Block Frequencies](https://discourse.llvm.org/t/rfc-fix-loop-transformations-to-preserve-block-frequencies/85785) ).\n\n \n\n    In summary, a loop's latch block can have branch weight metadata that\n\n    encodes an estimated trip count that is derived from application profile\n\n    data. Initially, the loop body's block frequencies agree with the\n\n    estimated trip count, as expected. However, sometimes loop\n\n    transformations adjust those branch weights in a way that correctly\n\n    maintains the estimated trip count but that corrupts the block\n\n    frequencies. This patch addresses that problem in LoopPeel, which it\n\n    changes to:\n\n \n\nMaintain branch weights consistently with the original loop for the\n\n    sake of preserving the total frequency of the original loop body.\n\nStore the new estimated trip count in the\n\n    `llvm.loop.estimated_trip_count` metadata, introduced by PR #148758."
+      },
+      {
+        "author": "jdenny-ornl",
+        "body": "> Fault commit for this bug is commit [afb2628](https://github.com/llvm/llvm-project/commit/afb262855e755b499a733c2b84b6a1cb789b3b1f)\n\nThanks for the report.\n\nFor me, the above reproducer still reproduces at 5bbf72400cfe, the immediately preceding commit.\n\nI think the problem is actually 0e3c5566c0c6, which changes getLoopEstimatedTripCount so it no longer guarantees its result is non-zero.  I will work on a fix.\n\nThe reproducer above explicitly sets `llvm.loop.estimated_trip_count` to zero.  Where did that reproducer come from?"
+      },
+      {
+        "author": "TatyanaDoubts",
+        "body": "The reproducer was extracted from the crash dump of java test generated by Fuzzer."
+      },
+      {
+        "author": "jdenny-ornl",
+        "body": "If possible, would you please try PR #167792?  It will not fix the reproducer attached to this issue.  Instead, it makes the `!{!\"llvm.loop.estimated_trip_count\", i32 0}` there invalid.  However, my expectation is that it will fix your original java reproducer because the `!{!\"llvm.loop.estimated_trip_count\", i32 0}` will no longer be generated."
+      },
+      {
+        "author": "jdenny-ornl",
+        "body": "> If possible, would you please try PR [#167792](https://github.com/llvm/llvm-project/pull/167792)?\n\nI've rewritten that PR.  Please try it now.  Sorry for the churn.\n\n> It will not fix the reproducer attached to this issue.\n\nIt does now, but please try your original java reproducer too.\n"
+      },
+      {
+        "author": "jdenny-ornl",
+        "body": "@TatyanaDoubts PR #167792 has been merged into main.  Let us know if it resolves the issue for you."
+      },
+      {
+        "author": "TatyanaDoubts",
+        "body": "PR https://github.com/llvm/llvm-project/pull/167792 fixed the issue."
+      },
+      {
+        "author": "jdenny-ornl",
+        "body": "Thanks for confirming."
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

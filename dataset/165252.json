@@ -1,0 +1,69 @@
+{
+  "bug_id": "165252",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/165252",
+  "bug_type": "crash",
+  "base_commit": "c03d0fe672b2506d22d101cb7704996f4ffda3e4",
+  "knowledge_cutoff": "2025-10-27T13:57:20Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/UnifyLoopExits"
+  ],
+  "hints": {
+    "fix_commit": "2c7cf896be28febcd2f9af1b0dfdb5dfc6b97583",
+    "components": [
+      "ControlFlowUtils",
+      "UnifyLoopExits"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Utils/ControlFlowUtils.cpp": [
+        [
+          299,
+          304
+        ]
+      ],
+      "llvm/lib/Transforms/Utils/UnifyLoopExits.cpp": [
+        [
+          154,
+          161
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Utils/ControlFlowUtils.cpp": [
+        "ControlFlowHub::finalize"
+      ],
+      "llvm/lib/Transforms/Utils/UnifyLoopExits.cpp": [
+        "unifyLoopExits"
+      ]
+    }
+  },
+  "patch": "commit 2c7cf896be28febcd2f9af1b0dfdb5dfc6b97583\nAuthor: Miguel Saldivar <saldivarcher@gmail.com>\nDate:   Sun Jan 25 16:31:28 2026 -0800\n\n    [llvm][UnifyLoopExits] Avoid optimization if no exit block is found (#165343)\n    \n    If there is not an exit block, we should not try unify the loops.\n    Instead we should just return.\n    \n    Fixes #165252\n\ndiff --git a/llvm/lib/Transforms/Utils/ControlFlowUtils.cpp b/llvm/lib/Transforms/Utils/ControlFlowUtils.cpp\nindex f728e9f18af5..8de83cc3700c 100644\n--- a/llvm/lib/Transforms/Utils/ControlFlowUtils.cpp\n+++ b/llvm/lib/Transforms/Utils/ControlFlowUtils.cpp\n@@ -299,6 +299,8 @@ std::pair<BasicBlock *, bool> ControlFlowHub::finalize(\n       Outgoing.insert(Succ1);\n   }\n \n+  assert(Outgoing.size() && \"No outgoing edges\");\n+\n   if (Outgoing.size() < 2)\n     return {Outgoing.front(), false};\n \ndiff --git a/llvm/lib/Transforms/Utils/UnifyLoopExits.cpp b/llvm/lib/Transforms/Utils/UnifyLoopExits.cpp\nindex e86ab13094b1..21baf4ec1d03 100644\n--- a/llvm/lib/Transforms/Utils/UnifyLoopExits.cpp\n+++ b/llvm/lib/Transforms/Utils/UnifyLoopExits.cpp\n@@ -154,8 +154,13 @@ static bool unifyLoopExits(DominatorTree &DT, LoopInfo &LI, Loop *L) {\n   SmallVector<BasicBlock *, 8> ExitingBlocks;\n   L->getExitingBlocks(ExitingBlocks);\n \n+  // No exit blocks, so nothing to do. Just return.\n+  if (ExitingBlocks.empty())\n+    return false;\n+\n   DomTreeUpdater DTU(DT, DomTreeUpdater::UpdateStrategy::Eager);\n   SmallVector<BasicBlock *, 8> CallBrTargetBlocksToFix;\n+\n   // Redirect exiting edges through a control flow hub.\n   ControlFlowHub CHub;\n   bool Changed = false;\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/UnifyLoopExits/no-exit-blocks.ll",
+      "commands": [
+        "opt -passes=unify-loop-exits %s -S 2>&1"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "; Based from this issue: https://github.com/llvm/llvm-project/issues/165252\n\ndefine void @test() {\nentry:\n  br i1 true, label %end, label %Loop\n\nLoop:\n  %V = phi i32 [0, %entry], [%V1, %Loop]\n  %V1 = add i32 %V, 1\n  br label %Loop\n\nend:\n  ret void\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "unify-loop-exits pass: Assertion `!empty() && \"Cannot call front() on empty SetVector!\"' failed.",
+    "body": "Reproducer:\nhttps://godbolt.org/z/GET14Pbb8\n\nBacktrace:\n```console\nopt: /root/llvm-project/llvm/include/llvm/ADT/SetVector.h:132: const value_type& llvm::SetVector<T, Vector, Set, N>::front() const [with T = llvm::BasicBlock*; Vector = llvm::SmallVector<llvm::BasicBlock*, 0>; Set = llvm::DenseSet<llvm::BasicBlock*, llvm::DenseMapInfo<llvm::BasicBlock*, void> >; unsigned int N = 0; llvm::SetVector<T, Vector, Set, N>::value_type = llvm::BasicBlock*]: Assertion `!empty() && \"Cannot call front() on empty SetVector!\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=unify-loop-exits <source>\n1.\tRunning pass \"function(unify-loop-exits)\" on module \"<source>\"\n2.\tRunning pass \"unify-loop-exits\" on function \"test\"\n #0 0x0000000005975828 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5975828)\n #1 0x00000000059726d4 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007d1723c42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007d1723c969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007d1723c42476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007d1723c287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007d1723c2871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007d1723c39e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000004c99174 llvm::ControlFlowHub::finalize(llvm::DomTreeUpdater*, llvm::SmallVectorImpl<llvm::BasicBlock*>&, llvm::StringRef, std::optional<unsigned int>) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4c99174)\n #9 0x0000000004c81693 unifyLoopExits(llvm::DominatorTree&, llvm::LoopInfo&, llvm::Loop*) UnifyLoopExits.cpp:0:0\n#10 0x0000000004c83a12 runImpl(llvm::LoopInfo&, llvm::DominatorTree&) UnifyLoopExits.cpp:0:0\n#11 0x0000000004c83f79 llvm::UnifyLoopExitsPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4c83f79)\n#12 0x0000000000efc39e llvm::detail::PassModel<llvm::Function, llvm::UnifyLoopExitsPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xefc39e)\n#13 0x000000000574f081 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x574f081)\n#14 0x0000000000efc57e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xefc57e)\n#15 0x000000000574d6fa llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x574d6fa)\n#16 0x000000000097bade llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97bade)\n#17 0x000000000574d0b1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x574d0b1)\n#18 0x0000000000985c7a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x985c7a)\n#19 0x0000000000979ef1 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x979ef1)\n#20 0x00007d1723c29d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#21 0x00007d1723c29e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#22 0x0000000000971305 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x971305)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "k-arrows",
+    "labels": [
+      "crash",
+      "llvm:transforms"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": false,
+    "is_single_func_fix": false
+  },
+  "verified": true
+}

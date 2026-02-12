@@ -1,0 +1,60 @@
+{
+  "bug_id": "176548",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/176548",
+  "bug_type": "crash",
+  "base_commit": "6b86e24ec1785ab13bbc1e136a85537460b15fb2",
+  "knowledge_cutoff": "2026-01-17T09:19:57Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InstCombine"
+  ],
+  "hints": {
+    "fix_commit": "9696c8bd620890387b258a116b9f244d91454627",
+    "components": [
+      "InstCombine"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp": [
+        [
+          1486,
+          1492
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp": [
+        "InstCombinerImpl::foldShuffledIntrinsicOperands"
+      ]
+    }
+  },
+  "patch": "commit 9696c8bd620890387b258a116b9f244d91454627\nAuthor: Yingwei Zheng <dtcxzyw2333@gmail.com>\nDate:   Sat Jan 17 20:04:37 2026 +0800\n\n    [InstCombine] Bail out on intrinsics with struct return types (#176556)\n    \n    After https://github.com/llvm/llvm-project/pull/174835, overflow\n    intrinsics can be vectorized. But `foldShuffledIntrinsicOperands`\n    doesn't support shuffling vectors inside the struct return value.\n    \n    Closes https://github.com/llvm/llvm-project/issues/176548.\n\ndiff --git a/llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp b/llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp\nindex eee3d0f6f3e1..b870ac259d3b 100644\n--- a/llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp\n+++ b/llvm/lib/Transforms/InstCombine/InstCombineCalls.cpp\n@@ -1486,7 +1486,8 @@ static Instruction *factorizeMinMaxTree(IntrinsicInst *II) {\n /// try to shuffle after the intrinsic.\n Instruction *\n InstCombinerImpl::foldShuffledIntrinsicOperands(IntrinsicInst *II) {\n-  if (!isTriviallyVectorizable(II->getIntrinsicID()) ||\n+  if (!II->getType()->isVectorTy() ||\n+      !isTriviallyVectorizable(II->getIntrinsicID()) ||\n       !II->getCalledFunction()->isSpeculatable())\n     return nullptr;\n \n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InstCombine/pr176548.ll",
+      "commands": [
+        "opt -S -passes=instcombine < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\n; Make sure we don't pull shufflevector through an intrinsic that returns a struct.\n\ndefine { <4 x i32>, <4 x i1> } @sadd_ov_shuffle_ops(<4 x i32> %x) {\n;\nentry:\n  %splat = shufflevector <4 x i32> %x, <4 x i32> poison, <4 x i32> zeroinitializer\n  %ov = call { <4 x i32>, <4 x i1> } @llvm.sadd.with.overflow.v4i32(<4 x i32> %splat, <4 x i32> splat (i32 1))\n  ret { <4 x i32>, <4 x i1> } %ov\n}\n\ndefine { <4 x float>, <4 x i32> } @frexp_ov_shuffle_ops(<4 x float> %x) {\n;\nentry:\n  %splat = shufflevector <4 x float> %x, <4 x float> poison, <4 x i32> zeroinitializer\n  %ov = call { <4 x float>, <4 x i32> } @llvm.frexp(<4 x float> %splat)\n  ret { <4 x float>, <4 x i32> } %ov\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[InstCombine] Assertion `isValidElementType(ElementType) && \"Element type of a VectorType must be an integer...\"' failed.",
+    "body": "Reproducer: https://godbolt.org/z/bfdeaYxYh\n```\n; bin/opt -passes=instcombine test.ll -S\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine { <4 x i32>, <4 x i1> } @main(<4 x i32> %broadcast.splatinsert2504) {\nentry:\n  %broadcast.splat2505 = shufflevector <4 x i32> %broadcast.splatinsert2504, <4 x i32> poison, <4 x i32> zeroinitializer\n  %0 = call { <4 x i32>, <4 x i1> } @llvm.sadd.with.overflow.v4i32(<4 x i32> %broadcast.splat2505, <4 x i32> splat (i32 1))\n  ret { <4 x i32>, <4 x i1> } %0\n}\n\n```\n```\nopt: /root/llvm-project/llvm/lib/IR/Type.cpp:804: static llvm::FixedVectorType* llvm::FixedVectorType::get(llvm::Type*, unsigned int): Assertion `isValidElementType(ElementType) && \"Element type of a VectorType must \" \"be an integer, floating point, \" \"pointer type, or a valid target \" \"extension type.\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=instcombine <source>\n1.\tRunning pass \"function(instcombine<max-iterations=1;verify-fixpoint>)\" on module \"<source>\"\n2.\tRunning pass \"instcombine<max-iterations=1;verify-fixpoint>\" on function \"main\"\n #0 0x0000000005a781a8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a781a8)\n #1 0x0000000005a75084 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007ea91d642520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007ea91d6969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007ea91d642476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007ea91d6287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007ea91d62871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007ea91d639e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000005812467 llvm::FixedVectorType::get(llvm::Type*, unsigned int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5812467)\n #9 0x00000000049ed31e llvm::InstCombinerImpl::foldShuffledIntrinsicOperands(llvm::IntrinsicInst*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x49ed31e)\n#10 0x00000000049f7ba1 llvm::InstCombinerImpl::visitCallInst(llvm::CallInst&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x49f7ba1)\n#11 0x0000000004994d43 llvm::InstCombinerImpl::run() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4994d43)\n#12 0x0000000004996c26 combineInstructionsOverFunction(llvm::Function&, llvm::InstructionWorklist&, llvm::AAResults*, llvm::AssumptionCache&, llvm::TargetLibraryInfo&, llvm::TargetTransformInfo&, llvm::DominatorTree&, llvm::OptimizationRemarkEmitter&, llvm::BlockFrequencyInfo*, llvm::BranchProbabilityInfo*, llvm::ProfileSummaryInfo*, llvm::InstCombineOptions const&) (.isra.0) InstructionCombining.cpp:0:0\n#13 0x0000000004998194 llvm::InstCombinePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4998194)\n#14 0x0000000002cd254e llvm::detail::PassModel<llvm::Function, llvm::InstCombinePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x2cd254e)\n#15 0x00000000057ebf01 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57ebf01)\n#16 0x0000000000f07dee llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf07dee)\n#17 0x00000000057ea4ba llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57ea4ba)\n#18 0x000000000096468e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96468e)\n#19 0x00000000057e9e71 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57e9e71)\n#20 0x000000000096e84a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96e84a)\n#21 0x00000000009628f8 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9628f8)\n#22 0x00007ea91d629d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#23 0x00007ea91d629e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#24 0x0000000000959575 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x959575)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```\n\nIt was caused by recent changes allowing the vectorization of overflow intrinsics: https://github.com/llvm/llvm-project/pull/174835\n",
+    "author": "dtcxzyw",
+    "labels": [
+      "llvm:instcombine",
+      "crash-on-valid",
+      "generated by fuzzer"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

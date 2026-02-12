@@ -1,0 +1,71 @@
+{
+  "bug_id": "176658",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/176658",
+  "bug_type": "crash",
+  "base_commit": "c7af813b5213ccf4d1fbe42c2bffbde8de5ffd75",
+  "knowledge_cutoff": "2026-01-18T17:08:47Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "3dc5259bc8908a516ea3c90278339d5d40e397d5",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          21794,
+          21799
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "BoUpSLP::BlockScheduling::tryScheduleBundle"
+      ]
+    }
+  },
+  "patch": "commit 3dc5259bc8908a516ea3c90278339d5d40e397d5\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Sun Jan 18 12:41:04 2026 -0800\n\n    [SLP]Do not build bundle for copyables, with parents used in PHI node\n    \n    If the copyables have parents, used in PHI nodes, this causes complex\n    schedulable/non-schedulable dependecies, which require complex\n    processing, but with small profitability. Cut such case early for now to\n    prevent compiler crashes and compile time blow up.\n    \n    Fixes #176658\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex 4c4901c31440..762b394f8ea8 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -21794,6 +21794,23 @@ BoUpSLP::BlockScheduling::tryScheduleBundle(ArrayRef<Value *> VL, BoUpSLP *SLP,\n         if (!Values.insert(std::make_pair(V, Op)).second)\n           return std::nullopt;\n       }\n+    } else {\n+      // If any of the parent requires scheduling - exit, complex dep between\n+      // schedulable/non-schedulable parents.\n+      if (any_of(EI.UserTE->Scalars, [&](Value *V) {\n+            if (EI.UserTE->hasCopyableElements() &&\n+                EI.UserTE->isCopyableElement(V))\n+              return false;\n+            ArrayRef<TreeEntry *> Entries = SLP->getTreeEntries(V);\n+            return any_of(Entries, [](const TreeEntry *TE) {\n+              return TE->doesNotNeedToSchedule() && TE->UserTreeIndex &&\n+                     TE->UserTreeIndex.UserTE->hasState() &&\n+                     TE->UserTreeIndex.UserTE->State !=\n+                         TreeEntry::SplitVectorize &&\n+                     TE->UserTreeIndex.UserTE->getOpcode() == Instruction::PHI;\n+            });\n+          }))\n+        return std::nullopt;\n     }\n   }\n   bool HasCopyables = S.areInstructionsWithCopyableElements();\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/copyables-with-parent-scalars-in-phis.ll",
+      "commands": [
+        "opt -S -passes=slp-vectorizer -mtriple=x86_64-unknown-linux-gnu -slp-threshold=-99999 < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine i32 @test() {\n;\nbb:\n  br label %bb3\n\nbb1:\n  %phi = phi i32 [ %or, %bb3 ]\n  %phi2 = phi i32 [ %ashr7, %bb3 ]\n  ret i32 0\n\nbb3:\n  %phi4 = phi i32 [ 0, %bb ], [ %or, %bb3 ]\n  %phi5 = phi i32 [ 0, %bb ], [ %or8, %bb3 ]\n  %load = load i64, ptr null, align 8\n  %trunc = trunc i64 %load to i32\n  %or = or i32 %phi4, %trunc\n  %trunc6 = trunc i64 0 to i32\n  %and = and i32 %trunc6, 0\n  %ashr = ashr i32 0, %and\n  %ashr7 = ashr i32 %phi5, %and\n  %or8 = or i32 %ashr7, 0\n  br i1 false, label %bb1, label %bb3\n}\n"
+        }
+      ]
+    },
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/matching-insert-point-for-nodes.ll",
+      "commands": [
+        "opt -passes=slp-vectorizer -S -slp-threshold=-99999 -mtriple=x86_64-unknown-linux-gnu < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "test",
+          "test_body": "define i32 @test() {\nbb:\n  br label %bb1\n\nbb1:                                              ; preds = %bb24, %bb\n  %phi = phi i32 [ %lshr25, %bb24 ], [ 0, %bb ]\n  %phi2 = phi i32 [ %or26, %bb24 ], [ 0, %bb ]\n  %phi3 = phi i32 [ 0, %bb24 ], [ 0, %bb ]\n  br i1 false, label %bb4, label %bb11\n\nbb4:                                              ; preds = %bb1\n  %phi6 = phi i32 [ poison, %bb1 ]\n  %phi7 = phi i32 [ poison, %bb1 ]\n  %phi9 = phi i32 [ %phi2, %bb1 ]\n  %phi10 = phi i32 [ %phi, %bb1 ]\n  %0 = phi <2 x double> [ zeroinitializer, %bb1 ]\n  br label %bb19\n\nbb11:                                             ; preds = %bb1\n  br i1 false, label %bb12, label %bb16\n\nbb12:                                             ; preds = %bb11\n  %or = or i32 0, %phi3\n  br label %bb13\n\nbb13:                                             ; preds = %bb12\n  %phi14 = phi i32 [ %phi, %bb12 ]\n  %phi15 = phi i32 [ %or, %bb12 ]\n  br label %bb16\n\nbb16:                                             ; preds = %bb13, %bb11\n  %phi17 = phi i32 [ 0, %bb11 ], [ %phi14, %bb13 ]\n  %phi18 = phi i32 [ 0, %bb11 ], [ %phi15, %bb13 ]\n  br label %bb19\n\nbb19:                                             ; preds = %bb16, %bb4\n  %phi20 = phi i32 [ 0, %bb4 ], [ %phi17, %bb16 ]\n  %phi21 = phi i32 [ 0, %bb4 ], [ %phi18, %bb16 ]\n  %phi22 = phi double [ 0.000000e+00, %bb4 ], [ 0.000000e+00, %bb16 ]\n  %or23 = or i32 %phi21, 0\n  br label %bb24\n\nbb24:                                             ; preds = %bb19\n  %lshr = lshr i32 %phi20, 0\n  %and = and i32 %lshr, 0\n  %lshr25 = lshr i32 %phi, %and\n  %or26 = or i32 0, %or23\n  br label %bb1\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Assertion `all_of(Bundles, [](const ScheduleBundle *Bundle) { return Bundle->isScheduled(); }) && \"must be scheduled at this point\"' failed.",
+    "body": "To reproduce run opt with the test below (-passes=slp-vectorizer -slp-threshold=-99999).\n```\n; ModuleID = './reduced.ll'\nsource_filename = \"./reduced.ll\"\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128-ni:1-p2:32:8:8:32-ni:2\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine i32 @wombat() #0 gc \"statepoint-example\" {\nbb:\n  br label %bb3\n\nbb1:                                              ; preds = %bb3\n  %phi = phi i32 [ %or, %bb3 ]\n  %phi2 = phi i32 [ %ashr7, %bb3 ]\n  ret i32 0\n\nbb3:                                              ; preds = %bb3, %bb\n  %phi4 = phi i32 [ 0, %bb ], [ %or, %bb3 ]\n  %phi5 = phi i32 [ 0, %bb ], [ %or8, %bb3 ]\n  %load = load i64, ptr addrspace(1) null, align 8\n  %trunc = trunc i64 %load to i32\n  %or = or i32 %phi4, %trunc\n  %trunc6 = trunc i64 0 to i32\n  %and = and i32 %trunc6, 0\n  %ashr = ashr i32 0, %and\n  %ashr7 = ashr i32 %phi5, %and\n  %or8 = or i32 %ashr7, 0\n  br i1 false, label %bb1, label %bb3\n}\n\nattributes #0 = { \"target-features\"=\"+prfchw,-cldemote,+avx,+aes,+sahf,+pclmul,-xop,+crc32,-amx-fp8,+xsaves,-avx512fp16,-usermsr,-sm4,-egpr,+sse4.1,-avx10.1,-avx512ifma,+xsave,+sse4.2,-tsxldtrk,-sm3,-ptwrite,-widekl,-movrs,+invpcid,+64bit,+xsavec,-avx512vpopcntdq,+cmov,-avx512vp2intersect,+avx512cd,+movbe,-avxvnniint8,-ccmp,-amx-int8,-kl,-sha512,-avxvnni,+rtm,+adx,+avx2,-hreset,-movdiri,-serialize,-vpclmulqdq,+avx512vl,-uintr,-cf,+clflushopt,-raoint,-cmpccxadd,+bmi,-amx-tile,+sse,-gfni,-avxvnniint16,-amx-fp16,-zu,-ndd,+xsaveopt,+rdrnd,+avx512f,-amx-bf16,-avx512bf16,-avx512vnni,-push2pop2,+cx8,+avx512bw,+sse3,+pku,-nf,-amx-tf32,-amx-avx512,+fsgsbase,-clzero,-mwaitx,-lwp,+lzcnt,-sha,-movdir64b,-ppx,-wbnoinvd,-enqcmd,-avxneconvert,-tbm,-pconfig,-amx-complex,+ssse3,+cx16,-avx10.2,+bmi2,+fma,+popcnt,-avxifma,+f16c,-avx512bitalg,-rdpru,+clwb,+mmx,+sse2,+rdseed,-avx512vbmi2,-prefetchi,-amx-movrs,-rdpid,-fma4,-avx512vbmi,-shstk,-vaes,-waitpkg,-sgx,+fxsr,+avx512dq,-sse4a,-avx512f\" }\n```\nReproducer: https://godbolt.org/z/EsrKx1G99\n\nStack dump:\n```\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=slp-vectorizer -slp-threshold=-99999 <source>\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"<source>\"\n2.\tRunning pass \"slp-vectorizer\" on function \"wombat\"\n #0 0x0000000005a776e8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a776e8)\n #1 0x0000000005a745c4 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000077e368c42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000077e368c969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000077e368c42476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000077e368c287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000077e368c2871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x000077e368c39e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x00000000037f427a llvm::slpvectorizer::BoUpSLP::scheduleBlock(llvm::slpvectorizer::BoUpSLP const&, llvm::slpvectorizer::BoUpSLP::BlockScheduling*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x37f427a)\n #9 0x000000000384885a llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::SmallDenseSet<llvm::Value*, 4u, llvm::DenseMapInfo<llvm::Value*, void>> const&, llvm::Instruction*, llvm::ArrayRef<std::tuple<llvm::Value*, unsigned int, bool>>) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x384885a)\n#10 0x000000000384ce24 llvm::slpvectorizer::BoUpSLP::vectorizeTree() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x384ce24)\n#11 0x000000000386dbb3 llvm::SLPVectorizerPass::tryToVectorizeList(llvm::ArrayRef<llvm::Value*>, llvm::slpvectorizer::BoUpSLP&, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x386dbb3)\n#12 0x000000000387247c bool tryToVectorizeSequence<llvm::Value>(llvm::SmallVectorImpl<llvm::Value*>&, llvm::function_ref<bool (llvm::Value*, llvm::Value*)>, llvm::function_ref<bool (llvm::ArrayRef<llvm::Value*>, llvm::Value*)>, llvm::function_ref<bool (llvm::ArrayRef<llvm::Value*>, bool)>, bool, llvm::slpvectorizer::BoUpSLP&) (.constprop.0) SLPVectorizer.cpp:0:0\n#13 0x000000000387370c llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x387370c)\n#14 0x000000000387b626 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\n#15 0x000000000387c17b llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x387c17b)\n#16 0x00000000030232ee llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x30232ee)\n#17 0x00000000057eb4e1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57eb4e1)\n#18 0x0000000000f07e1e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf07e1e)\n#19 0x00000000057e9a9a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57e9a9a)\n#20 0x000000000096469e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96469e)\n#21 0x00000000057e9451 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x57e9451)\n#22 0x000000000096e85a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96e85a)\n#23 0x0000000000962908 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x962908)\n#24 0x000077e368c29d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#25 0x000077e368c29e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#26 0x0000000000959585 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x959585)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

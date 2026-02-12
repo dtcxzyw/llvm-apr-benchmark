@@ -1,0 +1,65 @@
+{
+  "bug_id": "178884",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/178884",
+  "bug_type": "crash",
+  "base_commit": "5d01a0ad3d599df56d902b418e1a7eaf3f84db42",
+  "knowledge_cutoff": "2026-01-30T12:59:59Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "b73122d5b7f6f2ae7bce1a4d5e3f4c9fda88c787",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          20583,
+          20588
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "BoUpSLP::vectorizeTree"
+      ]
+    }
+  },
+  "patch": "commit b73122d5b7f6f2ae7bce1a4d5e3f4c9fda88c787\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Fri Jan 30 08:45:39 2026 -0800\n\n    [SLP]Cast incoming value to a propr type for int nodes, bitcasted to fp\n    \n    Before casting the value to FP type, need to check, if the type for\n    reduced during minbitwidth analysis and need to restore the original\n    source type to generate correct bitcast operation.\n    \n    Fixes #178884\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex 5dd7909c7ee9..dd70e35b0eee 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -20583,6 +20583,13 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {\n       } else if (VecOpcode == Instruction::SIToFP && SrcIt != MinBWs.end() &&\n                  !SrcIt->second.second) {\n         VecOpcode = Instruction::UIToFP;\n+      } else if (VecOpcode == Instruction::BitCast && SrcIt != MinBWs.end() &&\n+                 ScalarTy->isFPOrFPVectorTy()) {\n+        Type *OrigSrcScalarTy = CI->getSrcTy();\n+        auto *OrigSrcVectorTy =\n+            getWidenedType(OrigSrcScalarTy, E->Scalars.size());\n+        InVec =\n+            Builder.CreateIntCast(InVec, OrigSrcVectorTy, SrcIt->second.second);\n       }\n       Value *V = (VecOpcode != ShuffleOrOp && VecOpcode == Instruction::BitCast)\n                      ? InVec\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/minbw-bitcast-to-fp.ll",
+      "commands": [
+        "opt -S --passes=slp-vectorizer -mtriple=x86_64-unknown-linux-gnu < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine i16 @test(i16 %conv11) {\n;\nentry:\n  %0 = add i64 0, 0\n  %1 = bitcast i64 %0 to double\n  %mul.i.i.17 = fmul double 0.000000e+00, %1\n  %2 = or i64 0, 0\n  %3 = bitcast i64 %2 to double\n  %mul.i.i.18 = fmul double 0.000000e+00, %3\n  %4 = fcmp uno double %mul.i.i.18, 0.000000e+00\n  %5 = select i1 %4, i16 0, i16 0\n  %6 = trunc i64 %2 to i16\n  %7 = or i16 %5, %6\n  %8 = fcmp uno double %mul.i.i.17, 0.000000e+00\n  %9 = select i1 %8, i16 0, i16 0\n  %10 = trunc i64 %0 to i16\n  %11 = or i16 %9, %10\n  %12 = or i64 0, 0\n  %13 = bitcast i64 %12 to double\n  %14 = fcmp uno double %13, 0.000000e+00\n  %15 = select i1 %14, i16 0, i16 0\n  %16 = trunc i64 %12 to i16\n  %17 = zext i16 %conv11 to i64\n  %18 = or i64 %17, 0\n  %19 = bitcast i64 %18 to double\n  %mul.i.i.21 = fmul double 0.000000e+00, %19\n  %20 = fcmp uno double %mul.i.i.21, 0.000000e+00\n  %21 = select i1 %20, i16 0, i16 0\n  %22 = trunc i64 %18 to i16\n  %23 = or i16 %21, %22\n  %24 = or i16 %15, %16\n  %conv140.i.18 = xor i16 %7, %11\n  %conv140.i.20 = xor i16 %24, %conv140.i.18\n  %conv140.i.21 = xor i16 %23, %conv140.i.20\n  ret i16 %conv140.i.21\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[SLPVectorizer] Assertion `castIsValid(op, S, Ty) && \"Invalid cast!\"' failed.",
+    "body": "Reproducer: https://godbolt.org/z/Kajqfzjfx\n```llvm\n; bin/opt -passes=slp-vectorizer test.ll -S\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine fastcc i16 @func_257(i16 %conv11) {\nentry:\n  %0 = add i64 0, 0\n  %1 = bitcast i64 %0 to double\n  %mul.i.i.17 = fmul double 0.000000e+00, %1\n  %2 = or i64 0, 0\n  %3 = bitcast i64 %2 to double\n  %mul.i.i.18 = fmul double 0.000000e+00, %3\n  %4 = fcmp uno double %mul.i.i.18, 0.000000e+00\n  %5 = select i1 %4, i16 0, i16 0\n  %6 = trunc i64 %2 to i16\n  %7 = or i16 %5, %6\n  %8 = fcmp uno double %mul.i.i.17, 0.000000e+00\n  %9 = select i1 %8, i16 0, i16 0\n  %10 = trunc i64 %0 to i16\n  %11 = or i16 %9, %10\n  %12 = or i64 0, 0\n  %13 = bitcast i64 %12 to double\n  %14 = fcmp uno double %13, 0.000000e+00\n  %15 = select i1 %14, i16 0, i16 0\n  %16 = trunc i64 %12 to i16\n  %17 = zext i16 %conv11 to i64\n  %18 = or i64 %17, 0\n  %19 = bitcast i64 %18 to double\n  %mul.i.i.21 = fmul double 0.000000e+00, %19\n  %20 = fcmp uno double %mul.i.i.21, 0.000000e+00\n  %21 = select i1 %20, i16 0, i16 0\n  %22 = trunc i64 %18 to i16\n  %23 = or i16 %21, %22\n  %24 = or i16 %15, %16\n  %conv140.i.18 = xor i16 %7, %11\n  %conv140.i.20 = xor i16 %24, %conv140.i.18\n  %conv140.i.21 = xor i16 %23, %conv140.i.20\n  ret i16 %conv140.i.21\n}\n```\n```\nopt: /root/llvm-project/llvm/lib/IR/Instructions.cpp:3043: static llvm::CastInst* llvm::CastInst::Create(llvm::Instruction::CastOps, llvm::Value*, llvm::Type*, const llvm::Twine&, llvm::InsertPosition): Assertion `castIsValid(op, S, Ty) && \"Invalid cast!\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=slp-vectorizer <source>\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"<source>\"\n2.\tRunning pass \"slp-vectorizer\" on function \"func_257\"\n #0 0x0000000005ab1ef8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5ab1ef8)\n #1 0x0000000005aaedd4 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000072088da42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000072088da969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000072088da42476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000072088da287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000072088da2871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x000072088da39e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000005799836 (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5799836)\n #9 0x0000000000ba36b3 llvm::IRBuilderBase::CreateCast(llvm::Instruction::CastOps, llvm::Value*, llvm::Type*, llvm::Twine const&, llvm::MDNode*, llvm::FMFSource) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xba36b3)\n#10 0x0000000003838400 llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::slpvectorizer::BoUpSLP::TreeEntry*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3838400)\n#11 0x00000000038357ee llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::slpvectorizer::BoUpSLP::TreeEntry*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x38357ee)\n#12 0x0000000003835b5d llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::slpvectorizer::BoUpSLP::TreeEntry*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3835b5d)\n#13 0x0000000003836944 llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::slpvectorizer::BoUpSLP::TreeEntry*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3836944)\n#14 0x00000000038357ee llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::slpvectorizer::BoUpSLP::TreeEntry*) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x38357ee)\n#15 0x0000000003856fa4 llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::SmallDenseSet<llvm::Value*, 4u, llvm::DenseMapInfo<llvm::Value*, void>> const&, llvm::Instruction*, llvm::ArrayRef<std::tuple<llvm::Value*, unsigned int, bool>>) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3856fa4)\n#16 0x0000000003877229 (anonymous namespace)::HorizontalReduction::tryToReduce(llvm::slpvectorizer::BoUpSLP&, llvm::DataLayout const&, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo const&, llvm::AssumptionCache*, llvm::DominatorTree&) SLPVectorizer.cpp:0:0\n#17 0x000000000387a478 llvm::SLPVectorizerPass::vectorizeHorReduction(llvm::PHINode*, llvm::Instruction*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&, llvm::SmallVectorImpl<llvm::WeakTrackingVH>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x387a478)\n#18 0x000000000387f3ab llvm::SLPVectorizerPass::vectorizeRootInstruction(llvm::PHINode*, llvm::Instruction*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (.constprop.0) SLPVectorizer.cpp:0:0\n#19 0x0000000003883940 llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3883940)\n#20 0x0000000003889ed6 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\n#21 0x000000000388ad5b llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x388ad5b)\n#22 0x0000000003028ffe llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3028ffe)\n#23 0x00000000058232e1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58232e1)\n#24 0x0000000000f0866e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf0866e)\n#25 0x000000000582189a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x582189a)\n#26 0x000000000096594e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96594e)\n#27 0x0000000005821251 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5821251)\n#28 0x000000000096fb0a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96fb0a)\n#29 0x0000000000963bb8 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x963bb8)\n#30 0x000072088da29d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#31 0x000072088da29e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#32 0x000000000095a835 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x95a835)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```\nUnlike https://github.com/llvm/llvm-project/issues/170828, this crash can be triggered without revec.\n\n",
+    "author": "dtcxzyw",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash-on-valid",
+      "generated by fuzzer"
+    ],
+    "comments": [
+      {
+        "author": "dtcxzyw",
+        "body": "Bisected to e644f06c2ffc23b3415f3478b05c627303aef614"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

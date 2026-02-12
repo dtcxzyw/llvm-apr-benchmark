@@ -1,0 +1,59 @@
+{
+  "bug_id": "180361",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/180361",
+  "bug_type": "crash",
+  "base_commit": "39622a7739b85aa8cd1d5169028b6c8fd1e0bcaa",
+  "knowledge_cutoff": "2026-02-07T18:16:54Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/DeadStoreElimination"
+  ],
+  "hints": {
+    "fix_commit": "ec059d81aafedb253a02d6f490ad9b9747611038",
+    "components": [
+      "DeadStoreElimination"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp": [
+        [
+          1227,
+          1233
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp": [
+        "isInvisibleToCallerAfterRet"
+      ]
+    }
+  },
+  "patch": "commit ec059d81aafedb253a02d6f490ad9b9747611038\nAuthor: Aiden Grossman <aidengrossman@google.com>\nDate:   Sat Feb 7 11:43:56 2026 -0800\n\n    [DSE] Handle variable offsets with sized dead_on_return (#180364)\n    \n    With a sized dead_on_return, we need to not eliminate stores if there\n    are to a pointer with a variable offset from the underlying object\n    marked dead_on_return. This manifested as an assertion failure as\n    BaseValue/V ended up not being equal. It's possible we could do a range\n    analysis to try and prove the variable offset stays within bounds, but\n    this case seems to come up relatively rarely (only reproducible with a\n    UBSan build of LLVM) and is probably not worth the compile time.\n    \n    Fixes #180361.\n\ndiff --git a/llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp b/llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp\nindex 582ec1dbcec9..e056f0c1f639 100644\n--- a/llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp\n+++ b/llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp\n@@ -1227,7 +1227,11 @@ struct DSEState {\n       int64_t ValueOffset;\n       [[maybe_unused]] const Value *BaseValue =\n           GetPointerBaseWithConstantOffset(Ptr, ValueOffset, DL);\n-      assert(BaseValue == V);\n+      // If we are not able to find a constant offset from the UO, we have to\n+      // pessimistically assume that the store writes to memory out of the\n+      // dead_on_return bounds.\n+      if (BaseValue != V)\n+        return false;\n       // This store is only invisible after return if we are in bounds of the\n       // range marked dead.\n       if (StoreSize.hasValue() &&\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/DeadStoreElimination/simple.ll",
+      "commands": [
+        "opt -passes=dse -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "test_dead_on_return_variable_offset",
+          "test_body": "\ndefine void @test_dead_on_return_variable_offset(ptr dead_on_return(4) %p, i64 %offset) {\n  %p1 = getelementptr i8, ptr %p, i64 %offset\n  store i32 0, ptr %p1\n  ret void\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[DSE] Assertion failure with clang using sized dead_on_return",
+    "body": "We hit an assertion failure in DSE from the following minimized test case:\n```llvm\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\n; Function Attrs: nocallback nofree nounwind willreturn memory(argmem: write)\ndeclare void @llvm.memset.p0.i64(ptr writeonly captures(none), i8, i64, i1 immarg) #0\n\ndefine void @_ZN4llvm19LegacyLegalizerInfoD2Ev(ptr dead_on_return(90056) %this, i64 %arraydestroy.elementPast.add) {\nentry:\n  %arraydestroy.element.ptr = getelementptr i8, ptr %this, i64 %arraydestroy.elementPast.add\n  tail call void @llvm.memset.p0.i64(ptr %arraydestroy.element.ptr, i8 0, i64 0, i1 false)\n  ret void\n}\n\nattributes #0 = { nocallback nofree nounwind willreturn memory(argmem: write) }\n```\nwith the following command line:\n```\nopt -passes=\"dse\" -disable-output <input path>\n```\n\nStack trace looks like the following:\n```\nopt: /home/gha/llvm-project/llvm/lib/Transforms/Scalar/DeadStoreElimination.cpp:1230: bool (anonymous namespace)::DSEState::isInvisibleToCallerAfterRet(const Value *, const Value *, const LocationSize): Assertion `BaseValue == V' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.      Program arguments: ./bin/opt -passes=dse ./reduced.ll\n1.      Running pass \"function(dse)\" on module \"./reduced.ll\"\n2.      Running pass \"dse\" on function \"_ZN4llvm19LegacyLegalizerInfoD2Ev\"\n #0 0x000055cf10cb8868 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (./bin/opt+0x4af8868)\n #1 0x000055cf10cb5fa5 llvm::sys::RunSignalHandlers() (./bin/opt+0x4af5fa5)\n #2 0x000055cf10cb9631 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #3 0x00007f4e67768330 (/lib/x86_64-linux-gnu/libc.so.6+0x45330)\n #4 0x00007f4e677c1b2c pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x9eb2c)\n #5 0x00007f4e6776827e raise (/lib/x86_64-linux-gnu/libc.so.6+0x4527e)\n #6 0x00007f4e6774b8ff abort (/lib/x86_64-linux-gnu/libc.so.6+0x288ff)\n #7 0x00007f4e6774b81b (/lib/x86_64-linux-gnu/libc.so.6+0x2881b)\n #8 0x00007f4e6775e517 (/lib/x86_64-linux-gnu/libc.so.6+0x3b517)\n #9 0x000055cf0fb4221a (anonymous namespace)::DSEState::isInvisibleToCallerAfterRet(llvm::Value const*, llvm::Value const*, llvm::LocationSize) DeadStoreElimination.cpp:0:0\n#10 0x000055cf0fb3768c eliminateDeadStores(llvm::Function&, llvm::AAResults&, llvm::MemorySSA&, llvm::DominatorTree&, llvm::PostDominatorTree&, llvm::TargetLibraryInfo const&, llvm::LoopInfo const&) DeadStoreElimination.cpp:0:0\n#11 0x000055cf0fb34215 llvm::DSEPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (./bin/opt+0x3974215)\n#12 0x000055cf0e754bed llvm::detail::PassModel<llvm::Function, llvm::DSEPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (./bin/opt+0x2594bed)\n#13 0x000055cf10a79c37 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (./bin/opt+0x48b9c37)\n#14 0x000055cf0ce6ce2d llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (./bin/opt+0xcace2d)\n#15 0x000055cf10a7dc71 llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (./bin/opt+0x48bdc71)\n#16 0x000055cf0c97cc0d llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (./bin/opt+0x7bcc0d)\n#17 0x000055cf10a78d07 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (./bin/opt+0x48b8d07)\n#18 0x000055cf0c974872 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (./bin/opt+0x7b4872)\n#19 0x000055cf0c96770d optMain (./bin/opt+0x7a770d)\n#20 0x00007f4e6774d1ca (/lib/x86_64-linux-gnu/libc.so.6+0x2a1ca)\n#21 0x00007f4e6774d28b __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x2a28b)\n#22 0x000055cf0c960a05 _start (./bin/opt+0x7a0a05)\nAborted (core dumped)\n```",
+    "author": "boomanaiden154",
+    "labels": [
+      "crash",
+      "llvm:transforms"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

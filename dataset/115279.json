@@ -1,0 +1,73 @@
+{
+  "bug_id": "115279",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/115279",
+  "bug_type": "crash",
+  "base_commit": "a24f6ce743cc2dd311e35894f386c05d0ead089c",
+  "knowledge_cutoff": "2024-11-07T08:44:28Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopFusion"
+  ],
+  "hints": {
+    "fix_commit": "599c2731b3bbe9add135558377dbee2e1fa24358",
+    "components": [
+      "LoopFuse"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
+        [
+          1702,
+          1707
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Scalar/LoopFuse.cpp": [
+        "performFusion"
+      ]
+    }
+  },
+  "patch": "commit 599c2731b3bbe9add135558377dbee2e1fa24358\nAuthor: Alireza Torabian <alireza.torabian@huawei.com>\nDate:   Thu Jan 22 19:50:21 2026 -0500\n\n    [LoopFusion] Forget cached SCEV values after the fusion (#177455)\n    \n    This patch fixes the issue #115279. After the fusion, some of the cached\n    SCEV values such as the induction variable may not be valid anymore and\n    need to be forgotten.\n\ndiff --git a/llvm/lib/Transforms/Scalar/LoopFuse.cpp b/llvm/lib/Transforms/Scalar/LoopFuse.cpp\nindex 9c86b73dfc8d..0deeb557ddab 100644\n--- a/llvm/lib/Transforms/Scalar/LoopFuse.cpp\n+++ b/llvm/lib/Transforms/Scalar/LoopFuse.cpp\n@@ -1702,6 +1702,10 @@ private:\n     // since merging the latches may affect the dispositions.\n     SE.forgetBlockAndLoopDispositions();\n \n+    // Forget the cached SCEV values including the induction variable that may\n+    // have changed after the fusion.\n+    SE.forgetLoop(FC0.L);\n+\n     // Merge the loops.\n     SmallVector<BasicBlock *, 8> Blocks(FC1.L->blocks());\n     for (BasicBlock *BB : Blocks) {\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopFusion/pr115279.ll",
+      "commands": [
+        "opt -passes=loop-fusion -disable-output -stats < %s 2>&1"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "; REQUIRES: asserts\n; STAT: 1 loop-fusion - Loops fused\n\n; C Code\n;\n;;  for (i = 0; i < n; i++)\n;;      array2[i] = array1[i] * 2;\n;;  for (i = 0; i < n; i++)\n;;      if (array1[i] % 2 == 0)\n;;          array2[i] = array1[i] * array1[i];\n; Loop fusion should not crash due to incorrect cached SCEV values as now\n; forgetLoop() is used to reset them after the fusion.\n\ndefine dso_local noundef i32 @forget_induction_scev(ptr noalias %array1, ptr noalias %array2) {\nentry:\n  br label %for.body\n\nfor.body:\n  %indvars.iv54 = phi i64 [ %indvars.iv.next55, %for.body ], [ 0, %entry ]\n  %arrayidx6 = getelementptr inbounds i32, ptr %array1, i64 %indvars.iv54\n  %0 = load i32, ptr %arrayidx6, align 4\n  %mul = shl nsw i32 %0, 1\n  %arrayidx8 = getelementptr inbounds i32, ptr %array2, i64 %indvars.iv54\n  store i32 %mul, ptr %arrayidx8, align 4\n  %indvars.iv.next55 = add nuw nsw i64 %indvars.iv54, 1\n  %exitcond57.not = icmp eq i64 %indvars.iv.next55, 1024\n  br i1 %exitcond57.not, label %for.body14, label %for.body\n\nfor.body14:\n  %indvars.iv58 = phi i64 [ %indvars.iv.next59, %for.inc26 ], [ 0, %for.body ]\n  %arrayidx16 = getelementptr inbounds i32, ptr %array1, i64 %indvars.iv58\n  %1 = load i32, ptr %arrayidx16, align 4\n  %2 = and i32 %1, 1\n  %cmp18 = icmp eq i32 %2, 0\n  br i1 %cmp18, label %if.then, label %for.inc26\n\nif.then:\n  %mul23 = mul nsw i32 %1, %1\n  %arrayidx25 = getelementptr inbounds i32, ptr %array2, i64 %indvars.iv58\n  store i32 %mul23, ptr %arrayidx25, align 4\n  br label %for.inc26\n\nfor.inc26:\n  %indvars.iv.next59 = add nuw nsw i64 %indvars.iv58, 1\n  %exitcond61.not = icmp eq i64 %indvars.iv.next59, 1024\n  br i1 %exitcond61.not, label %for.end28, label %for.body14\n\nfor.end28:\n  %arrayidx30 = getelementptr inbounds i8, ptr %array2, i64 4092\n  %3 = load i32, ptr %arrayidx30, align 4\n  ret i32 %3\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LoopFusion] Assert \"Fused candidate should be eligible for fusion\"",
+    "body": "To reproduce: https://compiler-explorer.com/z/oqacnTqoa\r\n```opt -S -passes=loop-fusion -debug-only=loop-fusion ```  crashes on the LLVMIR generated from ```clang -O1``` because of an assertion failure\r\nStack Dump:\r\n```\r\nopt: /root/llvm-project/llvm/lib/Transforms/Scalar/LoopFuse.cpp:1038: bool {anonymous}::LoopFuser::fuseCandidates(): Assertion `FusedCand.isEligibleForFusion(SE) && \"Fused candidate should be eligible for fusion!\"' failed.\r\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace.\r\nStack dump:\r\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -S -passes=loop-fusion -debug-only=loop-fusion <source>\r\n1.\tRunning pass \"function(loop-fusion)\" on module \"<source>\"\r\n2.\tRunning pass \"loop-fusion\" on function \"main\"\r\n #0 0x000000000513f3c8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x513f3c8)\r\n #1 0x000000000513cdbc SignalHandler(int) Signals.cpp:0:0\r\n #2 0x0000719331442520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\r\n #3 0x00007193314969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\r\n #4 0x0000719331442476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\r\n #5 0x00007193314287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\r\n #6 0x000071933142871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\r\n #7 0x0000719331439e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\r\n #8 0x0000000003d8fdf8 (anonymous namespace)::LoopFuser::fuseCandidates() LoopFuse.cpp:0:0\r\n #9 0x0000000003d90d61 llvm::LoopFusePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3d90d61)\r\n#10 0x0000000002f9003e llvm::detail::PassModel<llvm::Function, llvm::LoopFusePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x2f9003e)\r\n#11 0x0000000004f3cde8 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f3cde8)\r\n#12 0x0000000000e3a56e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xe3a56e)\r\n#13 0x0000000004f3b80e llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f3b80e)\r\n#14 0x0000000000e39c7e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xe39c7e)\r\n#15 0x0000000004f3b240 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4f3b240)\r\n#16 0x00000000009108ea llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9108ea)\r\n#17 0x000000000090324a optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x90324a)\r\n#18 0x0000719331429d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\r\n#19 0x0000719331429e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\r\n#20 0x00000000008facce _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x8facce)\r\nProgram terminated with signal: SIGSEGV\r\nCompiler returned: 139\r\n```\r\nThe IR\r\n```\r\ndefine dso_local noundef i32 @main() local_unnamed_addr #0 {\r\nentry:\r\n  %vla48 = alloca [1024 x i32], align 16\r\n  %vla149 = alloca [1024 x i32], align 16\r\n  br label %for.body\r\n\r\nfor.body:\r\n  %indvars.iv = phi i64 [ 0, %entry ], [ %indvars.iv.next, %for.body ]\r\n  %call = tail call i32 @rand() #2\r\n  %rem = srem i32 %call, 100\r\n  %add = add nsw i32 %rem, 1\r\n  %arrayidx = getelementptr inbounds i32, ptr %vla48, i64 %indvars.iv\r\n  store i32 %add, ptr %arrayidx, align 4\r\n  %indvars.iv.next = add nuw nsw i64 %indvars.iv, 1\r\n  %exitcond.not = icmp eq i64 %indvars.iv.next, 1024\r\n  br i1 %exitcond.not, label %for.body4, label %for.body\r\n\r\nfor.body4:\r\n  %indvars.iv54 = phi i64 [ %indvars.iv.next55, %for.body4 ], [ 0, %for.body ]\r\n  %arrayidx6 = getelementptr inbounds i32, ptr %vla48, i64 %indvars.iv54\r\n  %0 = load i32, ptr %arrayidx6, align 4\r\n  %mul = shl nsw i32 %0, 1\r\n  %arrayidx8 = getelementptr inbounds i32, ptr %vla149, i64 %indvars.iv54\r\n  store i32 %mul, ptr %arrayidx8, align 4\r\n  %indvars.iv.next55 = add nuw nsw i64 %indvars.iv54, 1\r\n  %exitcond57.not = icmp eq i64 %indvars.iv.next55, 1024\r\n  br i1 %exitcond57.not, label %for.body14, label %for.body4\r\n\r\nfor.body14:\r\n  %indvars.iv58 = phi i64 [ %indvars.iv.next59, %for.inc26 ], [ 0, %for.body4 ]\r\n  %arrayidx16 = getelementptr inbounds i32, ptr %vla48, i64 %indvars.iv58\r\n  %1 = load i32, ptr %arrayidx16, align 4\r\n  %2 = and i32 %1, 1\r\n  %cmp18 = icmp eq i32 %2, 0\r\n  br i1 %cmp18, label %if.then, label %for.inc26\r\n\r\nif.then:\r\n  %mul23 = mul nsw i32 %1, %1\r\n  %arrayidx25 = getelementptr inbounds i32, ptr %vla149, i64 %indvars.iv58\r\n  store i32 %mul23, ptr %arrayidx25, align 4\r\n  br label %for.inc26\r\n\r\nfor.inc26:\r\n  %indvars.iv.next59 = add nuw nsw i64 %indvars.iv58, 1\r\n  %exitcond61.not = icmp eq i64 %indvars.iv.next59, 1024\r\n  br i1 %exitcond61.not, label %for.end28, label %for.body14\r\n\r\nfor.end28:\r\n  %arrayidx30 = getelementptr inbounds i8, ptr %vla149, i64 4092\r\n  %3 = load i32, ptr %arrayidx30, align 4\r\n  ret i32 %3\r\n}\r\n\r\ndeclare i32 @rand() local_unnamed_addr #1\r\n\r\nattributes #0 = { mustprogress norecurse nounwind uwtable \"min-legal-vector-width\"=\"0\" \"no-trapping-math\"=\"true\" \"stack-protector-buffer-size\"=\"8\" \"target-cpu\"=\"x86-64\" \"target-features\"=\"+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87\" \"tune-cpu\"=\"generic\" }\r\nattributes #1 = { nounwind \"no-trapping-math\"=\"true\" \"stack-protector-buffer-size\"=\"8\" \"target-cpu\"=\"x86-64\" \"target-features\"=\"+cmov,+cx8,+fxsr,+mmx,+sse,+sse2,+x87\" \"tune-cpu\"=\"generic\" }\r\nattributes #2 = { nounwind }\r\n```\r\n\r\nThis is generated from the cpp program:\r\n```cpp\r\n#include <random>\r\n\r\nint main() {\r\n    int n = 1024;\r\n    int array1[n];\r\n    int array2[n];\r\n    int i;\r\n    for (i = 0; i < n; i++) {\r\n        array1[i] = std::rand() % 100 + 1;\r\n    }\r\n    for (i = 0; i < n; i++) {\r\n        array2[i] = array1[i] * 2;\r\n    }\r\n    for (i = 0; i < n; i++) {\r\n        if (array1[i] % 2 == 0) {\r\n            array2[i] = array1[i] * array1[i];\r\n        } \r\n    }\r\n    return array2[n-1];\r\n}\r\n```",
+    "author": "zitongzhoueric",
+    "labels": [
+      "loopoptim",
+      "crash",
+      "loop-fusion"
+    ],
+    "comments": [
+      {
+        "author": "kasuga-fj",
+        "body": "I did a quick check and it looks like the SCEV cache is not invalidated properly. I added `SE.forgetLoop(FC0.L)` after `mergeLatch`, which resolved the problem. But I'm not sure if this is a proper fix, and I don't understand the comment `Note: Need to forget the loops before merging the loop latches, ...` in the code.\nhttps://github.com/llvm/llvm-project/blob/cb4ae35de0b4c19149379f16c7b279d80a669f9d/llvm/lib/Transforms/Scalar/LoopFuse.cpp#L1725-L1737"
+      },
+      {
+        "author": "madhur13490",
+        "body": "Looking into this."
+      },
+      {
+        "author": "1997alireza",
+        "body": "The issue is fixed by PR #177455. Close it now."
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

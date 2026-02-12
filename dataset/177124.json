@@ -1,0 +1,63 @@
+{
+  "bug_id": "177124",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/177124",
+  "bug_type": "crash",
+  "base_commit": "795d940254aa357cb5095ad776c04e72ced08b9d",
+  "knowledge_cutoff": "2026-01-21T09:20:08Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "d64d3735ab06cd1304fb383543312c355c45eeb8",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          19965,
+          19972
+        ],
+        [
+          19976,
+          19988
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "BoUpSLP::vectorizeTree"
+      ]
+    }
+  },
+  "patch": "commit d64d3735ab06cd1304fb383543312c355c45eeb8\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Wed Jan 21 09:10:46 2026 -0800\n\n    [SLP]Correctly handle vector nodes, coming from same incoming blocks in PHI nodes\n    \n    If multiple nodes are generated from same PHI node for the same block,\n    still need to vectorize vector nodes, even if the value for the incoming block was already emitted.\n    \n    Fixes #177124\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex f696d2021457..22b8ea481f2c 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -19965,8 +19965,7 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {\n \n       // PHINodes may have multiple entries from the same block. We want to\n       // visit every block once.\n-      SmallPtrSet<BasicBlock *, 4> VisitedBBs;\n-\n+      SmallDenseMap<BasicBlock *, unsigned, 4> VisitedBBs;\n       for (unsigned I : seq<unsigned>(PH->getNumIncomingValues())) {\n         BasicBlock *IBB = PH->getIncomingBlock(I);\n \n@@ -19976,13 +19975,17 @@ Value *BoUpSLP::vectorizeTree(TreeEntry *E) {\n           return NewPhi;\n         }\n \n-        if (!VisitedBBs.insert(IBB).second) {\n-          Value *VecOp = NewPhi->getIncomingValueForBlock(IBB);\n-          NewPhi->addIncoming(VecOp, IBB);\n+        auto Res = VisitedBBs.try_emplace(IBB, I);\n+        if (!Res.second) {\n           TreeEntry *OpTE = getOperandEntry(E, I);\n-          assert(!OpTE->VectorizedValue && \"Expected no vectorized value.\");\n-          OpTE->VectorizedValue = VecOp;\n-          continue;\n+          if (OpTE->isGather() || DeletedNodes.contains(OpTE) ||\n+              TransformedToGatherNodes.contains(OpTE)) {\n+            Value *VecOp = NewPhi->getIncomingValue(Res.first->getSecond());\n+            NewPhi->addIncoming(VecOp, IBB);\n+            assert(!OpTE->VectorizedValue && \"Expected no vectorized value.\");\n+            OpTE->VectorizedValue = VecOp;\n+            continue;\n+          }\n         }\n \n         Builder.SetInsertPoint(IBB->getTerminator());\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/phi-multi-same-nodes.ll",
+      "commands": [
+        "opt -passes=slp-vectorizer -S -slp-threshold=-99999 -mtriple=x86_64-unknown-linux-gnu < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine void @test() {\n;\nbb:\n  %ashr = ashr i32 0, 0\n  %add = add i32 0, 0\n  switch i32 0, label %bb1 [\n  i32 -4, label %bb4\n  i32 -1, label %bb4\n  i32 1, label %bb4\n  i32 2, label %bb4\n  i32 5, label %bb4\n  i32 7, label %bb4\n  i32 8, label %bb4\n  i32 11, label %bb4\n  i32 13, label %bb4\n  i32 21, label %bb4\n  i32 17, label %bb4\n  i32 19, label %bb4\n  ]\n\nbb1:\n  %add2 = add i32 0, 0\n  %ashr3 = ashr i32 %add2, 1\n  %xor = xor i32 0, 0\n  %or = or i32 %xor, %ashr\n  switch i32 0, label %bb4 [\n  i32 -4, label %bb4\n  i32 -1, label %bb4\n  i32 1, label %bb4\n  i32 2, label %bb4\n  i32 5, label %bb4\n  i32 7, label %bb4\n  i32 8, label %bb4\n  i32 11, label %bb4\n  i32 13, label %bb4\n  i32 21, label %bb4\n  i32 17, label %bb4\n  i32 19, label %bb4\n  ]\n\nbb4:\n  %phi = phi i32 [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr, %bb ], [ %ashr3, %bb1 ], [ %ashr3, %bb1 ]\n  %phi5 = phi i32 [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %or, %bb1 ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %add, %bb ], [ %or, %bb1 ], [ %or, %bb1 ]\n  ret void\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Assertion `!contains(New, this) && \"this->replaceAllUsesWith(expr(this)) is NOT valid!\"' failed.",
+    "body": "To reproduce run opt with the test below, -passes=slp-vectorizer -slp-threshold=-99999\n\n[reduced-stripped.ll.zip](https://github.com/user-attachments/files/24762079/reduced-stripped.ll.zip)\n\nReproducer: https://godbolt.org/z/Ys1hj3M6K\n\nStack dump:\n```\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=slp-vectorizer -slp-threshold=-99999 <source>\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"<source>\"\n2.\tRunning pass \"slp-vectorizer\" on function \"wombat\"\n #0 0x0000000005a91978 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5a91978)\n #1 0x0000000005a8e854 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x0000751bd4242520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x0000751bd42969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x0000751bd4242476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x0000751bd42287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x0000751bd422871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x0000751bd4239e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x000000000583d2a6 llvm::Value::doRAUW(llvm::Value*, llvm::Value::ReplaceMetadataUses) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x583d2a6)\n #9 0x0000000003854ef1 llvm::slpvectorizer::BoUpSLP::vectorizeTree(llvm::SmallDenseSet<llvm::Value*, 4u, llvm::DenseMapInfo<llvm::Value*, void>> const&, llvm::Instruction*, llvm::ArrayRef<std::tuple<llvm::Value*, unsigned int, bool>>) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3854ef1)\n#10 0x0000000003858ca4 llvm::slpvectorizer::BoUpSLP::vectorizeTree() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3858ca4)\n#11 0x0000000003879873 llvm::SLPVectorizerPass::tryToVectorizeList(llvm::ArrayRef<llvm::Value*>, llvm::slpvectorizer::BoUpSLP&, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3879873)\n#12 0x000000000387e13c bool tryToVectorizeSequence<llvm::Value>(llvm::SmallVectorImpl<llvm::Value*>&, llvm::function_ref<bool (llvm::Value*, llvm::Value*)>, llvm::function_ref<bool (llvm::ArrayRef<llvm::Value*>, llvm::Value*)>, llvm::function_ref<bool (llvm::ArrayRef<llvm::Value*>, bool)>, bool, llvm::slpvectorizer::BoUpSLP&) (.constprop.0) SLPVectorizer.cpp:0:0\n#13 0x000000000387f3cc llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x387f3cc)\n#14 0x0000000003887306 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\n#15 0x0000000003887e5b llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3887e5b)\n#16 0x000000000302d3ce llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x302d3ce)\n#17 0x0000000005805671 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5805671)\n#18 0x0000000000f0620e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf0620e)\n#19 0x0000000005803c2a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5803c2a)\n#20 0x000000000096300e llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96300e)\n#21 0x00000000058035e1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58035e1)\n#22 0x000000000096d1ca llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96d1ca)\n#23 0x0000000000961278 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x961278)\n#24 0x0000751bd4229d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#25 0x0000751bd4229e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#26 0x0000000000957ef5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x957ef5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash-on-valid"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

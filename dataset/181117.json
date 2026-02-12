@@ -1,0 +1,63 @@
+{
+  "bug_id": "181117",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/181117",
+  "bug_type": "crash",
+  "base_commit": "dcb38a4ef788be1276ac1aee5b48a400dd18013f",
+  "knowledge_cutoff": "2026-02-12T11:02:10Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/AggressiveInstCombine"
+  ],
+  "hints": {
+    "fix_commit": "4167b285e228ee1cfff77f30eee66cbc7b4dd3db",
+    "components": [
+      "AggressiveInstCombine"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp": [
+        [
+          915,
+          921
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp": [
+        "mergeConsecutivePartStores"
+      ]
+    }
+  },
+  "patch": "commit 4167b285e228ee1cfff77f30eee66cbc7b4dd3db\nAuthor: Nikita Popov <npopov@redhat.com>\nDate:   Thu Feb 12 14:41:00 2026 +0100\n\n    [AggressiveInstCombine] Create zext during store merge (#181125)\n    \n    The top extracted value can include shifted-in zero bits. In that case\n    we should emit a zext before the new store.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/181117.\n\ndiff --git a/llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp b/llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp\nindex 3341368208c2..797fabde3f25 100644\n--- a/llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp\n+++ b/llvm/lib/Transforms/AggressiveInstCombine/AggressiveInstCombine.cpp\n@@ -915,7 +915,7 @@ static bool mergeConsecutivePartStores(ArrayRef<PartStore> Parts,\n   Value *Val = First.Val;\n   if (First.ValOffset != 0)\n     Val = Builder.CreateLShr(Val, First.ValOffset);\n-  Val = Builder.CreateTrunc(Val, NewTy);\n+  Val = Builder.CreateZExtOrTrunc(Val, NewTy);\n   StoreInst *Store = Builder.CreateAlignedStore(\n       Val, First.Store->getPointerOperand(), First.Store->getAlign());\n \n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/AggressiveInstCombine/X86/store-merge.ll",
+      "commands": [
+        "opt -S -passes=aggressive-instcombine -mtriple=x86_64-unknown-linux-gnu < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "test_store_same_parts_twice",
+          "test_body": "define void @test_store_same_parts_twice(i32 %x, ptr %p) {\n  %x.0 = trunc i32 %x to i8\n  store i8 %x.0, ptr %p, align 1\n  %shr.1 = lshr i32 %x, 8\n  %x.1 = trunc i32 %shr.1 to i8\n  %gep.1 = getelementptr i8, ptr %p, i64 1\n  store i8 %x.1, ptr %gep.1, align 1\n  %gep.2 = getelementptr i8, ptr %p, i64 2\n  store i8 %x.0, ptr %gep.2, align 1\n  %gep.3 = getelementptr i8, ptr %p, i64 3\n  store i8 %x.1, ptr %gep.3, align 1\n  ret void\n}\n"
+        },
+        {
+          "test_name": "test_zext_store",
+          "test_body": "define void @test_zext_store(i56 %arg, ptr %p) {\n  %lo = trunc i56 %arg to i32\n  store i32 %lo, ptr %p, align 4\n  %shr = lshr i56 %arg, 32\n  %hi = trunc i56 %shr to i32\n  %p.4 = getelementptr i8, ptr %p, i64 4\n  store i32 %hi, ptr %p.4, align 4\n  ret void\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[AggressiveInstCombine] Invalid trunc creation in store merge optimization",
+    "body": "```llvm\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine void @test(i56 %arg, ptr %p) {\n  %lo = trunc i56 %arg to i32\n  store i32 %lo, ptr %p, align 4\n  %shr = lshr i56 %arg, 32\n  %hi = trunc i56 %shr to i32\n  %p.4 = getelementptr i8, ptr %p, i64 4\n  store i32 %hi, ptr %p.4, align 4\n  ret void\n}\n```\n\n> opt: /home/npopov/repos/llvm-project/llvm/lib/IR/Instructions.cpp:3043: static CastInst *llvm::CastInst::Create(Instruction::CastOps, Value *, Type *, const Twine &, InsertPosition): Assertion `castIsValid(op, S, Ty) && \"Invalid cast!\"' failed.\n",
+    "author": "nikic",
+    "labels": [
+      "crash",
+      "llvm:instcombine"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

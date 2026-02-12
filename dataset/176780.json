@@ -1,0 +1,59 @@
+{
+  "bug_id": "176780",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/176780",
+  "bug_type": "crash",
+  "base_commit": "24bf018be2055e131c440ffd1b8251e660d3d226",
+  "knowledge_cutoff": "2026-01-19T17:28:38Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "51845a53fd2e2f6b0a18dfad3f912e9f676a5fc9",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          902,
+          908
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "getExtractIndex"
+      ]
+    }
+  },
+  "patch": "commit 51845a53fd2e2f6b0a18dfad3f912e9f676a5fc9\nAuthor: Soumik15630m <soumik15630m@gmail.com>\nDate:   Wed Jan 28 16:38:03 2026 +0530\n\n    [SLP] Fix crash on extractelement with out-of-bounds index.....Fixes \u2026 (#176918)\n    \n    \u2026The cose modeling logic was attempting to set a bit in APInt for an\n    out-of-bounds index, causing an assertion failure. This patch ignores\n    OOB indices as they produce poison- which is already handled.\n    Fixes #176780\n    \n    this is the same test result which produces this bug\n    \n    <img width=\"1600\" height=\"964\" alt=\"image\"\n    src=\"https://github.com/user-attachments/assets/80593902-9d15-4e18-850b-a558bca8518e\"\n    />\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex 3034e94b5997..ce4786802388 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -902,7 +902,14 @@ static std::optional<unsigned> getExtractIndex(const Instruction *E) {\n     auto *CI = dyn_cast<ConstantInt>(E->getOperand(1));\n     if (!CI)\n       return std::nullopt;\n-    return CI->getZExtValue();\n+    // Check if the index is out of bound  - we can get the source vector from\n+    // operand 0\n+    unsigned Idx = CI->getZExtValue();\n+    auto *EE = cast<ExtractElementInst>(E);\n+    const unsigned VF = ::getNumElements(EE->getVectorOperandType());\n+    if (Idx >= VF)\n+      return std::nullopt;\n+    return Idx;\n   }\n   auto *EI = cast<ExtractValueInst>(E);\n   if (EI->getNumIndices() != 1)\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/X86/crash-on-out-of-bound-extract.ll",
+      "commands": [
+        "opt -passes=slp-vectorizer -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\n\n\ndefine <4 x i32> @test(<4 x i32> %A){\n;\nentry:\n  %e0 = extractelement <4 x i32> %A, i64 0\n  %e1 = extractelement <4 x i32> %A, i64 1\n  %e2 = extractelement <4 x i32> %A, i64 2\n  %e3 = extractelement <4 x i32> %A, i64 3\n  %oob = extractelement <4 x i32> %A, i64 4\n  %d0 = sdiv i32 %e0, %e0\n  %d1 = sdiv i32 %oob, %e1\n  %d2 = sdiv i32 %e2, %e3\n  %d3 = sdiv i32 %oob, %e1\n  %v0 = insertelement <4 x i32> poison, i32 %d0, i64 0\n  %v1 = insertelement <4 x i32> %v0, i32 %d1, i64 1\n  %v2 = insertelement <4 x i32> %v1, i32 %d2, i64 2\n  %v3 = insertelement <4 x i32> %v2, i32 %d3, i64 3\n  ret <4 x i32> %v3\n\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LLVM] SLP Vectorizer crashes with APInt setBit assertion on out-of-bounds extractelement",
+    "body": "**Fuzzer Generated Test** \n**Reproducer**\nhttps://godbolt.org/z/rxrEYrj1v\n\n**Test Commit**\n[0b2f3cfb72a76fa90f3ec2a234caabe0d0712590](https://github.com/llvm/llvm-project/commit/0b2f3cfb72a76fa90f3ec2a234caabe0d0712590)\n\n**Description**\nThe SLP Vectorizer crashes when processing IR containing an out-of-bounds `extractelement` index. While `extractelement` with an out-of-bounds index is valid IR (it produces poison), the SLP Vectorizer's cost calculation logic uses an APInt bitmask to track vector lanes and attempts to set a bit beyond the APInt's width, triggering an assertion failure.\n\nRelated:  https://github.com/llvm/llvm-project/issues/58054\n\n**Steps to reproduce**\n- Minimized test case, `input.ll`\n```\ndefine <4 x i32> @test(<4 x i32> %A) {\nentry:\n  %e0 = extractelement <4 x i32> %A, i64 0\n  %e1 = extractelement <4 x i32> %A, i64 1\n  %e2 = extractelement <4 x i32> %A, i64 2\n  %e3 = extractelement <4 x i32> %A, i64 3\n  %oob = extractelement <4 x i32> %A, i64 4\n  %d0 = sdiv i32 %e0, %e0\n  %d1 = sdiv i32 %oob, %e1\n  %d2 = sdiv i32 %e2, %e3\n  %d3 = sdiv i32 %oob, %e1\n  %v0 = insertelement <4 x i32> poison, i32 %d0, i64 0\n  %v1 = insertelement <4 x i32> %v0, i32 %d1, i64 1\n  %v2 = insertelement <4 x i32> %v1, i32 %d2, i64 2\n  %v3 = insertelement <4 x i32> %v2, i32 %d3, i64 3\n  ret <4 x i32> %v3\n}\n```\n\n**Command**\n```\nopt -passes=slp-vectorizer -S input.ll\n```\n\n**Output**\n```\nopt: /workdir/llvm-project/llvm/include/llvm/ADT/APInt.h:1332: void llvm::APInt::setBit(unsigned int): Assertion `BitPosition < BitWidth && \"BitPosition out of range\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: opt -passes=slp-vectorizer -S /input.ll\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"input.ll\"\n2.\tRunning pass \"slp-vectorizer\" on function \"test\"\n #0 0x00007f726e5ac728 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMSupport.so.22.0git+0x1d3728)\n #1 0x00007f726e5a99d5 llvm::sys::RunSignalHandlers() (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMSupport.so.22.0git+0x1d09d5)\n #2 0x00007f726e5ad3c6 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #3 0x00007f72786d5420 __restore_rt (/lib/x86_64-linux-gnu/libpthread.so.0+0x14420)\n #4 0x00007f726e0c000b raise /build/glibc-B3wQXB/glibc-2.31/signal/../sysdeps/unix/sysv/linux/raise.c:51:1\n #5 0x00007f726e09f859 abort /build/glibc-B3wQXB/glibc-2.31/stdlib/abort.c:81:7\n #6 0x00007f726e09f729 get_sysdep_segment_value /build/glibc-B3wQXB/glibc-2.31/intl/loadmsgcat.c:509:8\n #7 0x00007f726e09f729 _nl_load_domain /build/glibc-B3wQXB/glibc-2.31/intl/loadmsgcat.c:970:34\n #8 0x00007f726e0b0fd6 (/lib/x86_64-linux-gnu/libc.so.6+0x33fd6)\n #9 0x00007f7270fce24d llvm::InstructionCost llvm::function_ref<llvm::InstructionCost (unsigned int)>::callback_fn<llvm::slpvectorizer::BoUpSLP::getEntryCost(llvm::slpvectorizer::BoUpSLP::TreeEntry const*, llvm::ArrayRef<llvm::Value*>, llvm::SmallPtrSetImpl<llvm::Value*>&)::$_6>(long, unsigned int) SLPVectorizer.cpp:0:0\n#10 0x00007f7270f12f56 llvm::slpvectorizer::BoUpSLP::getEntryCost(llvm::slpvectorizer::BoUpSLP::TreeEntry const*, llvm::ArrayRef<llvm::Value*>, llvm::SmallPtrSetImpl<llvm::Value*>&)::$_2::operator()(llvm::function_ref<llvm::InstructionCost (unsigned int)>, llvm::function_ref<llvm::InstructionCost (llvm::InstructionCost)>) const SLPVectorizer.cpp:0:0\n#11 0x00007f7270f0d5fc llvm::slpvectorizer::BoUpSLP::getEntryCost(llvm::slpvectorizer::BoUpSLP::TreeEntry const*, llvm::ArrayRef<llvm::Value*>, llvm::SmallPtrSetImpl<llvm::Value*>&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1665fc)\n#12 0x00007f7270f19404 llvm::slpvectorizer::BoUpSLP::calculateTreeCostAndTrimNonProfitable(llvm::ArrayRef<llvm::Value*>) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x172404)\n#13 0x00007f7270f540e4 llvm::SLPVectorizerPass::tryToVectorizeList(llvm::ArrayRef<llvm::Value*>, llvm::slpvectorizer::BoUpSLP&, bool) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1ad0e4)\n#14 0x00007f7270f5a075 llvm::SLPVectorizerPass::vectorizeInsertElementInst(llvm::InsertElementInst*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&, bool) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1b3075)\n#15 0x00007f7270f5a279 llvm::SLPVectorizerPass::vectorizeInserts(llvm::SmallSetVector<llvm::Instruction*, 8u>&, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1b3279)\n#16 0x00007f7270f5b359 llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&)::$_4::operator()(bool) const SLPVectorizer.cpp:0:0\n#17 0x00007f7270f4e4a4 llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1a74a4)\n#18 0x00007f7270f4ac94 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1a3c94)\n#19 0x00007f7270f49fe5 llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMVectorize.so.22.0git+0x1a2fe5)\n#20 0x00007f726ea41f6b llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMCore.so.22.0git+0x2e3f6b)\n#21 0x00007f726ea46f9f llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMCore.so.22.0git+0x2e8f9f)\n#22 0x00007f726ea40d4b llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMCore.so.22.0git+0x2e2d4b)\n#23 0x00007f727868a9fd llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::__1::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMOptDriver.so.22.0git+0x269fd)\n#24 0x00007f727869bae4 optMain (/workdir/llvm-project/build-libcxx/bin/../lib/libLLVMOptDriver.so.22.0git+0x37ae4)\n#25 0x00007f726e0a1083 __libc_start_main /build/glibc-B3wQXB/glibc-2.31/csu/../csu/libc-start.c:342:3\n#26 0x000055c43c38e07e _start (/workdir/llvm-project/build-libcxx/bin/opt+0x207e)\n```\n",
+    "author": "sairam2661",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

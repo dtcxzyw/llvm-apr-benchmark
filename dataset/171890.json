@@ -1,0 +1,68 @@
+{
+  "bug_id": "171890",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/171890",
+  "bug_type": "crash",
+  "base_commit": "8bced611727da116641b329250a33c1871f8474c",
+  "knowledge_cutoff": "2025-12-11T20:00:33Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InferAddressSpaces/NVPTX"
+  ],
+  "hints": {
+    "fix_commit": "8b5e95b1fd2fa49a7c1607e294659f2c0ec12d69",
+    "components": [
+      "InferAddressSpaces"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Scalar/InferAddressSpaces.cpp": [
+        [
+          1102,
+          1108
+        ],
+        [
+          1133,
+          1144
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Scalar/InferAddressSpaces.cpp": [
+        "InferAddressSpacesImpl::updateAddressSpace"
+      ]
+    }
+  },
+  "patch": "commit 8b5e95b1fd2fa49a7c1607e294659f2c0ec12d69\nAuthor: Hongyu Chen <xxs_chy@outlook.com>\nDate:   Sun Feb 8 01:20:19 2026 +0800\n\n    [InferAddressSpaces] Initialize op(generic const, generic const, ...) -> generic (#172143)\n    \n    Fixes #171890\n    If the pointer operands of an instruction are all constants with generic\n    AS, we always infer the AS of the instruction as uninitialized finally.\n    And the rewrite process will skip cloning the instruction, producing\n    invalid IR.\n    This patch fixes it by inferring the AS of this kind of instruction as\n    flat. Maybe we can fold the operator with all constants to get better\n    performance, but I think this case is rare in the real world.\n\ndiff --git a/llvm/lib/Transforms/Scalar/InferAddressSpaces.cpp b/llvm/lib/Transforms/Scalar/InferAddressSpaces.cpp\nindex 03efc156df1e..93da510c5fbc 100644\n--- a/llvm/lib/Transforms/Scalar/InferAddressSpaces.cpp\n+++ b/llvm/lib/Transforms/Scalar/InferAddressSpaces.cpp\n@@ -1102,7 +1102,8 @@ bool InferAddressSpacesImpl::updateAddressSpace(\n   } else {\n     // Otherwise, infer the address space from its pointer operands.\n     SmallVector<Constant *, 2> ConstantPtrOps;\n-    for (Value *PtrOperand : getPointerOperands(V, *DL, TTI)) {\n+    SmallVector<Value *, 2> PtrOps = getPointerOperands(V, *DL, TTI);\n+    for (Value *PtrOperand : PtrOps) {\n       auto I = InferredAddrSpace.find(PtrOperand);\n       unsigned OperandAS;\n       if (I == InferredAddrSpace.end()) {\n@@ -1133,12 +1134,18 @@ bool InferAddressSpacesImpl::updateAddressSpace(\n       if (NewAS == FlatAddrSpace)\n         break;\n     }\n+\n     if (NewAS != FlatAddrSpace && NewAS != UninitializedAddressSpace) {\n       if (any_of(ConstantPtrOps, [=](Constant *C) {\n             return !isSafeToCastConstAddrSpace(C, NewAS);\n           }))\n         NewAS = FlatAddrSpace;\n     }\n+\n+    // operator(flat const, flat const, ...) -> flat\n+    if (NewAS == UninitializedAddressSpace &&\n+        PtrOps.size() == ConstantPtrOps.size())\n+      NewAS = FlatAddrSpace;\n   }\n \n   unsigned OldAS = InferredAddrSpace.lookup(&V);\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InferAddressSpaces/NVPTX/nullptr.ll",
+      "commands": [
+        "opt -S -passes=infer-address-spaces %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ntarget triple = \"nvptx64--\"\n\ndefine ptr @pr171890(i1 %c) {\n;\nentry:\n  %stack = alloca i16, align 2\n  %const = getelementptr i8, ptr null, i64 1\n  %sel = select i1 %c, ptr %stack, ptr %const\n  ret ptr %sel\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[NVPTX][InferAddressSpaces] Assertion `Val && \"isa<> used on a null pointer\"' failed.",
+    "body": "Reproducer: https://godbolt.org/z/P3exKvMsT\nTestcase:\n```llvm\ntarget datalayout = \"e-p6:32:32-i64:64-i128:128-i256:256-v16:16-v32:32-n16:32:64\"\ntarget triple = \"nvptx64-unknown-nvidiacl\"\n\ndefine ptr @func_64() {\nentry:\n  %p_1027_1 = alloca i16, align 2\n  br label %for.cond2.3\n\nfor.cond2.3:                                      ; preds = %entry\n  %l_171.1.3 = phi ptr [ null, %entry ]\n  br i1 false, label %for.cond2.4, label %BS_LABEL_0.preheader.4\n\nBS_LABEL_0.preheader.4:                           ; preds = %for.cond2.3\n  br label %for.cond2.4\n\nfor.cond2.4:                                      ; preds = %BS_LABEL_0.preheader.4, %for.cond2.3\n  %l_171.1.4 = phi ptr [ %p_1027_1, %BS_LABEL_0.preheader.4 ], [ %l_171.1.3, %for.cond2.3 ]\n  ret ptr %l_171.1.4\n}\n```\n\nDump:\n```\nllc: /root/llvm-project/llvm/include/llvm/Support/Casting.h:109: static bool llvm::isa_impl_cl<To, const From*>::doit(const From*) [with To = llvm::PoisonValue; From = llvm::Value]: Assertion `Val && \"isa<> used on a null pointer\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/llc -o /app/output.s -x86-asm-syntax=intel -O1 <source>\n1.\tRunning pass 'Function Pass Manager' on module '<source>'.\n2.\tRunning pass 'Early CSE' on function '@func_64'\n #0 0x000000000421f3e8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x421f3e8)\n #1 0x000000000421c294 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x0000712cf8642520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x0000712cf86969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x0000712cf8642476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x0000712cf86287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x0000712cf862871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x0000712cf8639e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000002ba36a3 (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x2ba36a3)\n #9 0x0000000002bc87ab simplifyInstructionWithOperands(llvm::Instruction*, llvm::ArrayRef<llvm::Value*>, llvm::SimplifyQuery const&, unsigned int) InstructionSimplify.cpp:0:0\n#10 0x0000000002bc89cb llvm::simplifyInstruction(llvm::Instruction*, llvm::SimplifyQuery const&) (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x2bc89cb)\n#11 0x0000000003aba91f (anonymous namespace)::EarlyCSE::processNode(llvm::DomTreeNodeBase<llvm::BasicBlock>*) EarlyCSE.cpp:0:0\n#12 0x0000000003abcdc6 (anonymous namespace)::EarlyCSE::run() EarlyCSE.cpp:0:0\n#13 0x0000000003abf7cb (anonymous namespace)::EarlyCSELegacyCommonPass<false>::runOnFunction(llvm::Function&) (.part.0) EarlyCSE.cpp:0:0\n#14 0x00000000037503d6 llvm::FPPassManager::runOnFunction(llvm::Function&) (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x37503d6)\n#15 0x0000000003750781 llvm::FPPassManager::runOnModule(llvm::Module&) (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x3750781)\n#16 0x0000000003750fef llvm::legacy::PassManagerImpl::run(llvm::Module&) (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x3750fef)\n#17 0x00000000008fdcc4 compileModule(char**, llvm::LLVMContext&, std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>>&) llc.cpp:0:0\n#18 0x00000000007c8139 main (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x7c8139)\n#19 0x0000712cf8629d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#20 0x0000712cf8629e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#21 0x00000000008f2ec5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/llc+0x8f2ec5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "XChy",
+    "labels": [
+      "crash-on-valid",
+      "llvm:transforms"
+    ],
+    "comments": [
+      {
+        "author": "XChy",
+        "body": "The problem is in InferAddressSpace:\n```llvm\n*** IR Dump Before Infer address spaces (infer-address-spaces) ***\ndefine ptr @func_64() {\nentry:\n  %p_1027_1 = alloca i16, align 2\n  %0 = addrspacecast ptr %p_1027_1 to ptr addrspace(5)\n  %1 = addrspacecast ptr addrspace(5) %0 to ptr\n  br label %for.cond2.3\n\nfor.cond2.3:                                      ; preds = %entry\n  %l_171.1.3 = phi ptr [ null, %entry ]\n  br i1 false, label %for.cond2.4, label %BS_LABEL_0.preheader.4\n\nBS_LABEL_0.preheader.4:                           ; preds = %for.cond2.3\n  br label %for.cond2.4\n\nfor.cond2.4:                                      ; preds = %BS_LABEL_0.preheader.4, %for.cond2.3\n  %l_171.1.4 = phi ptr [ %p_1027_1, %BS_LABEL_0.preheader.4 ], [ %l_171.1.3, %for.cond2.3 ]\n  ret ptr %l_171.1.4\n}\n*** IR Dump Before NVPTX lower atomics of local memory (nvptx-atomic-lower) ***\ndefine ptr @func_64() {\nentry:\n  %p_1027_1 = alloca i16, align 2\n  %0 = addrspacecast ptr %p_1027_1 to ptr addrspace(5)\n  %1 = addrspacecast ptr addrspace(5) %0 to ptr\n  br label %for.cond2.3\n\nfor.cond2.3:                                      ; preds = %entry\n  br i1 false, label %for.cond2.4, label %BS_LABEL_0.preheader.4\n\nBS_LABEL_0.preheader.4:                           ; preds = %for.cond2.3\n  br label %for.cond2.4\n\nfor.cond2.4:                                      ; preds = %BS_LABEL_0.preheader.4, %for.cond2.3\n  %l_171.1.4 = phi ptr addrspace(5) [ %0, %BS_LABEL_0.preheader.4 ], [ <null operand!>, %for.cond2.3 ]\n  %2 = addrspacecast ptr addrspace(5) %l_171.1.4 to ptr\n  ret ptr %2\n}\n```"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

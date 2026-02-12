@@ -1,0 +1,80 @@
+{
+  "bug_id": "175159",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/175159",
+  "bug_type": "crash",
+  "base_commit": "c722ef4874a569de8fd2dc53aaf3e367fa65e05c",
+  "knowledge_cutoff": "2026-01-09T12:10:54Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InstSimplify/ConstProp/WebAssembly"
+  ],
+  "hints": {
+    "fix_commit": "4996e3be341af782b856597023c83ee3ef9b5094",
+    "components": [
+      "ConstantFold"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Analysis/ConstantFolding.cpp": [
+        [
+          4288,
+          4294
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Analysis/ConstantFolding.cpp": [
+        "ConstantFoldFixedVectorCall"
+      ]
+    }
+  },
+  "patch": "commit 4996e3be341af782b856597023c83ee3ef9b5094\nAuthor: Nikita Popov <npopov@redhat.com>\nDate:   Fri Jan 9 17:13:21 2026 +0100\n\n    [ConstantFolding] Allow truncation when folding wasm.dot\n    \n    Changes this to getSigned() to match the signedness of the calculation.\n    However, we still need to allow truncation because the addition\n    result may overflow, and the operation is specified to truncate\n    in that case.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/175159.\n\ndiff --git a/llvm/lib/Analysis/ConstantFolding.cpp b/llvm/lib/Analysis/ConstantFolding.cpp\nindex c3a3035fcaa9..eaf4eb445423 100644\n--- a/llvm/lib/Analysis/ConstantFolding.cpp\n+++ b/llvm/lib/Analysis/ConstantFolding.cpp\n@@ -4288,7 +4288,7 @@ static Constant *ConstantFoldFixedVectorCall(\n     }\n     for (unsigned I = 0; I < Result.size(); I++) {\n       int64_t IAdd = (int64_t)MulVector[I * 2] + (int64_t)MulVector[I * 2 + 1];\n-      Result[I] = ConstantInt::get(Ty, IAdd);\n+      Result[I] = ConstantInt::getSigned(Ty, IAdd, /*ImplicitTrunc=*/true);\n     }\n \n     return ConstantVector::get(Result);\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InstSimplify/ConstProp/WebAssembly/dot.ll",
+      "commands": [
+        "opt -passes=instsimplify -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "dot_one_negative",
+          "test_body": "target triple = \"wasm32-unknown-unknown\"\n\ndefine <4 x i32> @dot_one_negative() {\n  %res = tail call <4 x i32> @llvm.wasm.dot(<8 x i16> splat (i16 1), <8 x i16> splat (i16 -1))\n  ret <4 x i32> %res\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <4 x i32> @llvm.wasm.dot(<8 x i16>, <8 x i16>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "dot_doubly_negative",
+          "test_body": "target triple = \"wasm32-unknown-unknown\"\n\ndefine <4 x i32> @dot_doubly_negative() {\n  %res = tail call <4 x i32> @llvm.wasm.dot(<8 x i16> splat (i16 -1), <8 x i16> splat (i16 -1))\n  ret <4 x i32> %res\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <4 x i32> @llvm.wasm.dot(<8 x i16>, <8 x i16>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "dot_nonzero",
+          "test_body": "target triple = \"wasm32-unknown-unknown\"\n\ndefine <4 x i32> @dot_nonzero() {\n  %res = tail call <4 x i32> @llvm.wasm.dot(<8 x i16> <i16 1, i16 2, i16 3, i16 4, i16 5, i16 6, i16 7, i16 8>, <8 x i16> <i16 1, i16 2, i16 3, i16 4, i16 5, i16 6, i16 7, i16 8>)\n  ret <4 x i32> %res\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <4 x i32> @llvm.wasm.dot(<8 x i16>, <8 x i16>) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[WebAssembly] Assertion `llvm::isUIntN(BitWidth, val) && \"Value is not an N-bit unsigned value\"' failed",
+    "body": "Reproduced using 804aa88317ddbdb6e713306d48dbee0443b252b1\n\ngit-bisecting from the emscripten side narrowed down the introduction of the crash to https://github.com/llvm/llvm-project/compare/55eaa6c27b36...88b77d5eaa66\n\n\n[26060.zip](https://github.com/user-attachments/files/24526777/26060.zip)\n\nEmscripten issue: https://github.com/emscripten-core/emscripten/issues/26060#issue-3795333593",
+    "author": "mr-c",
+    "labels": [
+      "crash",
+      "constant-folding"
+    ],
+    "comments": [
+      {
+        "author": "mr-c",
+        "body": "I've git-bisected this to a83c89495ba6fe0134dcaa02372c320cc7ff0dbf\nTagging @nikic "
+      },
+      {
+        "author": "nikic",
+        "body": "Reduced:\n```llvm\n; RUN: opt -S -passes=instsimplify < %s\ntarget triple = \"wasm32-unknown-emscripten\"\n\ndefine <4 x i32> @test() {\n  %dot = tail call <4 x i32> @llvm.wasm.dot(<8 x i16> <i16 19733, i16 18694, i16 -2158, i16 -12949, i16 -22664, i16 -3805, i16 30779, i16 1600>, <8 x i16> <i16 11918, i16 7268, i16 32199, i16 14806, i16 -14152, i16 -23986, i16 16941, i16 17135>)\n  ret <4 x i32> %dot\n}\n```"
+      },
+      {
+        "author": "mr-c",
+        "body": "Thank you for the quick fix @nikic ! I can confirm it from my end using emscripten + https://github.com/llvm/llvm-project/commit/4996e3be341af782b856597023c83ee3ef9b5094 and the entire SIMDe test suite"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

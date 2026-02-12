@@ -1,0 +1,68 @@
+{
+  "bug_id": "175990",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/175990",
+  "bug_type": "crash",
+  "base_commit": "b84ffe040babfd8541613e41dd394a1baa9404fb",
+  "knowledge_cutoff": "2026-01-14T16:49:12Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "808a6ba345ce6e898e9acc4c5eda60165806e967",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VPlanConstruction.cpp": [
+        [
+          1361,
+          1367
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VPlanConstruction.cpp": [
+        "VPlanTransforms::handleFindLastReductions"
+      ]
+    }
+  },
+  "patch": "commit 808a6ba345ce6e898e9acc4c5eda60165806e967\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Thu Jan 15 09:06:49 2026 +0000\n\n    [VPlan] Bail out when rdx result cannot be found in handleFindLast.\n    \n    Turn assertion from 2abd6d6d7ac\n    (https://github.com/llvm/llvm-project/pull/158088) into a bail\n    out to prevent crash when tail-folding.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/175990.\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanConstruction.cpp b/llvm/lib/Transforms/Vectorize/VPlanConstruction.cpp\nindex 7ee133545eeb..aa3437dfb8a9 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanConstruction.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlanConstruction.cpp\n@@ -1361,7 +1361,9 @@ bool VPlanTransforms::handleFindLastReductions(VPlan &Plan) {\n     // extract.last.active intrinsic.\n     auto *RdxResult =\n         findUserOf<VPInstruction::ComputeReductionResult>(DataSelect);\n-    assert(RdxResult && \"Unable to find reduction result recipe\");\n+    // TODO: Handle tail-folding.\n+    if (!RdxResult)\n+      return false;\n     Builder.setInsertPoint(RdxResult);\n     auto *ExtractLastActive =\n         Builder.createNaryOp(VPInstruction::ExtractLastActive,\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/iv-select-cmp-fold-tail.ll",
+      "commands": [
+        "opt -p loop-vectorize -prefer-predicate-over-epilogue=predicate-dont-vectorize -force-vector-width=4 -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine i32 @find_last_trunc_iv(ptr %src, i64 %n) {\n;\nentry:\n  br label %loop\n\nloop:\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop ]\n  %rdx = phi i32 [ 0, %entry ], [ %rdx.next, %loop ]\n  %gep.src = getelementptr inbounds i32, ptr %src, i64 %iv\n  %l = load i32, ptr %gep.src\n  %cmp103 = icmp eq i32 %l, 0\n  %0 = trunc i64 %iv to i32\n  %rdx.next = select i1 %cmp103, i32 %0, i32 %rdx\n  %iv.next = add i64 %iv, 1\n  %ec = icmp eq i64 %iv, %n\n  br i1 %ec, label %exit, label %loop\n\nexit:\n  ret i32 %rdx.next\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LV] crash with PGO",
+    "body": "[test.zip](https://github.com/user-attachments/files/24619392/test.zip)\n\n```\nclang -O3 -c mov.i -fprofile-use=pgo.profdata \nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace, preprocessed source, and associated run script.\nStack dump:\n0.      Program arguments: /build/install/llvmbin/clang -O3 -c mov.i -fprofile-use=pgo.profdata\n1.      <eof> parser at end of file\n2.      Optimizer\n3.      Running pass \"function<eager-inv>(drop-unnecessary-assumes,float2int,lower-constant-intrinsics,chr,loop(loop-rotate<header-duplication;no-prepare-for-lto>,loop-deletion),loop-distribute,inject-tli-mappings,loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>,drop-unnecessary-assumes,infer-alignment,loop-load-elim,instcombine<max-iterations=1;no-verify-fixpoint>,simplifycfg<bonus-inst-threshold=1;forward-switch-cond;switch-range-to-icmp;switch-to-arithmetic;switch-to-lookup;no-keep-loops;hoist-common-insts;no-hoist-loads-stores-with-cond-faulting;sink-common-insts;speculate-blocks;simplify-cond-branch;no-speculate-unpredictables>,slp-vectorizer,vector-combine,instcombine<max-iterations=1;no-verify-fixpoint>,loop-unroll<O3>,transform-warning,sroa<preserve-cfg>,infer-alignment,instcombine<max-iterations=1;no-verify-fixpoint>,loop-mssa(licm<allowspeculation>),alignment-from-assumptions,loop-sink,instsimplify,div-rem-pairs,tailcallelim,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;switch-to-arithmetic;no-switch-to-lookup;keep-loops;no-hoist-common-insts;hoist-loads-stores-with-cond-faulting;no-sink-common-insts;speculate-blocks;simplify-cond-branch;speculate-unpredictables>)\" on module \"src/libavformat/mov.c\"\n4.      Running pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"mov_read_header\"\n#0 0x00005ce47e8a4eee PrintStackTraceSignalHandler(void*) (.llvm.14462126317361604948) Signals.cpp:0:0\n```",
+    "author": "Andarwinux",
+    "labels": [
+      "vectorizers",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "Andarwinux",
+        "body": "[mov.ll.txt](https://github.com/user-attachments/files/24631971/mov.ll.txt)\n\n```\nclang -c -O3 -x ir mov.ll.txt\n\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace, preprocessed source, and associated run script.\nStack dump:\n0.      Program arguments: /build/install/llvmbin/clang -c -O3 -x ir mov.ll.txt\n1.      Optimizer\n2.      Running pass \"function<eager-inv>(drop-unnecessary-assumes,float2int,lower-constant-intrinsics,chr,loop(loop-rotate<header-duplication;no-prepare-for-lto>,loop-deletion),loop-distribute,inject-tli-mappings,loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>,drop-unnecessary-assumes,infer-alignment,loop-load-elim,instcombine<max-iterations=1;no-verify-fixpoint>,simplifycfg<bonus-inst-threshold=1;forward-switch-cond;switch-range-to-icmp;switch-to-arithmetic;switch-to-lookup;no-keep-loops;hoist-common-insts;no-hoist-loads-stores-with-cond-faulting;sink-common-insts;speculate-blocks;simplify-cond-branch;no-speculate-unpredictables>,slp-vectorizer,vector-combine,instcombine<max-iterations=1;no-verify-fixpoint>,loop-unroll<O3>,transform-warning,sroa<preserve-cfg>,infer-alignment,instcombine<max-iterations=1;no-verify-fixpoint>,loop-mssa(licm<allowspeculation>),alignment-from-assumptions,loop-sink,instsimplify,div-rem-pairs,tailcallelim,simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;switch-range-to-icmp;switch-to-arithmetic;no-switch-to-lookup;keep-loops;no-hoist-common-insts;hoist-loads-stores-with-cond-faulting;no-sink-common-insts;speculate-blocks;simplify-cond-branch;speculate-unpredictables>)\" on module \"mov.ll.txt\"\n3.      Running pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"mov_read_header\"\n#0 0x00005d671aee592e PrintStackTraceSignalHandler(void*) (.llvm.14462126317361604948) Signals.cpp:0:0\n```"
+      },
+      {
+        "author": "Andarwinux",
+        "body": "2abd6d6d7ac54d40302dfc946d01572a12963ee5 @huntergr-arm"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

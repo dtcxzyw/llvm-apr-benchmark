@@ -1,0 +1,73 @@
+{
+  "bug_id": "179074",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/179074",
+  "bug_type": "crash",
+  "base_commit": "584156d15d24c9b9f67aa7850e86ee2474a250c0",
+  "knowledge_cutoff": "2026-01-31T22:58:49Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "3bbf748a63a3cb38271a478b520789be57d5e2c8",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/VPlanPredicator.cpp": [
+        [
+          225,
+          230
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/VPlanPredicator.cpp": [
+        "VPPredicator::createSwitchEdgeMasks"
+      ]
+    }
+  },
+  "patch": "commit 3bbf748a63a3cb38271a478b520789be57d5e2c8\nAuthor: nora <48135649+Noratrieb@users.noreply.github.com>\nDate:   Thu Feb 5 08:50:57 2026 +0100\n\n    [VPlan] Create edge mask for single-destination switch (#179107)\n    \n    When converting phis to blends, the `VPPredicator` expects to have edge\n    masks to the phi node if the phi node has different incoming blocks.\n    This was not the case if the predecessor of the phi was a switch where a\n    conditional destination was the same as the default destination.\n    \n    This was because when creating edge masks in `createSwitchEdgeMasks`,\n    edge masks are set in a loop through the *non-default* destinations. But\n    when there are no non-default destinations (but at least one condition,\n    otherwise an earlier condition would trigger and just forward the source\n    mask), this loop is never executed, so the masks are never set.\n    \n    To resolve this, we explicitly forward the source mask for these cases\n    as well, which is correct because it is an unconditional branch, just a\n    very convoluted one.\n    \n    fixes #179074\n\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanPredicator.cpp b/llvm/lib/Transforms/Vectorize/VPlanPredicator.cpp\nindex f7e7fc29bc20..7f787dcbbf3c 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanPredicator.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlanPredicator.cpp\n@@ -225,6 +225,10 @@ void VPPredicator::createSwitchEdgeMasks(VPInstruction *SI) {\n     DefaultMask = Builder.createNot(DefaultMask);\n     if (SrcMask)\n       DefaultMask = Builder.createLogicalAnd(SrcMask, DefaultMask);\n+  } else {\n+    // There are no destinations other than the default destination, so this is\n+    // an unconditional branch.\n+    DefaultMask = SrcMask;\n   }\n   setEdgeMask(Src, DefaultDst, DefaultMask);\n }\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/predicate-switch.ll",
+      "commands": [
+        "opt -p loop-vectorize -force-vector-width=2 -force-vector-interleave=1 -S %s",
+        "opt -p loop-vectorize -force-vector-width=2 -force-vector-interleave=2 -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "switch_unconditional",
+          "test_body": "define void @switch_unconditional(ptr %start) {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %gep = getelementptr i32, ptr %start, i64 %iv\n  %x = load i32, ptr %gep, align 4\n  switch i32 %x, label %foo [\n  ]\n\nfoo:                                              ; preds = %loop.header\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %foo\n  store i32 0, ptr %gep, align 4\n  %iv.next = add i64 %iv, 1\n  %cmp = icmp eq i64 %iv.next, 100\n  br i1 %cmp, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n"
+        },
+        {
+          "test_name": "switch_unconditional_duplicate_target",
+          "test_body": "define void @switch_unconditional_duplicate_target(ptr %start, ptr %dest) {\nentry:\n  br label %loop\n\nloop:                                             ; preds = %latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %latch ]\n  %gep = getelementptr i32, ptr %start, i64 %iv\n  %x = load i32, ptr %gep, align 4\n  %cond = icmp ult i32 %x, 10\n  br i1 %cond, label %forward, label %latch\n\nforward:                                          ; preds = %loop\n  switch i32 %x, label %latch [\n    i32 0, label %latch\n  ]\n\nlatch:                                            ; preds = %forward, %forward, %loop\n  %gep.1 = phi ptr [ %gep, %loop ], [ %dest, %forward ], [ %dest, %forward ]\n  store i32 0, ptr %gep.1, align 4\n  %iv.next = add i64 %iv, 1\n  %cmp = icmp eq i64 %iv.next, 100\n  br i1 %cmp, label %exit, label %loop\n\nexit:                                             ; preds = %latch\n  ret void\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "Loop vectorizer crash in LLVM 22",
+    "body": "This code crashes in the loop vectorizer (`opt -passes=loop-vectorize`).\n\n```llvm\ntarget datalayout = \"e-m:e-p270:32:32-p271:32:32-p272:64:64-i64:64-i128:128-f80:128-n8:16:32:64-S128\"\ntarget triple = \"x86_64-unknown-linux-gnu\"\n\ndefine void @reproducer() {\nentry:\n  br label %head\n\nhead:                                             ; preds = %tail, %entry\n  %phi = phi ptr [ null, %entry ], [ %getelementptr, %tail ]\n  %getelementptr = getelementptr i8, ptr %phi, i64 12\n  br i1 false, label %tail, label %forward\n\nforward:                                          ; preds = %head\n  switch i32 0, label %tail [\n    i32 0, label %tail\n  ]\n\ntail:                                             ; preds = %forward, %forward, %head\n  %phi5 = phi i32 [ 1, %forward ], [ 1, %forward ], [ 0, %head ]\n  %icmp = icmp eq ptr %getelementptr, null\n  br i1 %icmp, label %exit, label %head\n\nexit:                                             ; preds = %tail\n  ret void\n}\n```\n\n```\nStack dump:\n0.      Program arguments: /home/nora/projects/rust/build/host/ci-llvm/bin/opt meta.ll -passes=loop-vectorize -disable-output\n1.      Running pass \"function(loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>)\" on module \"meta.ll\"\n2.      Running pass \"loop-vectorize<no-interleave-forced-only;no-vectorize-forced-only;>\" on function \"reproducer\"\n #0 0x00007f91e56c2008 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x58c2008)\n #1 0x00007f91e56bebe5 llvm::sys::RunSignalHandlers() (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x58bebe5)\n #2 0x00007f91e56c2746 SignalHandler(int, siginfo_t*, void*) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x58c2746)\n #3 0x00007f91dfa42790 __restore_rt (/nix/store/wb6rhpznjfczwlwx23zmdrrw74bayxw4-glibc-2.42-47/lib/libc.so.6+0x42790)\n #4 0x00007f91e7879f77 llvm::VPlanTransforms::introduceMasksAndLinearize(llvm::VPlan&, bool) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x7a79f77)\n #5 0x00007f91e7662efb llvm::LoopVectorizationPlanner::tryToBuildVPlanWithVPRecipes(std::unique_ptr<llvm::VPlan, std::default_delete<llvm::VPlan>>, llvm::VFRange&, llvm::LoopVersioning*) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x7862efb)\n #6 0x00007f91e7654643 llvm::LoopVectorizationPlanner::buildVPlansWithVPRecipes(llvm::ElementCount, llvm::ElementCount) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x7854643)\n #7 0x00007f91e7653ab6 llvm::LoopVectorizationPlanner::plan(llvm::ElementCount, unsigned int) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x7853ab6)\n #8 0x00007f91e766beac llvm::LoopVectorizePass::processLoop(llvm::Loop*) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x786beac)\n #9 0x00007f91e7678f8b llvm::LoopVectorizePass::runImpl(llvm::Function&) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x7878f8b)\n#10 0x00007f91e76798c2 llvm::LoopVectorizePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x78798c2)\n#11 0x00007f91e592f22f llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x5b2f22f)\n#12 0x00007f91e5934490 llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x5b34490)\n#13 0x00007f91e592de99 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/home/nora/projects/rust/build/x86_64-unknown-linux-gnu/ci-llvm/bin/../lib/libLLVM.so.22.1-rust-1.95.0-nightly+0x5b2de99)\n#14 0x000055bb94c79523 llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/home/nora/projects/rust/build/host/ci-llvm/bin/opt+0x2a523)\n#15 0x000055bb94c6b6ca optMain (/home/nora/projects/rust/build/host/ci-llvm/bin/opt+0x1c6ca)\n#16 0x00007f91dfa2b285 __libc_start_call_main (/nix/store/wb6rhpznjfczwlwx23zmdrrw74bayxw4-glibc-2.42-47/lib/libc.so.6+0x2b285)\n#17 0x00007f91dfa2b338 __libc_start_main@GLIBC_2.2.5 (/nix/store/wb6rhpznjfczwlwx23zmdrrw74bayxw4-glibc-2.42-47/lib/libc.so.6+0x2b338)\n#18 0x000055bb94c67e49 _start (/home/nora/projects/rust/build/host/ci-llvm/bin/opt+0x18e49)\n```\n",
+    "author": "Noratrieb",
+    "labels": [
+      "vectorizers",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "Noratrieb",
+        "body": "I've been trying to bisect it and it looks like this is not actually an LLVM 22 regression for the minimal reproducer, I've been able to reproduce it in LLVM 21 and LLVM 20. It looks like change in LLVM 22 that triggered the Rust reproducer (https://github.com/rust-lang/rust/issues/151926) was just perturbing something to reveal this existing bug."
+      },
+      {
+        "author": "Noratrieb",
+        "body": "296781524902c4eb06efc5bb054cac58b973d839 looks relevant but it didn't cause this issue, it merely turned an assertion failure into the segfault (when I revert it it triggers the `Distinct incoming values with one having a full mask` assertion)"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}
