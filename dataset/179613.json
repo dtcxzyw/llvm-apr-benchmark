@@ -1,0 +1,76 @@
+{
+  "bug_id": "179613",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/179613",
+  "bug_type": "miscompilation",
+  "base_commit": "6a5375fbce1992cb58a31a8c94d59ecb35c752a9",
+  "knowledge_cutoff": "2026-02-04T05:58:36Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InstSimplify"
+  ],
+  "hints": {
+    "fix_commit": "5a389d382b242bcbf4276b19fe21ee50fcdc988c",
+    "components": [],
+    "bug_location_lineno": {
+      "llvm/lib/Support/KnownFPClass.cpp": [
+        [
+          342,
+          354
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Support/KnownFPClass.cpp": [
+        "KnownFPClass::fmul"
+      ]
+    }
+  },
+  "patch": "commit 5a389d382b242bcbf4276b19fe21ee50fcdc988c\nAuthor: Nathiyaa Sengodan <133644025+Nathiyaa-Sengodan@users.noreply.github.com>\nDate:   Thu Feb 19 17:04:45 2026 +0530\n\n    [ValueTracking] Treat fmul NaN sign bit as unknown to prevent incorrect fabs folding (#180339)\n    \n    ### Summary\n    \n    ValueTracking currently allows InstSimplify to reason about the sign bit\n    of an `fmul` result based on the sign information of its operands. This\n    can lead to removing a subsequent `llvm.fabs` under the assumption that\n    the multiplication result is already non-negative.\n    \n    However, `fmul` may produce NaNs whose sign bit is non-deterministic.\n    Since `llvm.fabs` canonicalizes the sign bit of NaNs, eliminating\n    llvm.fabs` in these cases can change observable behaviour.\n    \n    ### Change\n    \n    Update ValueTracking to treat the sign bit of `fmul` as unknown when\n    NaNs are possible, preventing InstSimplify from incorrectly removing\n    llvm.fabs ` after `fmul`.\n    \n    Fixes #179613\n\ndiff --git a/llvm/lib/Support/KnownFPClass.cpp b/llvm/lib/Support/KnownFPClass.cpp\nindex 99d29119b8d8..080535a44c6c 100644\n--- a/llvm/lib/Support/KnownFPClass.cpp\n+++ b/llvm/lib/Support/KnownFPClass.cpp\n@@ -342,13 +342,6 @@ KnownFPClass KnownFPClass::fmul(const KnownFPClass &KnownLHS,\n   if (!KnownLHS.isKnownNeverNaN() || !KnownRHS.isKnownNeverNaN())\n     return Known;\n \n-  if (KnownLHS.SignBit && KnownRHS.SignBit) {\n-    if (*KnownLHS.SignBit == *KnownRHS.SignBit)\n-      Known.signBitMustBeZero();\n-    else\n-      Known.signBitMustBeOne();\n-  }\n-\n   // If 0 * +/-inf produces NaN.\n   if ((KnownRHS.isKnownNeverInfinity() ||\n        KnownLHS.isKnownNeverLogicalZero(Mode)) &&\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InstSimplify/floating-point-arithmetic.ll",
+      "commands": [
+        "opt < %s -passes=instsimplify -S"
+      ],
+      "tests": [
+        {
+          "test_name": "fabs_fmul_nan",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare float @llvm.fabs.f32(float) #0\n\ndefine float @fabs_fmul_nan(float %x) {\n  %abs = call nnan float @llvm.fabs.f32(float %x)\n  %mul = fmul float %abs, 0x7FF0000000000000\n  %abs2 = call float @llvm.fabs.f32(float %mul)\n  ret float %abs2\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        },
+        {
+          "test_name": "fabs_fmul_nan_vector",
+          "test_body": "; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare <2 x float> @llvm.fabs.v2f32(<2 x float>) #0\n\ndefine <2 x float> @fabs_fmul_nan_vector(<2 x float> %x) {\n  %abs = call nnan <2 x float> @llvm.fabs.v2f32(<2 x float> %x)\n  %mul = fmul <2 x float> %abs, splat (float 0x7FF0000000000000)\n  %abs2 = call <2 x float> @llvm.fabs.v2f32(<2 x float> %mul)\n  ret <2 x float> %abs2\n}\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[InstCombine] Dropping `fabs` around `fmul (fabs nnan x)`, `+inf` changes `NaN` sign for `x=+0.0`",
+    "body": "**Description**\n\nI observed a transformation involving `fabs` and `fmul` with `+inf` that cannot pass the verification of Alive2 due to a **NaN payload mismatch**, even though both sides evaluate to NaN.https://alive2.llvm.org/ce/z/7yBXf4\n\n**Input Program**\n\n**Source**\n\n```llvm\ndefine float @src(float %x) {\n  %fabs.x = call nnan float @llvm.fabs.f32(float %x)\n  %mul.fabs.x = fmul float %fabs.x, 0x7FF0000000000000\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %2 = call float @llvm.fabs.f32(float %mul.fabs.x)\n  %select = select i1 %x.is.zero, float %2, float %fabs.x\n  ret float %select\n}\n```\n\nThis is transformed to:\n**Target**\n\n```llvm\ndefine float @tgt(float %x) {\n  %fabs.x = call nnan float @llvm.fabs.f32(float %x)\n  %mul.fabs.x = fmul float %fabs.x, 0x7FF0000000000000\n  %x.is.zero = fcmp oeq float %x, 0.000000e+00\n  %select = select i1 %x.is.zero, float %mul.fabs.x, float %fabs.x\n  ret float %select\n}\n```\n\n",
+    "author": "ariskeirio",
+    "labels": [
+      "miscompilation",
+      "llvm:instcombine",
+      "llvm:support",
+      "floating-point"
+    ],
+    "comments": [
+      {
+        "author": "Nathiyaa-Sengodan",
+        "body": "Hi, I would like to work on this issue. \n\nThis is my first LLVM contribution, so any guidance or pointers would be greatly appreciated."
+      },
+      {
+        "author": "ActuallyaDeviloper",
+        "body": "I think this is working as specified.\n\n[LangRef](https://llvm.org/docs/LangRef.html#behavior-of-floating-point-nan-values) says:\n> Unless specified otherwise, the following rules apply whenever the IEEE 754 semantics say that a NaN value is returned: the result has a non-deterministic sign, the quiet bit and payload are non-deterministically chosen from the following set of options: ..."
+      },
+      {
+        "author": "arsenm",
+        "body": "> I think this is working as specified.\n\nThe nan sign bit still needs to be well behaved through select and fabs (as well as the other sign bit operations). The sign bit and payload bits are only nondeterministic when that value passes through a canonicalizing operation. Since the select reads a fabs value for the second input, any value taken from there must have a 0 sign-bit, including nans "
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

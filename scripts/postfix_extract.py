@@ -194,6 +194,9 @@ fix_commit_map = {
     "177772": None,  # Cannot reproduce the crash
     "177780": None,  # Duplicate of #177772
     "178275": None,  # Crash on invalid input
+    "179671": None,  # Reverted
+    "180340": None,  # Cannot reproduce the crash
+    "180781": None,  # Cannot verify the fix with Alive2
     "180846": None,  # Cannot reproduce the hang (missing timeout)
 }
 

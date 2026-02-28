@@ -1,0 +1,93 @@
+{
+  "bug_id": "180870",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/180870",
+  "bug_type": "miscompilation",
+  "base_commit": "e0182ebd40066fedc282f9cb06cbec48b6f827dc",
+  "knowledge_cutoff": "2026-02-11T01:18:14Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/IndVarSimplify"
+  ],
+  "hints": {
+    "fix_commit": "fe413f70fe594fcc53519fc685a0de36a8cbcb36",
+    "components": [
+      "ScalarEvolution"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Analysis/ScalarEvolution.cpp": [
+        [
+          11496,
+          11501
+        ],
+        [
+          11526,
+          11532
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Analysis/ScalarEvolution.cpp": [
+        "ScalarEvolution::getLoopInvariantExitCondDuringFirstIterationsImpl"
+      ]
+    }
+  },
+  "patch": "commit fe413f70fe594fcc53519fc685a0de36a8cbcb36\nAuthor: Nikita Popov <npopov@redhat.com>\nDate:   Fri Feb 13 12:23:31 2026 +0100\n\n    [SCEV] Discard samesign when analyzing loop invariant exits (#181171)\n    \n    If the predicate has samesign set, we could either perform the checks\n    with the unsigned predicate and return and unsigned invariant predicate,\n    or we could perform them with the signed predicate and return a signed\n    invariant predicate. The current implementation can end up mixing both,\n    using a signed predicate for one check and an unsigned one for the\n    other.\n    \n    Avoid this by dropping the samesign flag.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/180870.\n\ndiff --git a/llvm/lib/Analysis/ScalarEvolution.cpp b/llvm/lib/Analysis/ScalarEvolution.cpp\nindex 45f1b543b8fc..ae9ce311ec08 100644\n--- a/llvm/lib/Analysis/ScalarEvolution.cpp\n+++ b/llvm/lib/Analysis/ScalarEvolution.cpp\n@@ -11496,6 +11496,11 @@ ScalarEvolution::getLoopInvariantExitCondDuringFirstIterationsImpl(\n   if (!AR || AR->getLoop() != L)\n     return std::nullopt;\n \n+  // Even if both are valid, we need to consistently chose the unsigned or the\n+  // signed predicate below, not mixtures of both. For now, prefer the unsigned\n+  // predicate.\n+  Pred = Pred.dropSameSign();\n+\n   // The predicate must be relational (i.e. <, <=, >=, >).\n   if (!ICmpInst::isRelational(Pred))\n     return std::nullopt;\n@@ -11526,7 +11531,7 @@ ScalarEvolution::getLoopInvariantExitCondDuringFirstIterationsImpl(\n   ICmpInst::Predicate NoOverflowPred =\n       CmpInst::isSigned(Pred) ? ICmpInst::ICMP_SLE : ICmpInst::ICMP_ULE;\n   if (Step == MinusOne)\n-    NoOverflowPred = ICmpInst::getSwappedCmpPredicate(NoOverflowPred);\n+    NoOverflowPred = ICmpInst::getSwappedPredicate(NoOverflowPred);\n   const SCEV *Start = AR->getStart();\n   if (!isKnownPredicateAt(NoOverflowPred, Start, Last, CtxI))\n     return std::nullopt;\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/IndVarSimplify/turn-to-invariant.ll",
+      "commands": [
+        "opt -passes=indvars -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "not_invariant_samesign",
+          "test_body": "define i32 @not_invariant_samesign(i32 %unknown_limit, ptr %length_ptr) {\nentry:\n  br label %header\n\nheader:                                           ; preds = %latch, %entry\n  %iv = phi i32 [ 1, %entry ], [ %iv.next, %latch ]\n  %iv.next = add i32 %iv, 1\n  %range_check1 = icmp samesign ult i32 %iv.next, %unknown_limit\n  %is_positive = icmp sgt i32 %unknown_limit, 0\n  %or.cond = and i1 %range_check1, %is_positive\n  br i1 %or.cond, label %latch, label %ret\n\nlatch:                                            ; preds = %header\n  %iv.prev = add i32 %iv, -1\n  %length = load i32, ptr %length_ptr, align 4, !range !0\n  %range_check2 = icmp ult i32 %iv.prev, %length\n  br i1 %range_check2, label %header, label %ret\n\nret:                                              ; preds = %latch, %header\n  ret i32 %iv\n}\n\n!0 = !{i32 0, i32 2147483647}\n",
+          "additional_args": "-src-unroll=4 -tgt-unroll=4"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[IndVarSimplify][SCEV] IndVarSimplify incorrectly hoists loop exit condition due to signed wrap",
+    "body": "### Bug\nHere is a link to the test, demonstrating the issue: https://godbolt.org/z/8rqoE6s9E\nThis is one of the tests that demonstrates the issue:\n```llvm\ndefine void @test_indvar_limits_samesign(i32 %unknown_limit, ptr addrspace(1) %length_ptr) {\nentry:\n  br label %header\n\nheader:                                           ; preds = %latch, %entry\n  %iv = phi i32 [ 1, %entry ], [ %iv.next, %latch ]\n  %iv.next = add i32 %iv, 1\n  %range_check1 = icmp samesign ult i32 %iv.next, %unknown_limit\n  %is_positive = icmp sgt i32 %unknown_limit, 0\n  %or.cond = and i1 %range_check1, %is_positive\n  br i1 %or.cond, label %latch, label %ret\n\nlatch:                                            ; preds = %header\n  %iv.prev = add i32 %iv, -1\n  %length = load i32, ptr addrspace(1) %length_ptr, align 4, !range !0\n  %range_check2 = icmp ult i32 %iv.prev, %length\n  br i1 %range_check2, label %header, label %ret\n\nret:                                              ; preds = %latch, %header\n  ret void\n}\n\n!0 = !{i32 0, i32 2147483647}\n```\nRunning `indvars` pass for this test results in hoisting of `%range_check1 = icmp samesign ult i32 %iv.next, %unknown_limit` instruction to the preheader with the replacement of the inductive variable by its value during the first iteration: `%range_check1.first_iter = icmp ult i32 2, %unknown_limit`. As is obvious from this test, this is a misoptimization since the information in the test is not sufficient to make this substitution.\n\n### Analysis\nThe cause of the bug is likely located not in IndVarSimplify analysis, but in SCEV, since it's used to prove the replacement invariants. Another observation is related to signed wrap, since the range metadata plays a crucial role in the test to identify the maximum number of iterations and the value of the inductive variable on the last iteration - reducing the upper bound on the range metadata or removing it altogether masks the bug. `samesign` attribute also affects the bug's reproducibility, so I added two tests - with and without this attribute.",
+    "author": "KirillVNaumov",
+    "labels": [
+      "miscompilation",
+      "llvm:SCEV"
+    ],
+    "comments": [
+      {
+        "author": "nikic",
+        "body": "> As is obvious from this test, this is a misoptimization since the information in the test is not sufficient to make this substitution.\n\nPlease be more explicit. For which value of unknown_limit is the transform incorrect?"
+      },
+      {
+        "author": "KirillVNaumov",
+        "body": "> For which value of unknown_limit is the transform incorrect?\n\nConsider the following scenario: `%unknown_limit = 10` and `%length` that is loaded from `%length_ptr` is `100`. When the initial IR is executed, the loop will exit with the induction variable `%iv = 9` due to `%range_check1 = icmp samesign ult i32 %iv.next, %unknown_limit`. However, after running `indvars` pass on the test we get:\n\n```llvm\ndefine void @test_indvar_limits_samesign(i32 %unknown_limit, ptr addrspace(1) %length_ptr) {\nentry:\n  %range_check1.first_iter = icmp ult i32 2, %unknown_limit\n  br label %header\n\nheader:\n  %iv = phi i32 [ 1, %entry ], [ %iv.next, %latch ]\n  %iv.next = add nuw i32 %iv, 1\n  %is_positive = icmp sgt i32 %unknown_limit, 0\n  %or.cond = and i1 %range_check1.first_iter, %is_positive\n  br i1 %or.cond, label %latch, label %ret\n\nlatch:\n  %iv.prev = add nsw i32 %iv, -1\n  %length = load i32, ptr addrspace(1) %length_ptr, align 4\n  %range_check2 = icmp samesign ult i32 %iv.prev, %length\n  br i1 %range_check2, label %header, label %ret\n\nret:\n  ret void\n}\n```\nHere, the first range check is hoisted out of the loop (`%range_check1.first_iter = icmp ult i32 2, %unknown_limit`) and is always true; therefore, the loop can only exit via the second range check (`%range_check2 = icmp samesign ult i32 %iv.prev, %length`) when the induction variable `%iv` is equal to `101`."
+      },
+      {
+        "author": "nikic",
+        "body": "Thanks, that does sound right.\n\nHere's an alive2 failure if we add a use of an IV into the loop, otherwise the number of iterations is not observed: https://alive2.llvm.org/ce/z/em3ZHe\n\nThe relevant fold here is optimizeLoopExitWithUnknownExitCount()."
+      },
+      {
+        "author": "nikic",
+        "body": "Adding some debug output:\n```\n  dbgs() << \"MaxIter: \" << *MaxIter << \"\\n\";\n  dbgs() << \"Orig: \" << *LHSS << \" \" << Pred << \" \" << *RHSS << \"\\n\";\n  dbgs() << \"LIP: \" << *LIP->LHS << \" \" << LIP->Pred << \" \" << *LIP->RHS << \"\\n\";\n```\nI get:\n```\nMaxIter: (2147483646 umin (-2 + (2 umax %unknown_limit)))\nOrig: {2,+,1}<nuw><%header> ult %unknown_limit\nLIP: 2 ult %unknown_limit\n```"
+      },
+      {
+        "author": "nikic",
+        "body": "In\nhttps://github.com/llvm/llvm-project/blob/208b4dbf122465db894bc0d62f73e802834b170e/llvm/lib/Analysis/ScalarEvolution.cpp#L11519-L11520\nwe end up checking a condition like `-2147483648 samesign ult %unknown_limit`.\n\nWe probably need to discard samesign in this code."
+      },
+      {
+        "author": "KirillVNaumov",
+        "body": "Just in case - in https://godbolt.org/z/8rqoE6s9E, there is another very similar test that (in the initial IR) doesn't use `samesign` attribute. Initial IR:\n\n```llvm\ndefine void @test_indvar_limits(i32 %unknown_limit, i32 range(i32 0, 2147483647) %length1, i1 %cond, ptr addrspace(1) %length_ptr) {\nentry:\n  %precheck = icmp ugt i32 %length1, 1\n  br i1 %precheck, label %header, label %ret\n\nheader:                                           ; preds = %latch, %entry\n  %iv = phi i32 [ %iv.next, %latch ], [ 1, %entry ]\n  %iv.next = add i32 %iv, 1\n  %range_check1 = icmp ult i32 %iv.next, %length1\n  %guard_cond = and i1 %range_check1, %cond\n  %limit_not_reached = icmp slt i32 %iv, %unknown_limit\n  %or.cond = and i1 %guard_cond, %limit_not_reached\n  br i1 %or.cond, label %latch, label %ret\n\nlatch:                                            ; preds = %header\n  %iv.prev = add i32 %iv, -1\n  %length2 = load i32, ptr addrspace(1) %length_ptr, align 4, !range !0\n  %range_check2 = icmp ult i32 %iv.prev, %length2\n  br i1 %range_check2, label %header, label %ret\n\nret:                                              ; preds = %latch, %header, %entry\n  ret void\n}\n\n!0 = !{i32 0, i32 2147483647}\n```\n\nAfter `-passes=indvars`:\n\n```llvm\ndefine void @test_indvar_limits(i32 %unknown_limit, i32 range(i32 0, 2147483647) %length1, i1 %cond, ptr addrspace(1) %length_ptr) {\nentry:\n  %precheck = icmp ugt i32 %length1, 1\n  br i1 %precheck, label %header.preheader, label %ret\n\nheader.preheader:\n  %range_check1.first_iter = icmp ult i32 2, %length1\n  br label %header\n\nheader:\n  %iv = phi i32 [ %iv.next, %latch ], [ 1, %header.preheader ]\n  %iv.next = add nuw nsw i32 %iv, 1\n  %guard_cond = and i1 %range_check1.first_iter, %cond\n  %limit_not_reached = icmp slt i32 %iv, %unknown_limit\n  %or.cond = and i1 %guard_cond, %limit_not_reached\n  br i1 %or.cond, label %latch, label %ret.loopexit\n\nlatch:\n  %iv.prev = add nsw i32 %iv, -1\n  %length2 = load i32, ptr addrspace(1) %length_ptr, align 4\n  %range_check2 = icmp samesign ult i32 %iv.prev, %length2\n  br i1 %range_check2, label %header, label %ret.loopexit\n\nret.loopexit:\n  br label %ret\n\nret:\n  ret void\n}\n```\n\nThis test shows an exactly the same problem as in the first testcase: consider a scenario with values `%length1 = 10`, `%unknown_limit = 100`, and `%length2 = 100`. In the intial IR, we expect to exit on the iteration with the induction variable `%iv = 9`, however after the first range check is hoisted out of the loop, we would exit due to the `%limit_not_reached = icmp slt i32 %iv, %unknown_limit` with induction variable `%iv = 100`."
+      },
+      {
+        "author": "nikic",
+        "body": "Candidate fix: https://github.com/llvm/llvm-project/pull/181171\n\n@KirillVNaumov The root cause for that example is the same, as indvars ends up inferring the samesign flag on the icmp."
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

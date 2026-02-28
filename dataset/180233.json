@@ -1,0 +1,86 @@
+{
+  "bug_id": "180233",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/180233",
+  "bug_type": "crash",
+  "base_commit": "45b037cf7a26641bf778bbe7532d99935d35be1b",
+  "knowledge_cutoff": "2026-02-06T17:08:27Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/InstCombine"
+  ],
+  "hints": {
+    "fix_commit": "d1b402b61298d7f28578650e452874e51ea818c4",
+    "components": [
+      "InstCombine"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp": [
+        [
+          698,
+          703
+        ],
+        [
+          711,
+          727
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp": [
+        "foldVecExtTruncToExtElt"
+      ]
+    }
+  },
+  "patch": "commit d1b402b61298d7f28578650e452874e51ea818c4\nAuthor: Yingwei Zheng <dtcxzyw2333@gmail.com>\nDate:   Mon Feb 9 21:09:48 2026 +0800\n\n    [InstCombine] Avoid overflow in `foldVecExtTruncToExtElt` (#180414)\n    \n    This weird pattern was introduced by LoopVectorize. But it was placed in\n    an unreachable path, so we cannot assert that the indices are always\n    valid in InstCombine.\n    Closes https://github.com/llvm/llvm-project/issues/180233.\n\ndiff --git a/llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp b/llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp\nindex 0cd2c09726a2..a75c24bb9121 100644\n--- a/llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp\n+++ b/llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp\n@@ -698,6 +698,10 @@ static Instruction *foldVecExtTruncToExtElt(TruncInst &Trunc,\n   auto VecElts = VecOpTy->getElementCount();\n \n   uint64_t BitCastNumElts = VecElts.getKnownMinValue() * TruncRatio;\n+  // Make sure we don't overflow in the calculation of the new index.\n+  // (VecOpIdx + 1) * TruncRatio should not overflow.\n+  if (Cst->uge(std::numeric_limits<uint64_t>::max() / TruncRatio))\n+    return nullptr;\n   uint64_t VecOpIdx = Cst->getZExtValue();\n   uint64_t NewIdx = IC.getDataLayout().isBigEndian()\n                         ? (VecOpIdx + 1) * TruncRatio - 1\n@@ -711,17 +715,21 @@ static Instruction *foldVecExtTruncToExtElt(TruncInst &Trunc,\n       return nullptr;\n \n     uint64_t IdxOfs = ShiftAmount->udiv(DstBits).getZExtValue();\n+    // IdxOfs is guaranteed to be less than TruncRatio, so we won't overflow in\n+    // the adjustment.\n+    assert(IdxOfs < TruncRatio &&\n+           \"IdxOfs is expected to be less than TruncRatio.\");\n     NewIdx = IC.getDataLayout().isBigEndian() ? (NewIdx - IdxOfs)\n                                               : (NewIdx + IdxOfs);\n   }\n \n   assert(BitCastNumElts <= std::numeric_limits<uint32_t>::max() &&\n-         NewIdx <= std::numeric_limits<uint32_t>::max() && \"overflow 32-bits\");\n+         \"overflow 32-bits\");\n \n   auto *BitCastTo =\n       VectorType::get(DstType, BitCastNumElts, VecElts.isScalable());\n   Value *BitCast = IC.Builder.CreateBitCast(VecOp, BitCastTo);\n-  return ExtractElementInst::Create(BitCast, IC.Builder.getInt32(NewIdx));\n+  return ExtractElementInst::Create(BitCast, IC.Builder.getInt64(NewIdx));\n }\n \n /// Funnel/Rotate left/right may occur in a wider type than necessary because of\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/InstCombine/trunc-extractelement.ll",
+      "commands": [
+        "opt < %s -passes=instcombine -S -data-layout=\"e\"",
+        "opt < %s -passes=instcombine -S -data-layout=\"E\""
+      ],
+      "tests": [
+        {
+          "test_name": "test_overflow_idx2",
+          "test_body": "define i16 @test_overflow_idx2(<vscale x 16 x i32> %vec) {\nentry:\n  %ext = extractelement <vscale x 16 x i32> %vec, i32 -2147483648\n  %trunc = trunc i32 %ext to i16\n  ret i16 %trunc\n}\n"
+        },
+        {
+          "test_name": "PR45314",
+          "test_body": "define <4 x i64> @PR45314(<4 x i64> %x) {\n  %e = extractelement <4 x i64> %x, i32 0\n  %t = trunc i64 %e to i32\n  %i = insertelement <8 x i32> undef, i32 %t, i32 0\n  %s = shufflevector <8 x i32> %i, <8 x i32> undef, <8 x i32> zeroinitializer\n  %b = bitcast <8 x i32> %s to <4 x i64>\n  ret <4 x i64> %b\n}\n"
+        },
+        {
+          "test_name": "test_overflow_idx1",
+          "test_body": "define i16 @test_overflow_idx1(<vscale x 16 x i32> %vec) {\nentry:\n  %ext = extractelement <vscale x 16 x i32> %vec, i64 -1\n  %trunc = trunc i32 %ext to i16\n  ret i16 %trunc\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[InstCombine] Assertion `BitCastNumElts <= std::numeric_limits<uint32_t>::max() && NewIdx <= std::numeric_limits<uint32_t>::max() && \"overflow 32-bits\"' failed.",
+    "body": "Reproducer: https://godbolt.org/z/7Mv978ce7\nTestcase:\n```llvm\ntarget datalayout = \"e-m:e-p:64:64-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"riscv64-unknown-linux-musl\"\n\n; Function Attrs: vscale_range(2,1024)\ndefine noundef i32 @g_199() #0 {\nentry:\n  %0 = call <vscale x 16 x i32> @llvm.stepvector.nxv16i32()\n  %1 = xor <vscale x 16 x i32> %0, splat (i32 1)\n  %2 = extractelement <vscale x 16 x i32> %1, i64 -1\n  %conv3.le.i = trunc i32 %2 to i16\n  %vecinit17.i = insertelement <4 x i16> <i16 poison, i16 0, i16 0, i16 0>, i16 %conv3.le.i, i64 0\n  %conv18.i = zext <4 x i16> %vecinit17.i to <4 x i32>\n  %3 = bitcast <4 x i32> %conv18.i to i128\n  %call.i = tail call i64 null(i64 0, i128 %3)\n  ret i32 0\n}\n\n; Function Attrs: nocallback nofree nosync nounwind willreturn memory(none)\ndeclare <vscale x 16 x i32> @llvm.stepvector.nxv16i32() #1\n\nattributes #0 = { vscale_range(2,1024) \"target-features\"=\"+v\" }\nattributes #1 = { nocallback nofree nosync nounwind willreturn memory(none) }\n```\n\nBacktrace:\n```\nopt: /root/llvm-project/llvm/lib/Transforms/InstCombine/InstCombineCasts.cpp:718: llvm::Instruction* foldVecExtTruncToExtElt(llvm::TruncInst&, llvm::InstCombinerImpl&): Assertion `BitCastNumElts <= std::numeric_limits<uint32_t>::max() && NewIdx <= std::numeric_limits<uint32_t>::max() && \"overflow 32-bits\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S --passes=instcombine <source>\n1.\tRunning pass \"function(instcombine<max-iterations=1;verify-fixpoint>)\" on module \"<source>\"\n2.\tRunning pass \"instcombine<max-iterations=1;verify-fixpoint>\" on function \"g_199\"\n #0 0x0000000005afd6b8 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5afd6b8)\n #1 0x0000000005afa594 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007892e1842520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007892e18969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007892e1842476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007892e18287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x00007892e182871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x00007892e1839e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000004a82567 llvm::InstCombinerImpl::visitTrunc(llvm::TruncInst&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4a82567)\n #9 0x0000000004a05243 llvm::InstCombinerImpl::run() (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4a05243)\n#10 0x0000000004a07316 combineInstructionsOverFunction(llvm::Function&, llvm::InstructionWorklist&, llvm::AAResults*, llvm::AssumptionCache&, llvm::TargetLibraryInfo&, llvm::TargetTransformInfo&, llvm::DominatorTree&, llvm::OptimizationRemarkEmitter&, llvm::BlockFrequencyInfo*, llvm::BranchProbabilityInfo*, llvm::ProfileSummaryInfo*, llvm::InstCombineOptions const&) (.isra.0) InstructionCombining.cpp:0:0\n#11 0x0000000004a089a4 llvm::InstCombinePass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4a089a4)\n#12 0x0000000002d0503e llvm::detail::PassModel<llvm::Function, llvm::InstCombinePass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x2d0503e)\n#13 0x0000000005868841 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5868841)\n#14 0x0000000000f0e16e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf0e16e)\n#15 0x0000000005866dfa llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5866dfa)\n#16 0x00000000009683ae llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9683ae)\n#17 0x00000000058667b1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58667b1)\n#18 0x000000000097256a llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x97256a)\n#19 0x0000000000966618 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x966618)\n#20 0x00007892e1829d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#21 0x00007892e1829e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#22 0x000000000095d295 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x95d295)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "XChy",
+    "labels": [
+      "llvm:instcombine",
+      "crash-on-valid",
+      "generated by fuzzer"
+    ],
+    "comments": [
+      {
+        "author": "dtcxzyw",
+        "body": "> %2 = extractelement <vscale x 16 x i32> %1, i64 -1\n\nWhich pass introduces this instruction?"
+      },
+      {
+        "author": "XChy",
+        "body": "> Which pass introduces this instruction?\n\nHaven't looked into it in detail. But I have a quick C reproducer at -O3: https://godbolt.org/z/dbMvxh4hd."
+      },
+      {
+        "author": "dtcxzyw",
+        "body": "It is generated by LoopVectorizePass: https://godbolt.org/z/PGYYWbG7G\nLooks like an immediate UB is triggered in lbl_1077. So it is fine for LoopVectorizePass to generate weird patterns."
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

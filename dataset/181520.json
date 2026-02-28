@@ -1,0 +1,64 @@
+{
+  "bug_id": "181520",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/181520",
+  "bug_type": "crash",
+  "base_commit": "c087fff25a2420ff7023445973e72f3261385b5d",
+  "knowledge_cutoff": "2026-02-15T02:32:20Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "255b493673e65201986d443c64db0a251a4ddbe8",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          26779,
+          26785
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "emitScaleForReusedOps"
+      ]
+    }
+  },
+  "patch": "commit 255b493673e65201986d443c64db0a251a4ddbe8\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Sun Feb 15 10:08:13 2026 -0800\n\n    [SLP]Do not overflow number of the reduced values\n    \n    Need to trunc the total number of the reduced values, in case if the\n    number is too big\n    \n    Fixes #181520\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex a74205c385e9..b29367fa1543 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -26779,7 +26779,9 @@ private:\n     switch (RdxKind) {\n     case RecurKind::Add: {\n       // res = mul vv, n\n-      Value *Scale = ConstantInt::get(VectorizedValue->getType(), Cnt);\n+      Value *Scale =\n+          ConstantInt::get(VectorizedValue->getType(), Cnt,\n+                           /*IsSigned=*/false, /*ImplicitTrunc=*/true);\n       LLVM_DEBUG(dbgs() << \"SLP: Add (to-mul) \" << Cnt << \"of \"\n                         << VectorizedValue << \". (HorRdx)\\n\");\n       return Builder.CreateMul(VectorizedValue, Scale);\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/big-number-reduced-values.ll",
+      "commands": [
+        "opt -S --passes=slp-vectorizer < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine i2 @test(i2 %x) {\n;\n  %tmp1 = add i2 %x, %x\n  %tmp2 = add i2 %tmp1, %x\n  %tmp3 = add i2 %tmp2, %x\n  ret i2 %tmp3\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "opt -passes=slp-vectorizer crashes: Assertion `llvm::isUIntN(BitWidth, val) && \"Value is not an N-bit unsigned value\"' failed.",
+    "body": "Reproducer:\nhttps://godbolt.org/z/P9WWjGYhY\n\nBacktrace:\n```console\nopt: /root/llvm-project/llvm/include/llvm/ADT/APInt.h:127: llvm::APInt::APInt(unsigned int, uint64_t, bool, bool): Assertion `llvm::isUIntN(BitWidth, val) && \"Value is not an N-bit unsigned value\"' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=slp-vectorizer -S <source>\n1.\tRunning pass \"function(slp-vectorizer)\" on module \"<source>\"\n2.\tRunning pass \"slp-vectorizer\" on function \"add\"\n #0 0x0000000005b86608 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5b86608)\n #1 0x0000000005b834e4 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x000072a7ab442520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x000072a7ab4969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x000072a7ab442476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x000072a7ab4287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x000072a7ab42871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x000072a7ab439e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000000b89439 llvm::APInt::APInt(unsigned int, unsigned long, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xb89439)\n #9 0x000000000576ccd5 llvm::ConstantInt::get(llvm::Type*, unsigned long, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x576ccd5)\n#10 0x000000000380dd99 (anonymous namespace)::HorizontalReduction::emitScaleForReusedOps(llvm::Value*, llvm::IRBuilderBase&, unsigned int) (.isra.0) SLPVectorizer.cpp:0:0\n#11 0x000000000391df1b (anonymous namespace)::HorizontalReduction::tryToReduce(llvm::slpvectorizer::BoUpSLP&, llvm::DataLayout const&, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo const&, llvm::AssumptionCache*, llvm::DominatorTree&) SLPVectorizer.cpp:0:0\n#12 0x0000000003920388 llvm::SLPVectorizerPass::vectorizeHorReduction(llvm::PHINode*, llvm::Instruction*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&, llvm::SmallVectorImpl<llvm::WeakTrackingVH>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3920388)\n#13 0x000000000392508b llvm::SLPVectorizerPass::vectorizeRootInstruction(llvm::PHINode*, llvm::Instruction*, llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (.constprop.0) SLPVectorizer.cpp:0:0\n#14 0x0000000003929620 llvm::SLPVectorizerPass::vectorizeChainsInBlock(llvm::BasicBlock*, llvm::slpvectorizer::BoUpSLP&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3929620)\n#15 0x000000000392f796 llvm::SLPVectorizerPass::runImpl(llvm::Function&, llvm::ScalarEvolution*, llvm::TargetTransformInfo*, llvm::TargetLibraryInfo*, llvm::AAResults*, llvm::LoopInfo*, llvm::DominatorTree*, llvm::AssumptionCache*, llvm::DemandedBits*, llvm::OptimizationRemarkEmitter*) (.part.0) SLPVectorizer.cpp:0:0\n#16 0x000000000393061b llvm::SLPVectorizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x393061b)\n#17 0x00000000030c928e llvm::detail::PassModel<llvm::Function, llvm::SLPVectorizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x30c928e)\n#18 0x00000000058f15d1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58f15d1)\n#19 0x0000000000f129ce llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf129ce)\n#20 0x00000000058efb8a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58efb8a)\n#21 0x000000000096b8ee llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96b8ee)\n#22 0x00000000058ef541 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58ef541)\n#23 0x0000000000975aaa llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x975aaa)\n#24 0x0000000000969b58 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x969b58)\n#25 0x000072a7ab429d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#26 0x000072a7ab429e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#27 0x00000000009607d5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x9607d5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```",
+    "author": "k-arrows",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash"
+    ],
+    "comments": [
+      {
+        "author": "k-arrows",
+        "body": "The reproducer here comes from llvm/test/Transforms/Reassociate/repeats.ll"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

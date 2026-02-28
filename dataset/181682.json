@@ -1,0 +1,59 @@
+{
+  "bug_id": "181682",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/181682",
+  "bug_type": "crash",
+  "base_commit": "e559d0a97a3dcce5df1e0d64c60a8808096c4b7d",
+  "knowledge_cutoff": "2026-02-16T15:11:05Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SLPVectorizer"
+  ],
+  "hints": {
+    "fix_commit": "7ec7907b80f8137f06bfb84b47f4a9b4805402ba",
+    "components": [
+      "SLPVectorizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        [
+          7231,
+          7236
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp": [
+        "BoUpSLP::analyzeRtStrideCandidate"
+      ]
+    }
+  },
+  "patch": "commit 7ec7907b80f8137f06bfb84b47f4a9b4805402ba\nAuthor: Alexey Bataev <a.bataev@outlook.com>\nDate:   Mon Feb 16 11:05:58 2026 -0800\n\n    [SLP] Fix a very long loads offset, being stored in DenseMap\n    \n    Added a check for a very long offset to avoid a crash in the compiler\n    \n    Fixes #181682\n\ndiff --git a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\nindex b29367fa1543..e50fb370ad7d 100644\n--- a/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n+++ b/llvm/lib/Transforms/Vectorize/SLPVectorizer.cpp\n@@ -7231,6 +7231,10 @@ bool BoUpSLP::analyzeRtStrideCandidate(ArrayRef<Value *> PointerOps,\n         if (!SC)\n           continue;\n         Offset = SC->getAPInt().getSExtValue();\n+        if (Offset >= std::numeric_limits<int64_t>::max() - 1) {\n+          Offset = 0;\n+          continue;\n+        }\n         break;\n       }\n     }\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SLPVectorizer/loads-with-large-distance.ll",
+      "commands": [
+        "opt -passes=slp-vectorizer -S < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "<module>",
+          "test_body": "\ndefine void @test() {\n;\nentry:\n  %0 = getelementptr i8, ptr addrspace(1) null, i64 9223372036854775807\n  %a = load float, ptr addrspace(1) %0, align 4\n  %b = load float, ptr addrspace(1) null, align 4\n  %c = fadd float %a, %b\n  store float %c, ptr addrspace(1) null, align 4\n  ret void\n}"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[SLPVectorizer] Crash when offset equals DenseMap reserved keys for int64_t (regressed by 3572e62991f4)",
+    "body": "A change introduced in [3572e62](https://github.com/llvm/llvm-project/commit/3572e62991f4) made SLPVectorizer use a DenseMap<int64_t, ...> keyed by an offset. When the offset equals to INT64_MAX or INT64_MAX-1 the pass crashes, because those two values are used by this DenseMap as EmptyKey and TombstoneKey.\n\n**Error message**\n\n> bool llvm::DenseMapBase<DerivedT, KeyT, ValueT, KeyInfoT, BucketT>::LookupBucketFor(const LookupKeyT&, BucketT*&) [with LookupKeyT = long int; DerivedT = llvm::SmallDenseMap<long int, std::pair<llvm::SmallVector<llvm::Value*>, llvm::SmallVector<unsigned int> > >; KeyT = long int; ValueT = std::pair<llvm::SmallVector<llvm::Value*>, llvm::SmallVector<unsigned int> >; KeyInfoT = llvm::DenseMapInfo<long int>; BucketT = llvm::detail::DenseMapPair<long int, std::pair<llvm::SmallVector<llvm::Value*>, llvm::SmallVector<unsigned int> > >]: Assertion `!KeyInfoT::isEqual(Val, EmptyKey) && !KeyInfoT::isEqual(Val, TombstoneKey) && \"Empty/Tombstone value shouldn't be inserted into map!\"' failed.\n\n**Minimal reproducer**\n```llvm\ndefine void @crash() {\nentry:\n  %0 = getelementptr i8, ptr addrspace(1) null, i64 9223372036854775807\n  %a = load float, ptr addrspace(1) %0, align 4\n  %b = load float, ptr addrspace(1) null, align 4\n  %c = fadd float %a, %b\n  store float %c, ptr addrspace(1) null, align 4\n  ret void\n}\n```\n```\nopt -passes=slp-vectorizer -S crash.ll\n```\nhttps://godbolt.org/z/Wdz1jMda6\n\n**Proposed Fix**\nDisable this code-path for offsets equal to EmptyKey or TomestoneKey. In the long run, consider changing the data structure or changing the key type (wider type or wrapper structure) to prevent such collisions.\n\n",
+    "author": "mateuszchudyk",
+    "labels": [
+      "llvm:SLPVectorizer",
+      "crash"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

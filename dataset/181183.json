@@ -1,0 +1,101 @@
+{
+  "bug_id": "181183",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/181183",
+  "bug_type": "crash",
+  "base_commit": "b69292549552f53eeff7deebdd649a5a6522b7d0",
+  "knowledge_cutoff": "2026-02-12T16:56:00Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/LoopVectorize"
+  ],
+  "hints": {
+    "fix_commit": "b3dcf485d23a574e4c377739a32468240a87c2fc",
+    "components": [
+      "LoopVectorize"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        [
+          318,
+          324
+        ],
+        [
+          6890,
+          6899
+        ]
+      ],
+      "llvm/lib/Transforms/Vectorize/VPlan.cpp": [
+        [
+          67,
+          72
+        ],
+        [
+          1803,
+          1805
+        ]
+      ],
+      "llvm/lib/Transforms/Vectorize/VPlanHelpers.h": [
+        [
+          346,
+          351
+        ],
+        [
+          385,
+          393
+        ]
+      ],
+      "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
+        [
+          3570,
+          3576
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Vectorize/LoopVectorize.cpp": [
+        "LoopVectorizationPlanner::precomputeCosts",
+        "VPCostContext::getPredBlockCostDivisor",
+        "VPCostContext::useEmulatedMaskMemRefHack"
+      ],
+      "llvm/lib/Transforms/Vectorize/VPlan.cpp": [
+        "VPCostContext::getScalarizationOverhead"
+      ],
+      "llvm/lib/Transforms/Vectorize/VPlanHelpers.h": [
+        "VPCostContext"
+      ],
+      "llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp": [
+        "VPReplicateRecipe::computeCost"
+      ]
+    }
+  },
+  "patch": "commit b3dcf485d23a574e4c377739a32468240a87c2fc\nAuthor: Florian Hahn <flo@fhahn.com>\nDate:   Fri Feb 13 21:16:52 2026 +0000\n\n    [VPlan] Compute NumPredStores for VPReplicateRecipe costs in VPlan.\n    \n    Compute the number of predicated stores directly in VPlan instead of\n    using CM.useEmulatedMaskMemRefHack(), which will only account for the\n    number of predicated stores for the last VF the legacy cost model\n    considered.\n    \n    Fixes https://github.com/llvm/llvm-project/issues/181183\n\ndiff --git a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\nindex 499c5a31421e..b5feb3feea2e 100644\n--- a/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n+++ b/llvm/lib/Transforms/Vectorize/LoopVectorize.cpp\n@@ -318,7 +318,7 @@ static cl::opt<bool> EnableLoadStoreRuntimeInterleave(\n         \"Enable runtime interleaving until load/store ports are saturated\"));\n \n /// The number of stores in a loop that are allowed to need predication.\n-static cl::opt<unsigned> NumberOfStoresToPredicate(\n+cl::opt<unsigned> NumberOfStoresToPredicate(\n     \"vectorize-num-stores-pred\", cl::init(1), cl::Hidden,\n     cl::desc(\"Max number of stores to be predicated behind an if.\"));\n \n@@ -6890,10 +6890,6 @@ unsigned VPCostContext::getPredBlockCostDivisor(BasicBlock *BB) const {\n   return CM.getPredBlockCostDivisor(CostKind, BB);\n }\n \n-bool VPCostContext::useEmulatedMaskMemRefHack(Instruction *I, ElementCount VF) {\n-  return CM.useEmulatedMaskMemRefHack(I, VF);\n-}\n-\n InstructionCost\n LoopVectorizationPlanner::precomputeCosts(VPlan &Plan, ElementCount VF,\n                                           VPCostContext &CostCtx) const {\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlan.cpp b/llvm/lib/Transforms/Vectorize/VPlan.cpp\nindex 9b22c399d7ac..c266842f107e 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlan.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlan.cpp\n@@ -67,6 +67,8 @@ const char LLVMLoopVectorizeFollowupEpilogue[] =\n \n extern cl::opt<unsigned> ForceTargetInstructionCost;\n \n+extern cl::opt<unsigned> NumberOfStoresToPredicate;\n+\n static cl::opt<bool> PrintVPlansInDotFormat(\n     \"vplan-print-in-dot-format\", cl::Hidden,\n     cl::desc(\"Use dot format instead of plain text when dumping VPlans\"));\n@@ -1803,3 +1805,31 @@ InstructionCost VPCostContext::getScalarizationOverhead(\n   return ScalarizationCost +\n          TTI.getOperandsScalarizationOverhead(Tys, CostKind, VIC);\n }\n+\n+bool VPCostContext::useEmulatedMaskMemRefHack(const VPReplicateRecipe *R,\n+                                              ElementCount VF) {\n+  const Instruction *UI = R->getUnderlyingInstr();\n+  if (isa<LoadInst>(UI))\n+    return true;\n+  assert(isa<StoreInst>(UI) && \"R must either be a load or store\");\n+\n+  if (!NumPredStores) {\n+    // Count the number of predicated stores in the VPlan, caching the result.\n+    const VPlan &Plan = *R->getParent()->getPlan();\n+    NumPredStores = 0;\n+    for (const VPRegionBlock *VPRB :\n+         VPBlockUtils::blocksOnly<const VPRegionBlock>(\n+             vp_depth_first_shallow(Plan.getVectorLoopRegion()->getEntry()))) {\n+      assert(VPRB->isReplicator() && \"must only contain replicate regions\");\n+      for (const VPBasicBlock *VPBB :\n+           VPBlockUtils::blocksOnly<const VPBasicBlock>(\n+               vp_depth_first_shallow(VPRB->getEntry()))) {\n+        *NumPredStores += count_if(*VPBB, [](const VPRecipeBase &R) {\n+          auto *RepR = dyn_cast<VPReplicateRecipe>(&R);\n+          return RepR && isa<StoreInst>(RepR->getUnderlyingInstr());\n+        });\n+      }\n+    }\n+  }\n+  return *NumPredStores > NumberOfStoresToPredicate;\n+}\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanHelpers.h b/llvm/lib/Transforms/Vectorize/VPlanHelpers.h\nindex bab7e25cbf40..113ca8c4d0f7 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanHelpers.h\n+++ b/llvm/lib/Transforms/Vectorize/VPlanHelpers.h\n@@ -346,6 +346,9 @@ struct VPCostContext {\n   PredicatedScalarEvolution &PSE;\n   const Loop *L;\n \n+  /// Number of predicated stores in the VPlan, computed on demand.\n+  std::optional<unsigned> NumPredStores;\n+\n   VPCostContext(const TargetTransformInfo &TTI, const TargetLibraryInfo &TLI,\n                 const VPlan &Plan, LoopVectorizationCostModel &CM,\n                 TargetTransformInfo::TargetCostKind CostKind,\n@@ -385,9 +388,8 @@ struct VPCostContext {\n       bool AlwaysIncludeReplicatingR = false);\n \n   /// Returns true if an artificially high cost for emulated masked memrefs\n-  /// should be used. Forwards to\n-  /// LoopVectorizationCostModel::useEmulatedMaskMemRefHack.\n-  bool useEmulatedMaskMemRefHack(Instruction *I, ElementCount VF);\n+  /// should be used.\n+  bool useEmulatedMaskMemRefHack(const VPReplicateRecipe *R, ElementCount VF);\n };\n \n /// This class can be used to assign names to VPValues. For VPValues without\ndiff --git a/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp b/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp\nindex 389331fd958d..c15b9fb23060 100644\n--- a/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp\n+++ b/llvm/lib/Transforms/Vectorize/VPlanRecipes.cpp\n@@ -3570,7 +3570,7 @@ InstructionCost VPReplicateRecipe::computeCost(ElementCount VF,\n           VecI1Ty, APInt::getAllOnes(VF.getFixedValue()),\n           /*Insert=*/false, /*Extract=*/true, Ctx.CostKind);\n \n-      if (Ctx.useEmulatedMaskMemRefHack(UI, VF)) {\n+      if (Ctx.useEmulatedMaskMemRefHack(this, VF)) {\n         // Artificially setting to a high enough value to practically disable\n         // vectorization with such operations.\n         return 3000000;\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/LoopVectorize/AArch64/conditional-branches-cost.ll",
+      "commands": [
+        "opt -p loop-vectorize -S %s",
+        "opt -p loop-vectorize  -prefer-predicate-over-epilogue=predicate-else-scalar-epilogue -S %s"
+      ],
+      "tests": [
+        {
+          "test_name": "predicated_store",
+          "test_body": "target datalayout = \"e-m:o-i64:64-i128:128-n32:64-S128\"\ntarget triple = \"arm64-apple-macosx14.0.0\"\n\ndefine void @predicated_store(ptr %A, ptr noalias %B, ptr noalias %C, ptr %D, ptr %E, double %divisor, i64 %loop.count) #0 {\nentry:\n  br label %loop.header\n\nloop.header:                                      ; preds = %loop.latch, %entry\n  %iv = phi i64 [ 0, %entry ], [ %iv.next, %loop.latch ]\n  %gep.B = getelementptr double, ptr %B, i64 %iv\n  %first.val = load double, ptr %B, align 8\n  store double 0.000000e+00, ptr %D, align 8\n  %coeff = load double, ptr %C, align 8\n  %neg = fneg double %first.val\n  %norm = fdiv double %neg, %divisor\n  %scaled.coeff = fmul double %coeff, %norm\n  %input.val = load double, ptr %gep.B, align 8\n  %scaled.input = fmul double %input.val, %divisor\n  %product = fmul double %scaled.coeff, %scaled.input\n  %final = fmul double %product, %divisor\n  %is.pos = fcmp ogt double %final, 0.000000e+00\n  br i1 %is.pos, label %then, label %loop.latch\n\nthen:                                             ; preds = %loop.header\n  store double 0.000000e+00, ptr %A, align 8\n  %gep.E = getelementptr i8, ptr %E, i64 %iv\n  store double 0.000000e+00, ptr %gep.E, align 8\n  br label %loop.latch\n\nloop.latch:                                       ; preds = %then, %loop.header\n  store double 0.000000e+00, ptr null, align 8\n  %iv.next = add i64 %iv, 1\n  %ec = icmp eq i64 %iv, %loop.count\n  br i1 %ec, label %exit, label %loop.header\n\nexit:                                             ; preds = %loop.latch\n  ret void\n}\n\nattributes #0 = { \"target-cpu\"=\"neoverse-v2\" }\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[LV]VPlan cost model and legacy cost model disagreed",
+    "body": "https://godbolt.org/z/TzKsnE8Kr\n@fhahn looks like another one",
+    "author": "alexey-bataev",
+    "labels": [
+      "vectorizers",
+      "crash-on-valid"
+    ],
+    "comments": []
+  },
+  "properties": {
+    "is_single_file_fix": false,
+    "is_single_func_fix": false
+  },
+  "verified": true
+}

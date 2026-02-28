@@ -1,0 +1,64 @@
+{
+  "bug_id": "181837",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/181837",
+  "bug_type": "crash",
+  "base_commit": "696aa3c0b0989037edc5982154d1d777f71374bf",
+  "knowledge_cutoff": "2026-02-17T15:19:26Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/SimplifyCFG"
+  ],
+  "hints": {
+    "fix_commit": "31e5f86a3cdc960ef7b2f0a533c4a37cf526cacd",
+    "components": [
+      "SimplifyCFG"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Utils/SimplifyCFG.cpp": [
+        [
+          7724,
+          7730
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Utils/SimplifyCFG.cpp": [
+        "simplifySwitchWhenUMin"
+      ]
+    }
+  },
+  "patch": "commit 31e5f86a3cdc960ef7b2f0a533c4a37cf526cacd\nAuthor: Congcong Cai <congcongcai0907@163.com>\nDate:   Fri Feb 20 07:03:27 2026 +0800\n\n    [SimplifyCFG] process prof data when remove case in umin (#182261)\n    \n    In #164097, we introduce a optimization for umin. But it does not handle\n    profile data correctly.\n    This PR remove profile data when remove cases.\n    Fixed: #181837\n\ndiff --git a/llvm/lib/Transforms/Utils/SimplifyCFG.cpp b/llvm/lib/Transforms/Utils/SimplifyCFG.cpp\nindex 8b56109990b2..b912baef6188 100644\n--- a/llvm/lib/Transforms/Utils/SimplifyCFG.cpp\n+++ b/llvm/lib/Transforms/Utils/SimplifyCFG.cpp\n@@ -7724,7 +7724,7 @@ static bool simplifySwitchWhenUMin(SwitchInst *SI, DomTreeUpdater *DTU) {\n     BasicBlock *DeadCaseBB = I->getCaseSuccessor();\n     DeadCaseBB->removePredecessor(BB);\n     Updates.push_back({DominatorTree::Delete, BB, DeadCaseBB});\n-    I = SIW->removeCase(I);\n+    I = SIW.removeCase(I);\n     E = SIW->case_end();\n   }\n \n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/SimplifyCFG/switch-umin.ll",
+      "commands": [
+        "opt -S -passes=simplifycfg < %s"
+      ],
+      "tests": [
+        {
+          "test_name": "switch_remove_dead_cases",
+          "test_body": "declare void @a()\n\ndeclare void @b()\n\ndefine void @switch_remove_dead_cases(i32 %x) {\n  %min = call i32 @llvm.umin.i32(i32 %x, i32 4)\n  switch i32 %min, label %unreachable [\n    i32 2, label %case_a\n    i32 3, label %case_b\n    i32 4, label %case_ret\n    i32 5, label %case_ret\n  ], !prof !0\n\ncase_a:                                           ; preds = %0\n  call void @a()\n  ret void\n\ncase_b:                                           ; preds = %0\n  call void @b()\n  ret void\n\ncase_ret:                                         ; preds = %0, %0\n  ret void\n\nunreachable:                                      ; preds = %0\n  unreachable\n}\n\n; Function Attrs: nocallback nofree nosync nounwind speculatable willreturn memory(none)\ndeclare i32 @llvm.umin.i32(i32, i32) #0\n\nattributes #0 = { nocallback nofree nosync nounwind speculatable willreturn memory(none) }\n\n!0 = !{!\"branch_weights\", i32 11, i32 12, i32 13, i32 14, i32 15}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[simplifycfg] number of prof branch_weights metadata operands does not correspond to number of succesors",
+    "body": "To reproduce run opt with the test below, -passes=simplifycfg \n\n[reduced-stripped.ll.zip](https://github.com/user-attachments/files/25368313/reduced-stripped.ll.zip)\n\nReproducer: https://godbolt.org/z/TfbKohbnP\n\nStack dump:\n```\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S -passes=simplifycfg <source>\n1.\tRunning pass \"function(simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;no-switch-range-to-icmp;no-switch-to-arithmetic;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-hoist-loads-stores-with-cond-faulting;no-sink-common-insts;speculate-blocks;simplify-cond-branch;no-speculate-unpredictables>)\" on module \"<source>\"\n2.\tRunning pass \"simplifycfg<bonus-inst-threshold=1;no-forward-switch-cond;no-switch-range-to-icmp;no-switch-to-arithmetic;no-switch-to-lookup;keep-loops;no-hoist-common-insts;no-hoist-loads-stores-with-cond-faulting;no-sink-common-insts;speculate-blocks;simplify-cond-branch;no-speculate-unpredictables>\" on function \"quux\"\n #0 0x0000000005b8a888 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5b8a888)\n #1 0x0000000005b87764 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x00007b6109242520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x00007b61092969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x00007b6109242476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x00007b61092287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x0000000005aba3da (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5aba3da)\n #7 0x0000000005869c8b (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5869c8b)\n #8 0x0000000004e0da68 simplifySwitchWhenUMin(llvm::SwitchInst*, llvm::DomTreeUpdater*) SimplifyCFG.cpp:0:0\n #9 0x0000000004e338ef (anonymous namespace)::SimplifyCFGOpt::simplifySwitch(llvm::SwitchInst*, llvm::IRBuilder<llvm::ConstantFolder, llvm::IRBuilderDefaultInserter>&) SimplifyCFG.cpp:0:0\n#10 0x0000000004e39b35 llvm::simplifyCFG(llvm::BasicBlock*, llvm::TargetTransformInfo const&, llvm::DomTreeUpdater*, llvm::SimplifyCFGOptions const&, llvm::ArrayRef<llvm::WeakVH>) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4e39b35)\n#11 0x0000000004a18ab4 iterativelySimplifyCFG(llvm::Function&, llvm::TargetTransformInfo const&, llvm::DomTreeUpdater*, llvm::SimplifyCFGOptions const&) SimplifyCFGPass.cpp:0:0\n#12 0x0000000004a19a14 simplifyFunctionCFGImpl(llvm::Function&, llvm::TargetTransformInfo const&, llvm::DominatorTree*, llvm::SimplifyCFGOptions const&) SimplifyCFGPass.cpp:0:0\n#13 0x0000000004a1abe5 simplifyFunctionCFG(llvm::Function&, llvm::TargetTransformInfo const&, llvm::DominatorTree*, llvm::SimplifyCFGOptions const&) SimplifyCFGPass.cpp:0:0\n#14 0x0000000004a1ad2a llvm::SimplifyCFGPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4a1ad2a)\n#15 0x000000000174221e llvm::detail::PassModel<llvm::Function, llvm::SimplifyCFGPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x174221e)\n#16 0x00000000058f5961 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58f5961)\n#17 0x0000000000f1420e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf1420e)\n#18 0x00000000058f3f1a llvm::ModuleToFunctionPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58f3f1a)\n#19 0x000000000096bdfe llvm::detail::PassModel<llvm::Module, llvm::ModuleToFunctionPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96bdfe)\n#20 0x00000000058f38d1 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58f38d1)\n#21 0x0000000000975fba llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x975fba)\n#22 0x000000000096a068 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x96a068)\n#23 0x00007b6109229d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#24 0x00007b6109229e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#25 0x0000000000960ce5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x960ce5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```\n\n[reduced-stripped.ll.zip](https://github.com/user-attachments/files/25368310/reduced-stripped.ll.zip)",
+    "author": "TatyanaDoubts",
+    "labels": [
+      "crash-on-valid",
+      "llvm:transforms"
+    ],
+    "comments": [
+      {
+        "author": "antoniofrighetto",
+        "body": "Maybe cc/ @mtrofin"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}

@@ -1,0 +1,68 @@
+{
+  "bug_id": "179880",
+  "issue_url": "https://github.com/llvm/llvm-project/issues/179880",
+  "bug_type": "crash",
+  "base_commit": "a67bf7d796df75592a26a377420696e3c7b7993f",
+  "knowledge_cutoff": "2026-02-05T08:10:42Z",
+  "lit_test_dir": [
+    "llvm/test/Transforms/Scalarizer"
+  ],
+  "hints": {
+    "fix_commit": "6e0054aa512aaa29cc04788291bbf3b4dfcbd2b3",
+    "components": [
+      "Scalarizer"
+    ],
+    "bug_location_lineno": {
+      "llvm/lib/Transforms/Scalar/Scalarizer.cpp": [
+        [
+          1133,
+          1138
+        ]
+      ]
+    },
+    "bug_location_funcname": {
+      "llvm/lib/Transforms/Scalar/Scalarizer.cpp": [
+        "ScalarizerVisitor::visitExtractElementInst"
+      ]
+    }
+  },
+  "patch": "commit 6e0054aa512aaa29cc04788291bbf3b4dfcbd2b3\nAuthor: bala-bhargav <penugondabalabharghav@gmail.com>\nDate:   Sat Feb 21 23:25:30 2026 +0530\n\n    [Scalarizer] Fix out-of-bounds crash (#180359)\n    \n    When processing an extractelement instruction with an index that exceeds\n    the vector size (e.g., extracting index 2147483647 from a 4-element\n    vector), the scalarizer would calculate an out-of-bounds Fragment index\n    and crash with an assertion failure in `SmallVector::operator[]`.\n    \n    This PR adds a bounds check in\n    `ScalarizerVisitor::visitExtractElementInst` to prevent a crash when the\n    extractelement index is out of bounds.\n    \n    Fixes #179880\n\ndiff --git a/llvm/lib/Transforms/Scalar/Scalarizer.cpp b/llvm/lib/Transforms/Scalar/Scalarizer.cpp\nindex 46f92c3de04d..0ef8e5790b7f 100644\n--- a/llvm/lib/Transforms/Scalar/Scalarizer.cpp\n+++ b/llvm/lib/Transforms/Scalar/Scalarizer.cpp\n@@ -1133,6 +1133,8 @@ bool ScalarizerVisitor::visitExtractElementInst(ExtractElementInst &EEI) {\n \n   if (auto *CI = dyn_cast<ConstantInt>(ExtIdx)) {\n     unsigned Idx = CI->getZExtValue();\n+    if (Idx >= VS->VecTy->getNumElements())\n+      return false;\n     unsigned Fragment = Idx / VS->NumPacked;\n     Value *Res = Op0[Fragment];\n     bool IsPacked = VS->NumPacked > 1;\n",
+  "tests": [
+    {
+      "file": "llvm/test/Transforms/Scalarizer/constant-extractelement.ll",
+      "commands": [
+        "opt %s -passes='function(scalarizer<load-store>,dce)' -S"
+      ],
+      "tests": [
+        {
+          "test_name": "oob_extract",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128\"\n\ndefine ptr @oob_extract() {\n  %E = extractelement <4 x ptr> zeroinitializer, i32 100\n  ret ptr %E\n}\n"
+        },
+        {
+          "test_name": "f1",
+          "test_body": "target datalayout = \"e-p:64:64:64-i1:8:8-i8:8:8-i16:16:16-i32:32:32-i64:64:64-f32:32:32-f64:64:64-v64:64:64-v128:128:128-a0:0:64-s0:64:64-f80:128:128-n8:16:32:64-S128\"\n\ndefine i32 @f1(ptr %src, i32 %index) {\n  %val0 = load <4 x i32>, ptr %src, align 16\n  %val1 = shl <4 x i32> <i32 1, i32 2, i32 3, i32 4>, %val0\n  %val2 = extractelement <4 x i32> %val1, i32 3\n  ret i32 %val2\n}\n"
+        }
+      ]
+    }
+  ],
+  "issue": {
+    "title": "[opt] -passes=scalarizer causes Assertion `idx < size()'",
+    "body": "Reproducer: https://godbolt.org/z/MhnqEWPs9\n\n```\nopt: /root/llvm-project/llvm/include/llvm/ADT/SmallVector.h:297: T& llvm::SmallVectorTemplateCommon<T, <template-parameter-1-2> >::operator[](llvm::SmallVectorTemplateCommon<T, <template-parameter-1-2> >::size_type) [with T = llvm::Value*; <template-parameter-1-2> = void; llvm::SmallVectorTemplateCommon<T, <template-parameter-1-2> >::reference = llvm::Value*&; llvm::SmallVectorTemplateCommon<T, <template-parameter-1-2> >::size_type = long unsigned int]: Assertion `idx < size()' failed.\nPLEASE submit a bug report to https://github.com/llvm/llvm-project/issues/ and include the crash backtrace and instructions to reproduce the bug.\nStack dump:\n0.\tProgram arguments: /opt/compiler-explorer/clang-assertions-trunk/bin/opt -o /app/output.s -S --passes=module(cgscc(function(scalarizer))) <source>\n1.\tRunning pass \"cgscc(function(scalarizer))\" on module \"<source>\"\n2.\tRunning pass \"scalarizer\" on function \"f13\"\n #0 0x0000000005aefe98 llvm::sys::PrintStackTrace(llvm::raw_ostream&, int) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x5aefe98)\n #1 0x0000000005aecd74 SignalHandler(int, siginfo_t*, void*) Signals.cpp:0:0\n #2 0x0000704cdba42520 (/lib/x86_64-linux-gnu/libc.so.6+0x42520)\n #3 0x0000704cdba969fc pthread_kill (/lib/x86_64-linux-gnu/libc.so.6+0x969fc)\n #4 0x0000704cdba42476 gsignal (/lib/x86_64-linux-gnu/libc.so.6+0x42476)\n #5 0x0000704cdba287f3 abort (/lib/x86_64-linux-gnu/libc.so.6+0x287f3)\n #6 0x0000704cdba2871b (/lib/x86_64-linux-gnu/libc.so.6+0x2871b)\n #7 0x0000704cdba39e96 (/lib/x86_64-linux-gnu/libc.so.6+0x39e96)\n #8 0x0000000004950030 (anonymous namespace)::Scatterer::operator[](unsigned int) Scalarizer.cpp:0:0\n #9 0x00000000049543e8 (anonymous namespace)::ScalarizerVisitor::visitExtractElementInst(llvm::ExtractElementInst&) Scalarizer.cpp:0:0\n#10 0x0000000004957ea2 (anonymous namespace)::ScalarizerVisitor::visit(llvm::Function&) (.constprop.0) Scalarizer.cpp:0:0\n#11 0x00000000049597ff llvm::ScalarizerPass::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x49597ff)\n#12 0x000000000305920e llvm::detail::PassModel<llvm::Function, llvm::ScalarizerPass, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x305920e)\n#13 0x00000000058604a1 llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x58604a1)\n#14 0x0000000000f0ce4e llvm::detail::PassModel<llvm::Function, llvm::PassManager<llvm::Function, llvm::AnalysisManager<llvm::Function>>, llvm::AnalysisManager<llvm::Function>>::run(llvm::Function&, llvm::AnalysisManager<llvm::Function>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf0ce4e)\n#15 0x0000000004e6c3c2 llvm::CGSCCToFunctionPassAdaptor::run(llvm::LazyCallGraph::SCC&, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>&, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4e6c3c2)\n#16 0x0000000000f0bbae llvm::detail::PassModel<llvm::LazyCallGraph::SCC, llvm::CGSCCToFunctionPassAdaptor, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&>::run(llvm::LazyCallGraph::SCC&, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>&, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf0bbae)\n#17 0x0000000004e64bf2 llvm::PassManager<llvm::LazyCallGraph::SCC, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&>::run(llvm::LazyCallGraph::SCC&, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>&, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4e64bf2)\n#18 0x0000000003058f2e llvm::detail::PassModel<llvm::LazyCallGraph::SCC, llvm::PassManager<llvm::LazyCallGraph::SCC, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&>, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&>::run(llvm::LazyCallGraph::SCC&, llvm::AnalysisManager<llvm::LazyCallGraph::SCC, llvm::LazyCallGraph&>&, llvm::LazyCallGraph&, llvm::CGSCCUpdateResult&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x3058f2e)\n#19 0x0000000004e66571 llvm::ModuleToPostOrderCGSCCPassAdaptor::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x4e66571)\n#20 0x0000000000f0bb8e llvm::detail::PassModel<llvm::Module, llvm::ModuleToPostOrderCGSCCPassAdaptor, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0xf0bb8e)\n#21 0x000000000585e411 llvm::PassManager<llvm::Module, llvm::AnalysisManager<llvm::Module>>::run(llvm::Module&, llvm::AnalysisManager<llvm::Module>&) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x585e411)\n#22 0x0000000000971fba llvm::runPassPipeline(llvm::StringRef, llvm::Module&, llvm::TargetMachine*, llvm::TargetLibraryInfoImpl*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::ToolOutputFile*, llvm::StringRef, llvm::ArrayRef<llvm::PassPlugin>, llvm::ArrayRef<std::function<void (llvm::PassBuilder&)>>, llvm::opt_tool::OutputKind, llvm::opt_tool::VerifierKind, bool, bool, bool, bool, bool, bool, bool, bool) (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x971fba)\n#23 0x0000000000966068 optMain (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x966068)\n#24 0x0000704cdba29d90 (/lib/x86_64-linux-gnu/libc.so.6+0x29d90)\n#25 0x0000704cdba29e40 __libc_start_main (/lib/x86_64-linux-gnu/libc.so.6+0x29e40)\n#26 0x000000000095cce5 _start (/opt/compiler-explorer/clang-assertions-trunk/bin/opt+0x95cce5)\nProgram terminated with signal: SIGSEGV\nCompiler returned: 139\n```\n\nPossible duplicate of #126938",
+    "author": "fraglantia",
+    "labels": [
+      "crash",
+      "llvm:transforms"
+    ],
+    "comments": [
+      {
+        "author": "bala-bhargav",
+        "body": "@fraglantia \ncan i work on it ??"
+      }
+    ]
+  },
+  "properties": {
+    "is_single_file_fix": true,
+    "is_single_func_fix": true
+  },
+  "verified": true
+}
