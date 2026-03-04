@@ -180,7 +180,9 @@ fix_commit_map = {
     "160912": None,  # Unsupported intrinsic llvm.stepvector.nxv2i64
     "162498": None,  # Cannot reproduce with Alive2
     "162512": None,  # Unterminated loop in the reproducer
+    "165382": None,  # Cannot be verified with Alive2
     "166535": None,  # Duplicate of #165031
+    "166496": None,  # Cannot be verified with Alive2
     "167813": None,  # Still crashes on the regression testsuite
     "168576": None,  # Duplicate of #168512
     "168263": None,  # Missing reproducer
@@ -190,6 +192,7 @@ fix_commit_map = {
     "172647": None,  # Crash on invalid input
     "172817": None,  # Crash on invalid input
     "175295": None,  # Cannot verify the fix
+    "175949": None,  # Cannot find a valid base commit
     "176674": None,  # Crash on invalid input
     "177772": None,  # Cannot reproduce the crash
     "177780": None,  # Duplicate of #177772
