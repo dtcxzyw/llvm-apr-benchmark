@@ -1,5 +1,7 @@
 # LLVM APR Benchmark: A Large-Scale Automated Program Repair Benchmark of Real-World LLVM Middle-End Bugs
 
+**IMPORTANT: This repository has been migrated to https://github.com/dtcxzyw/llvm-autofix.**
+
 [GitHub (We only accept pull requests from GitHub)](https://github.com/dtcxzyw/llvm-apr-benchmark)
 
 [Hugging Face Mirror](https://huggingface.co/datasets/dtcxzyw/llvm-apr-benchmark)
